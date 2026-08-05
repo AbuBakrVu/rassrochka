@@ -1,6 +1,16 @@
 "use client";
 
-import { Search, Bell, Inbox, type LucideIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import {
+  Search,
+  Bell,
+  Inbox,
+  UserPlus,
+  FilePlus2,
+  ChevronDown,
+  type LucideIcon,
+} from "lucide-react";
 
 export function PageHeader({
   title,
@@ -41,12 +51,74 @@ export function PageHeader({
           <Bell size={17} />
           <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-danger" />
         </button>
-        {cta && (
-          <button className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep">
-            {cta}
-          </button>
-        )}
+        {cta && <CtaMenu label={cta} />}
       </div>
+    </div>
+  );
+}
+
+function CtaMenu({ label }: { label: string }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
+
+  // Меню не должно оставаться раскрытым после перехода в другой раздел
+  useEffect(() => setOpen(false), [pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const items = [
+    { icon: FilePlus2, label: "Создать сделку" },
+    { icon: UserPlus, label: "Создать клиента" },
+  ];
+
+  return (
+    <div ref={wrap} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep"
+      >
+        {label}
+        <ChevronDown
+          size={15}
+          aria-hidden
+          className={`transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute top-full right-0 z-30 mt-2 w-56 rounded-[12px] border border-line bg-surface p-1.5 shadow-pop"
+        >
+          {items.map(({ icon: Icon, label: text }) => (
+            <button
+              key={text}
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-sm font-medium text-ink hover:bg-brand-soft hover:text-brand-deep"
+            >
+              <Icon size={16} className="text-brand" aria-hidden />
+              {text}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

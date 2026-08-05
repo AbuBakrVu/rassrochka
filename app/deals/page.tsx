@@ -16,7 +16,7 @@ export default function DealsPage() {
         title="Сделки"
         subtitle="Ведите клиента по этапам без потери контекста"
         searchPlaceholder="Поиск по сделкам"
-        cta="+ Создать сделку"
+        cta="+ Добавить"
       />
       <div className="px-4 py-6 sm:px-8">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">

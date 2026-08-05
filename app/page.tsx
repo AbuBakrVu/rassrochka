@@ -102,7 +102,7 @@ export default function Home() {
         title="Главная"
         subtitle="Оперативный контроль портфеля"
         searchPlaceholder="Найти клиента или сделку"
-        cta="+ Новая сделка"
+        cta="+ Добавить"
       />
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">

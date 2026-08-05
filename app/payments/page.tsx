@@ -27,7 +27,7 @@ export default function PaymentsPage() {
         title="Платежи"
         subtitle="План недели и месяца по всем сделкам"
         searchPlaceholder="Найти платёж или клиента"
-        cta="+ Платёж"
+        cta="+ Добавить"
       />
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-8">
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_340px]">
