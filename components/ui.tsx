@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import NewClientModal from "@/components/new-client-modal";
+import NewDealModal from "@/components/new-deal-modal";
 import {
   Search,
   Bell,
@@ -60,7 +61,7 @@ export function PageHeader({
 
 function CtaMenu({ label }: { label: string }) {
   const [open, setOpen] = useState(false);
-  const [modal, setModal] = useState(false);
+  const [modal, setModal] = useState<"client" | "deal" | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
@@ -84,8 +85,12 @@ function CtaMenu({ label }: { label: string }) {
   }, [open]);
 
   const items = [
-    { icon: FilePlus2, label: "Создать сделку", action: () => {} },
-    { icon: UserPlus, label: "Создать клиента", action: () => setModal(true) },
+    { icon: FilePlus2, label: "Создать сделку", action: () => setModal("deal") },
+    {
+      icon: UserPlus,
+      label: "Создать клиента",
+      action: () => setModal("client"),
+    },
   ];
 
   return (
@@ -124,7 +129,8 @@ function CtaMenu({ label }: { label: string }) {
           ))}
         </div>
       )}
-      {modal && <NewClientModal onClose={() => setModal(false)} />}
+      {modal === "client" && <NewClientModal onClose={() => setModal(null)} />}
+      {modal === "deal" && <NewDealModal onClose={() => setModal(null)} />}
     </div>
   );
 }
