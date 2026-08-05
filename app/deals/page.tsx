@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PageHeader, Badge } from "@/components/ui";
 import { deals, stages, fmt } from "@/lib/data";
 
@@ -52,9 +53,10 @@ export default function DealsPage() {
                   </div>
                   <div className="flex flex-col gap-3">
                     {items.map((d) => (
-                      <article
+                      <Link
                         key={d.id}
-                        className="rounded-[12px] border border-line bg-surface p-4 shadow-card transition-shadow hover:shadow-pop"
+                        href={`/deals/${d.id}`}
+                        className="block rounded-[12px] border border-line bg-surface p-4 shadow-card transition-shadow hover:shadow-pop"
                       >
                         <div className="mb-2.5 flex items-center justify-between gap-2">
                           <Badge tone={d.statusTone}>{d.status}</Badge>
@@ -81,7 +83,7 @@ export default function DealsPage() {
                             {d.manager}
                           </span>
                         </div>
-                      </article>
+                      </Link>
                     ))}
                   </div>
                 </section>
