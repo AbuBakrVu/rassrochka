@@ -1,0 +1,130 @@
+"use client";
+
+import { Search, Bell, Inbox, type LucideIcon } from "lucide-react";
+
+export function PageHeader({
+  title,
+  subtitle,
+  searchPlaceholder,
+  cta,
+}: {
+  title: string;
+  subtitle: string;
+  searchPlaceholder?: string;
+  cta?: string;
+}) {
+  return (
+    <div className="border-b border-line bg-surface px-4 py-4 sm:px-8">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+          <p className="mt-0.5 truncate text-sm text-mute">{subtitle}</p>
+        </div>
+        {searchPlaceholder && (
+          <label className="relative hidden md:block">
+            <Search
+              size={16}
+              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-mute"
+              aria-hidden
+            />
+            <input
+              type="search"
+              placeholder={searchPlaceholder}
+              className="w-64 rounded-[10px] border border-line bg-canvas py-2 pr-3 pl-9 text-sm outline-none focus:border-brand"
+            />
+          </label>
+        )}
+        <button
+          aria-label="Уведомления"
+          className="relative rounded-[10px] border border-line bg-surface p-2.5 text-mute hover:text-ink"
+        >
+          <Bell size={17} />
+          <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-danger" />
+        </button>
+        {cta && (
+          <button className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep">
+            {cta}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const tones = {
+  blue: "bg-brand-soft text-brand-deep",
+  yellow: "bg-warn-soft text-warn",
+  green: "bg-good-soft text-good",
+  red: "bg-danger-soft text-danger",
+  gray: "bg-canvas text-mute",
+} as const;
+
+export function Badge({
+  tone,
+  children,
+}: {
+  tone: keyof typeof tones;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-medium whitespace-nowrap ${tones[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+export function Card({
+  className = "",
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className={`rounded-card border border-line bg-surface shadow-card ${className}`}
+    >
+      {children}
+    </section>
+  );
+}
+
+export function EmptyState({
+  icon: Icon = Inbox,
+  title,
+  text,
+  action,
+  onAction,
+}: {
+  icon?: LucideIcon;
+  title: string;
+  text: string;
+  action?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+      <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand">
+        <Icon size={22} aria-hidden />
+      </span>
+      <p className="font-medium">{title}</p>
+      <p className="mt-1 max-w-sm text-sm text-mute">{text}</p>
+      {action && (
+        <button
+          onClick={onAction}
+          className="mt-4 rounded-[10px] bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-deep"
+        >
+          {action}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function Skeleton({ className = "" }: { className?: string }) {
+  return (
+    <div className={`animate-pulse rounded-[10px] bg-line/60 ${className}`} />
+  );
+}

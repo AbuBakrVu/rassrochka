@@ -1,0 +1,145 @@
+import { Phone, CircleDollarSign, Flag, Video } from "lucide-react";
+import { PageHeader, Card } from "@/components/ui";
+import { calendarDays, todayAgenda, fmt } from "@/lib/data";
+
+const short = (n: number) =>
+  new Intl.NumberFormat("ru-RU").format(n / 1000).replace(",", ".") + " т.";
+
+const kindIcon = {
+  Звонок: Phone,
+  Платёж: CircleDollarSign,
+  Дедлайн: Flag,
+  Созвон: Video,
+} as const;
+
+export default function PaymentsPage() {
+  // Август 2026 начинается с субботы → 5 пустых ячеек (Пн–Пт)
+  const lead = 5;
+  const cells: (typeof calendarDays[number] | null)[] = [
+    ...Array.from({ length: lead }, () => null),
+    ...calendarDays,
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  return (
+    <>
+      <PageHeader
+        title="Платежи"
+        subtitle="План недели и месяца по всем сделкам"
+        searchPlaceholder="Найти платёж или клиента"
+        cta="+ Платёж"
+      />
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-8">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_340px]">
+          {/* Календарь */}
+          <Card className="p-4 sm:p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight">
+                  Август 2026
+                </h2>
+                <p className="text-sm text-mute">
+                  Выберите день, чтобы увидеть все оплаты
+                </p>
+              </div>
+              <button className="rounded-[10px] border border-line bg-surface px-4 py-2 text-sm text-mute hover:text-ink">
+                Месяц ▾
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <div className="min-w-[640px]">
+                <div className="grid grid-cols-7 border-b border-line pb-2 text-center text-xs text-mute">
+                  {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((d) => (
+                    <span key={d}>{d}</span>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7">
+                  {cells.map((c, i) => (
+                    <div
+                      key={i}
+                      className={`min-h-[86px] border-b border-line p-1.5 ${
+                        i % 7 !== 6 ? "border-r" : ""
+                      } ${c ? "" : "bg-canvas/50"}`}
+                    >
+                      {c && (
+                        <>
+                          <p
+                            className={`mb-1 px-1 text-sm ${
+                              c.day === 5
+                                ? "font-semibold text-brand-deep"
+                                : "text-ink"
+                            }`}
+                          >
+                            {c.day}
+                            {c.day === 5 && (
+                              <span
+                                className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-brand align-middle"
+                                aria-hidden
+                              />
+                            )}
+                          </p>
+                          {c.payments && (
+                            <span className="block truncate rounded-lg bg-brand-soft px-1.5 py-1 text-xs font-medium text-brand-deep">
+                              {c.payments.count} опл. · {short(c.payments.sum)}
+                            </span>
+                          )}
+                          {c.event && (
+                            <span className="mt-1 block truncate rounded-lg bg-danger-soft px-1.5 py-1 text-xs font-medium text-danger">
+                              {c.event.label}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Сегодня */}
+          <Card className="h-fit p-5 sm:p-6">
+            <h3 className="font-semibold">Сегодня · 5 августа</h3>
+            <p className="mt-1 text-sm text-mute">Сумма к получению</p>
+            <p className="mt-1 text-[26px] font-semibold tracking-tight">
+              {fmt(todayAgenda.sum)}
+            </p>
+            <ul className="mt-4 divide-y divide-line">
+              {todayAgenda.items.map((it) => {
+                const Icon =
+                  kindIcon[it.kind as keyof typeof kindIcon] ??
+                  CircleDollarSign;
+                return (
+                  <li key={it.time + it.text} className="flex gap-3 py-3">
+                    <span
+                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ${
+                        it.urgent
+                          ? "bg-danger-soft text-danger"
+                          : "bg-brand-soft text-brand"
+                      }`}
+                    >
+                      <Icon size={15} aria-hidden />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-mute">
+                        {it.time} · {it.kind}
+                        {it.urgent && (
+                          <span className="ml-1.5 font-medium text-danger">
+                            срочно
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-sm font-medium break-words">
+                        {it.text}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}
