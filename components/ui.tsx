@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import NewClientModal from "@/components/new-client-modal";
 import {
   Search,
   Bell,
@@ -59,6 +60,7 @@ export function PageHeader({
 
 function CtaMenu({ label }: { label: string }) {
   const [open, setOpen] = useState(false);
+  const [modal, setModal] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
@@ -82,8 +84,8 @@ function CtaMenu({ label }: { label: string }) {
   }, [open]);
 
   const items = [
-    { icon: FilePlus2, label: "Создать сделку" },
-    { icon: UserPlus, label: "Создать клиента" },
+    { icon: FilePlus2, label: "Создать сделку", action: () => {} },
+    { icon: UserPlus, label: "Создать клиента", action: () => setModal(true) },
   ];
 
   return (
@@ -106,11 +108,14 @@ function CtaMenu({ label }: { label: string }) {
           role="menu"
           className="absolute top-full right-0 z-30 mt-2 w-56 rounded-[12px] border border-line bg-surface p-1.5 shadow-pop"
         >
-          {items.map(({ icon: Icon, label: text }) => (
+          {items.map(({ icon: Icon, label: text, action }) => (
             <button
               key={text}
               role="menuitem"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                setOpen(false);
+                action();
+              }}
               className="flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-sm font-medium text-ink hover:bg-brand-soft hover:text-brand-deep"
             >
               <Icon size={16} className="text-brand" aria-hidden />
@@ -119,6 +124,7 @@ function CtaMenu({ label }: { label: string }) {
           ))}
         </div>
       )}
+      {modal && <NewClientModal onClose={() => setModal(false)} />}
     </div>
   );
 }
