@@ -12,7 +12,13 @@ import {
   Landmark,
   CalendarDays,
 } from "lucide-react";
-import { deals, clients, paidPayments, type Deal } from "@/lib/data";
+import {
+  deals,
+  clientById,
+  paidCount,
+  dealState,
+  type Deal,
+} from "@/lib/data";
 import { Badge } from "@/components/ui";
 
 const money = (n: number) =>
@@ -66,9 +72,11 @@ export default function AcceptPaymentModal({
     const q = query.trim().toLowerCase();
     const qd = digits(query);
     return deals
+      // Платёж можно принять только по действующей или готовящейся сделке
+      .filter((d) => dealState(d) === "active" || dealState(d) === "pending")
       .map((d) => {
-        const client = clients.find((c) => c.name === d.client);
-        const paid = paidPayments[d.id] ?? 0;
+        const client = clientById(d.clientId);
+        const paid = paidCount(d);
         const monthly = Math.round(d.amount / d.months);
         return {
           deal: d,

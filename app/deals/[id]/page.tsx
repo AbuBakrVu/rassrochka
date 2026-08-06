@@ -16,8 +16,20 @@ import {
   History,
 } from "lucide-react";
 import { Card, Badge } from "@/components/ui";
-import { deals, clients, fmt, stages, paidPayments, tokenByDeal } from "@/lib/data";
-import { buildSchedule, money, type Installment } from "@/lib/schedule";
+import {
+  deals,
+  clientById,
+  fmt,
+  stages,
+  paidCount,
+  tokenByDeal,
+} from "@/lib/data";
+import {
+  buildSchedule,
+  money,
+  longDate,
+  type Installment,
+} from "@/lib/schedule";
 import CopyLinkButton from "@/components/copy-link";
 
 export function generateStaticParams() {
@@ -104,9 +116,14 @@ export default async function DealPage({
   const deal = deals.find((d) => d.id === id);
   if (!deal) notFound();
 
-  const client = clients.find((c) => c.name === deal.client);
-  const paid = paidPayments[deal.id] ?? 0;
-  const schedule = buildSchedule(deal.amount, deal.months, paid);
+  const client = clientById(deal.clientId);
+  const paid = paidCount(deal);
+  const schedule = buildSchedule(
+    deal.amount,
+    deal.months,
+    paid,
+    deal.openedAt
+  );
   const monthly = Math.round(deal.amount / deal.months);
   const paidSum = schedule
     .filter((p) => p.status === "paid")
@@ -114,8 +131,12 @@ export default async function DealPage({
   const remaining = deal.amount - paidSum;
   const markup = Math.round(deal.amount * 0.15);
   const purchase = deal.amount - markup;
-  const stageTitle = stages.find((s) => s.key === deal.stage)?.title ?? "";
+  const stageTitle =
+    stages.find((s) => s.key === deal.stage)?.title ??
+    (deal.stage === "closed" ? "Закрыта" : "Отклонена");
   const active = deal.stage === "active";
+  const finished = deal.stage === "closed" || deal.stage === "rejected";
+  const openedLabel = longDate(new Date(deal.openedAt));
   const nextPayment = schedule.find((p) => p.status !== "paid");
 
   const history = [
@@ -128,9 +149,9 @@ export default async function DealPage({
         ]
       : []),
     ...(active
-      ? [{ date: "5 августа 2026", text: "Сделка переведена в «Активна»" }]
+      ? [{ date: openedLabel, text: "Сделка переведена в «Активна»" }]
       : []),
-    { date: "5 августа 2026", text: "Сделка создана" },
+    { date: openedLabel, text: "Сделка создана" },
   ];
 
   return (
@@ -163,8 +184,8 @@ export default async function DealPage({
                 <Badge tone={deal.statusTone}>{deal.status}</Badge>
               </div>
               <p className="mt-1 text-sm text-mute">
-                {deal.client} · {fmt(deal.amount)} на {deal.months} мес ·
-                заключена 5 августа 2026 г.
+                {deal.product} · {fmt(deal.amount)} на {deal.months} мес ·
+                заключена {openedLabel} г.
               </p>
             </div>
           </div>
@@ -220,24 +241,35 @@ export default async function DealPage({
         </div>
       </Card>
 
-      {/* Следующий шаг */}
-      <div className="mt-4 flex flex-wrap items-center gap-4 rounded-card border border-line bg-brand-soft px-5 py-4">
-        <CalendarDays size={18} className="shrink-0 text-brand" aria-hidden />
-        <div className="min-w-0 flex-1 basis-52">
-          <p className="text-sm font-medium text-brand-deep">Следующий шаг</p>
-          <p className="text-sm text-ink">
-            {deal.urgent
-              ? deal.nextStep
-              : nextPayment
-                ? `Платёж ${money(nextPayment.amount)} — ${nextPayment.date} г.`
-                : deal.nextStep}
+      {/* Следующий шаг — только пока по сделке есть что делать */}
+      {finished ? (
+        <div className="mt-4 flex flex-wrap items-center gap-4 rounded-card border border-line bg-surface px-5 py-4">
+          <ShieldCheck size={18} className="shrink-0 text-mute" aria-hidden />
+          <p className="text-sm text-mute">
+            {deal.stage === "closed"
+              ? `Сделка закрыта: все ${deal.months} платежей внесены, задолженности нет.`
+              : `Заявка отклонена. ${deal.nextStep}.`}
           </p>
         </div>
-        <button className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep">
-          {active ? "Принять платёж" : "Продолжить работу"}
-          <ArrowRight size={15} aria-hidden />
-        </button>
-      </div>
+      ) : (
+        <div className="mt-4 flex flex-wrap items-center gap-4 rounded-card border border-line bg-brand-soft px-5 py-4">
+          <CalendarDays size={18} className="shrink-0 text-brand" aria-hidden />
+          <div className="min-w-0 flex-1 basis-52">
+            <p className="text-sm font-medium text-brand-deep">Следующий шаг</p>
+            <p className="text-sm text-ink">
+              {deal.urgent
+                ? deal.nextStep
+                : nextPayment
+                  ? `Платёж ${money(nextPayment.amount)} — ${nextPayment.date} г.`
+                  : deal.nextStep}
+            </p>
+          </div>
+          <button className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep">
+            {active ? "Принять платёж" : "Продолжить работу"}
+            <ArrowRight size={15} aria-hidden />
+          </button>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1fr_340px]">
         {/* Левая колонка */}
@@ -370,7 +402,7 @@ export default async function DealPage({
               </span>
               <div className="min-w-0">
                 <Link
-                  href="/clients"
+                  href={`/clients/${deal.clientId}`}
                   className="block truncate font-medium hover:text-brand-deep"
                 >
                   {deal.client}
@@ -381,21 +413,25 @@ export default async function DealPage({
                 </p>
               </div>
             </div>
-            <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep">
-              <MessageCircle size={16} aria-hidden />
-              Напомнить об оплате
-            </button>
-            <p className="mt-2 text-center text-xs text-mute">
-              Сообщение уйдёт в WhatsApp по шаблону из «Рассылок»
-            </p>
-            <div className="mt-4 border-t border-line pt-4">
-              <p className="text-sm font-medium">Кабинет клиента</p>
-              <p className="mt-0.5 mb-3 text-xs text-mute">
-                Персональная страница с графиком и остатком — отправьте её
-                клиенту
-              </p>
-              <CopyLinkButton path={`/pay/${tokenByDeal(deal.id)}`} />
-            </div>
+            {!finished && (
+              <>
+                <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep">
+                  <MessageCircle size={16} aria-hidden />
+                  Напомнить об оплате
+                </button>
+                <p className="mt-2 text-center text-xs text-mute">
+                  Сообщение уйдёт в WhatsApp по шаблону из «Рассылок»
+                </p>
+                <div className="mt-4 border-t border-line pt-4">
+                  <p className="text-sm font-medium">Кабинет клиента</p>
+                  <p className="mt-0.5 mb-3 text-xs text-mute">
+                    Персональная страница с графиком и остатком — отправьте её
+                    клиенту
+                  </p>
+                  <CopyLinkButton path={`/pay/${tokenByDeal(deal.id)}`} />
+                </div>
+              </>
+            )}
           </Card>
 
           <Card className="p-5">
@@ -416,7 +452,7 @@ export default async function DealPage({
                 ["Срок", `${deal.months} месяцев`],
                 ["Интервал", "Ежемесячно"],
                 ["Тип платежей", "Равные"],
-                ["Первый платёж", "5 сентября 2026 г."],
+                ["Первый платёж", `${schedule[0].date} г.`],
                 ["Ответственный", deal.manager],
               ].map(([k, v]) => (
                 <div key={k} className="flex items-center justify-between py-2.5">

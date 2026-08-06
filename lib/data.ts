@@ -1,18 +1,31 @@
-// Моковые данные CRM «Финора» — учёт рассрочек. Август 2026.
+// Моковые данные CRM «Финора» — учёт рассрочек. Сегодня 5 августа 2026 г.
 
 export const fmt = (n: number) =>
   new Intl.NumberFormat("ru-RU").format(n) + " ₽";
 
-export type DealStage = "new" | "check" | "signing" | "active";
+// Этап в канбане; closed и rejected в канбан не попадают
+export type DealStage =
+  | "new"
+  | "check"
+  | "signing"
+  | "active"
+  | "closed"
+  | "rejected";
+
+// Состояние для карточки клиента
+export type DealState = "active" | "closed" | "rejected" | "pending";
 
 export interface Deal {
   id: string;
+  clientId: string;
   client: string;
+  product: string;
   amount: number;
   months: number;
+  openedAt: string;
   stage: DealStage;
   status: string;
-  statusTone: "blue" | "yellow" | "green" | "red";
+  statusTone: "blue" | "yellow" | "green" | "red" | "gray";
   nextStep: string;
   deadline?: string;
   urgent?: boolean;
@@ -27,26 +40,54 @@ export const stages: { key: DealStage; title: string }[] = [
 ];
 
 export const deals: Deal[] = [
-  { id: "R-1051", client: "Анна Полякова", amount: 120000, months: 12, stage: "new", status: "Новая", statusTone: "blue", nextStep: "Ответить сегодня", manager: "АС" },
-  { id: "R-1052", client: "Роман Ветров", amount: 85000, months: 10, stage: "new", status: "Новая", statusTone: "blue", nextStep: "Заявка 30 мин назад", manager: "МК" },
-  { id: "R-1053", client: "Ольга Смирнова", amount: 64000, months: 6, stage: "new", status: "Новая", statusTone: "blue", nextStep: "Уточнить сумму", manager: "АС" },
-  { id: "R-1054", client: "Игорь Лапин", amount: 150000, months: 18, stage: "new", status: "Новая", statusTone: "blue", nextStep: "Перезвонить завтра", manager: "ДС" },
-  { id: "R-1045", client: "Виктор Данилов", amount: 240000, months: 18, stage: "check", status: "Документы", statusTone: "yellow", nextStep: "Ждём паспорт", manager: "АС" },
-  { id: "R-1046", client: "Елена Крылова", amount: 74000, months: 8, stage: "check", status: "Скоринг", statusTone: "yellow", nextStep: "Срок сегодня", urgent: true, manager: "ДС" },
-  { id: "R-1047", client: "Павел Козлов", amount: 96000, months: 12, stage: "check", status: "Документы", statusTone: "yellow", nextStep: "Проверить ИНН", manager: "МК" },
-  { id: "R-1017", client: "Сергей Миронов", amount: 58500, months: 6, stage: "signing", status: "Отправлен договор", statusTone: "blue", nextStep: "Подписать до 6 авг", deadline: "6 августа", manager: "МК" },
-  { id: "R-1044", client: "Дарья Ильина", amount: 132000, months: 12, stage: "signing", status: "Согласование", statusTone: "blue", nextStep: "Созвон в 15:00", manager: "АС" },
-  { id: "R-1042", client: "Марина Котова", amount: 96000, months: 12, stage: "active", status: "В графике", statusTone: "green", nextStep: "Оплата сегодня", manager: "АС" },
-  { id: "R-1038", client: "Никита Абрамов", amount: 142000, months: 14, stage: "active", status: "В графике", statusTone: "green", nextStep: "Платёж 9 августа", manager: "ДС" },
-  { id: "R-1031", client: "Татьяна Горина", amount: 88000, months: 10, stage: "active", status: "Просрочка 2 дня", statusTone: "red", nextStep: "Нужен новый график", urgent: true, manager: "МК" },
+  // Новые заявки
+  { id: "R-1051", clientId: "C-106", client: "Анна Полякова", product: "MacBook Air 13″ M3", amount: 120000, months: 12, openedAt: "2026-08-05", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Ответить сегодня", manager: "АС" },
+  { id: "R-1052", clientId: "C-111", client: "Роман Ветров", product: "Велосипед Merida Big Nine", amount: 85000, months: 10, openedAt: "2026-08-05", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Заявка 30 мин назад", manager: "МК" },
+  { id: "R-1053", clientId: "C-112", client: "Ольга Смирнова", product: "Стиральная машина Bosch", amount: 64000, months: 6, openedAt: "2026-08-04", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Уточнить сумму", manager: "АС" },
+  { id: "R-1054", clientId: "C-113", client: "Игорь Лапин", product: "Кухонный гарнитур на заказ", amount: 150000, months: 18, openedAt: "2026-08-04", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Перезвонить завтра", manager: "ДС" },
+  // Проверка
+  { id: "R-1045", clientId: "C-105", client: "Виктор Данилов", product: "Автоприцеп МЗСА", amount: 240000, months: 18, openedAt: "2026-08-01", stage: "check", status: "Документы", statusTone: "yellow", nextStep: "Ждём паспорт", manager: "АС" },
+  { id: "R-1046", clientId: "C-108", client: "Елена Крылова", product: "iPhone 15 Pro 256 ГБ", amount: 74000, months: 8, openedAt: "2026-07-31", stage: "check", status: "Скоринг", statusTone: "yellow", nextStep: "Срок сегодня", urgent: true, manager: "ДС" },
+  { id: "R-1047", clientId: "C-114", client: "Павел Козлов", product: "Телевизор LG OLED 55″", amount: 96000, months: 12, openedAt: "2026-07-30", stage: "check", status: "Документы", statusTone: "yellow", nextStep: "Проверить ИНН", manager: "МК" },
+  // Подписание
+  { id: "R-1017", clientId: "C-107", client: "Сергей Миронов", product: "Ноутбук ASUS Vivobook 16", amount: 58500, months: 6, openedAt: "2026-07-28", stage: "signing", status: "Отправлен договор", statusTone: "blue", nextStep: "Подписать до 6 авг", deadline: "6 августа", manager: "МК" },
+  { id: "R-1044", clientId: "C-115", client: "Дарья Ильина", product: "Диван Bergen + кресло", amount: 132000, months: 12, openedAt: "2026-07-27", stage: "signing", status: "Согласование", statusTone: "blue", nextStep: "Созвон в 15:00", manager: "АС" },
+  // Активные
+  { id: "R-1042", clientId: "C-101", client: "Марина Котова", product: "iPhone 15 Pro Max 256 ГБ", amount: 96000, months: 12, openedAt: "2026-03-05", stage: "active", status: "В графике", statusTone: "green", nextStep: "Оплата сегодня", manager: "АС" },
+  { id: "R-1038", clientId: "C-102", client: "Никита Абрамов", product: "Холодильник Bosch Serie 6", amount: 142000, months: 14, openedAt: "2026-04-05", stage: "active", status: "В графике", statusTone: "green", nextStep: "Платёж 9 августа", manager: "ДС" },
+  { id: "R-1031", clientId: "C-103", client: "Татьяна Горина", product: "Мебель для спальни", amount: 88000, months: 10, openedAt: "2026-05-05", stage: "active", status: "Просрочка 2 дня", statusTone: "red", nextStep: "Нужен новый график", urgent: true, manager: "МК" },
+  { id: "R-1040", clientId: "C-104", client: "Дмитрий Савельев", product: "Ноутбук Lenovo IdeaPad", amount: 75000, months: 10, openedAt: "2026-03-20", stage: "active", status: "В графике", statusTone: "green", nextStep: "Напомнить об оплате", manager: "АС" },
+  // Закрытые
+  { id: "R-0988", clientId: "C-101", client: "Марина Котова", product: "Samsung Galaxy A55", amount: 48000, months: 6, openedAt: "2025-09-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "АС" },
+  { id: "R-0975", clientId: "C-102", client: "Никита Абрамов", product: "Стиральная машина LG", amount: 64000, months: 8, openedAt: "2025-06-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "ДС" },
+  { id: "R-0961", clientId: "C-109", client: "Ирина Волкова", product: "Кухонный гарнитур", amount: 55000, months: 6, openedAt: "2025-08-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "МК" },
+  { id: "R-0954", clientId: "C-110", client: "Олег Чернов", product: "Телевизор Samsung 55″", amount: 39000, months: 4, openedAt: "2025-10-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "АС" },
+  { id: "R-0942", clientId: "C-110", client: "Олег Чернов", product: "Ноутбук HP Pavilion", amount: 72000, months: 9, openedAt: "2025-04-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "АС" },
+  // Отклонённые
+  { id: "R-1012", clientId: "C-103", client: "Татьяна Горина", product: "Автомобиль Kia Rio", amount: 320000, months: 24, openedAt: "2026-02-14", stage: "rejected", status: "Отклонена", statusTone: "red", nextStep: "Отказ: высокая нагрузка", manager: "МК" },
+  { id: "R-1029", clientId: "C-105", client: "Виктор Данилов", product: "Мотоцикл Bajaj", amount: 210000, months: 18, openedAt: "2026-04-22", stage: "rejected", status: "Отклонена", statusTone: "red", nextStep: "Отказ: нет подтверждения дохода", manager: "АС" },
+  { id: "R-0930", clientId: "C-109", client: "Ирина Волкова", product: "Смартфон Xiaomi 14", amount: 62000, months: 8, openedAt: "2025-03-11", stage: "rejected", status: "Отклонена", statusTone: "red", nextStep: "Отказ: клиент передумал", manager: "ДС" },
 ];
 
-// Сколько платежей уже прошло — только у активных сделок
+// Сколько платежей уже прошло у активных сделок
 export const paidPayments: Record<string, number> = {
   "R-1042": 5,
   "R-1038": 3,
   "R-1031": 2,
+  "R-1040": 4,
 };
+
+// У закрытых сделок выплачены все платежи
+export const paidCount = (d: Deal) =>
+  d.stage === "closed" ? d.months : (paidPayments[d.id] ?? 0);
+
+export const dealState = (d: Deal): DealState =>
+  d.stage === "active" || d.stage === "closed" || d.stage === "rejected"
+    ? d.stage
+    : "pending";
+
+export const dealsOfClient = (clientId: string) =>
+  deals.filter((d) => d.clientId === clientId);
 
 // Персональные ссылки клиентов: токен → номер сделки.
 // В реальной системе токен генерируется случайно при создании сделки.
@@ -55,7 +96,10 @@ export const clientTokens: Record<string, string> = Object.fromEntries(
     // Детерминированный «случайный» токен из id сделки
     let h = 7;
     for (const ch of d.id) h = (h * 31 + ch.charCodeAt(0)) % 46656;
-    return [`${d.id.slice(2).toLowerCase()}-${h.toString(36).padStart(3, "0")}`, d.id];
+    return [
+      `${d.id.slice(2).toLowerCase()}-${h.toString(36).padStart(3, "0")}`,
+      d.id,
+    ];
   })
 );
 
@@ -66,52 +110,34 @@ export interface Client {
   id: string;
   name: string;
   phone: string;
+  email: string;
+  city: string;
+  since: string;
   status: "active" | "overdue" | "closed" | "lead";
   statusLabel: string;
-  deals: number;
-  portfolio: number;
   nextAction: string;
   nextDate: string;
 }
 
 export const clients: Client[] = [
-  { id: "C-101", name: "Марина Котова", phone: "+7 921 402-18-55", status: "active", statusLabel: "В графике", deals: 1, portfolio: 96000, nextAction: "Платёж 18 000 ₽", nextDate: "Сегодня" },
-  { id: "C-102", name: "Никита Абрамов", phone: "+7 911 733-02-14", status: "active", statusLabel: "В графике", deals: 2, portfolio: 142000, nextAction: "Платёж 12 000 ₽", nextDate: "9 августа" },
-  { id: "C-103", name: "Татьяна Горина", phone: "+7 981 220-47-90", status: "overdue", statusLabel: "Просрочка 2 дня", deals: 1, portfolio: 88000, nextAction: "Звонок о графике", nextDate: "Сегодня" },
-  { id: "C-104", name: "Дмитрий Савельев", phone: "+7 921 118-64-32", status: "active", statusLabel: "В графике", deals: 1, portfolio: 75000, nextAction: "Напомнить об оплате", nextDate: "Сегодня" },
-  { id: "C-105", name: "Виктор Данилов", phone: "+7 911 604-77-21", status: "lead", statusLabel: "Проверка", deals: 1, portfolio: 240000, nextAction: "Дослать паспорт", nextDate: "6 августа" },
-  { id: "C-106", name: "Анна Полякова", phone: "+7 981 355-90-08", status: "lead", statusLabel: "Новая заявка", deals: 1, portfolio: 120000, nextAction: "Первичный звонок", nextDate: "Сегодня" },
-  { id: "C-107", name: "Сергей Миронов", phone: "+7 921 909-33-46", status: "lead", statusLabel: "Подписание", deals: 1, portfolio: 58500, nextAction: "Подписание договора", nextDate: "6 августа" },
-  { id: "C-108", name: "Елена Крылова", phone: "+7 911 287-15-73", status: "lead", statusLabel: "Скоринг", deals: 1, portfolio: 74000, nextAction: "Решение по скорингу", nextDate: "Сегодня" },
-  { id: "C-109", name: "Ирина Волкова", phone: "+7 981 512-38-27", status: "closed", statusLabel: "Закрыта", deals: 1, portfolio: 0, nextAction: "—", nextDate: "—" },
-  { id: "C-110", name: "Олег Чернов", phone: "+7 921 774-51-19", status: "closed", statusLabel: "Закрыта", deals: 2, portfolio: 0, nextAction: "—", nextDate: "—" },
+  { id: "C-101", name: "Марина Котова", phone: "+7 921 402-18-55", email: "m.kotova@mail.ru", city: "Санкт-Петербург", since: "сентября 2025", status: "active", statusLabel: "В графике", nextAction: "Платёж 8 000 ₽", nextDate: "Сегодня" },
+  { id: "C-102", name: "Никита Абрамов", phone: "+7 911 733-02-14", email: "n.abramov@gmail.com", city: "Санкт-Петербург", since: "июня 2025", status: "active", statusLabel: "В графике", nextAction: "Платёж 10 143 ₽", nextDate: "9 августа" },
+  { id: "C-103", name: "Татьяна Горина", phone: "+7 981 220-47-90", email: "gorina.t@yandex.ru", city: "Москва", since: "февраля 2026", status: "overdue", statusLabel: "Просрочка 2 дня", nextAction: "Звонок о новом графике", nextDate: "Сегодня" },
+  { id: "C-104", name: "Дмитрий Савельев", phone: "+7 921 118-64-32", email: "savelev.d@mail.ru", city: "Казань", since: "марта 2026", status: "active", statusLabel: "В графике", nextAction: "Напомнить об оплате", nextDate: "Сегодня" },
+  { id: "C-105", name: "Виктор Данилов", phone: "+7 911 604-77-21", email: "v.danilov@gmail.com", city: "Екатеринбург", since: "апреля 2026", status: "lead", statusLabel: "Проверка", nextAction: "Дослать паспорт", nextDate: "6 августа" },
+  { id: "C-106", name: "Анна Полякова", phone: "+7 981 355-90-08", email: "a.polyakova@mail.ru", city: "Москва", since: "августа 2026", status: "lead", statusLabel: "Новая заявка", nextAction: "Первичный звонок", nextDate: "Сегодня" },
+  { id: "C-107", name: "Сергей Миронов", phone: "+7 921 909-33-46", email: "s.mironov@yandex.ru", city: "Новосибирск", since: "июля 2026", status: "lead", statusLabel: "Подписание", nextAction: "Подписание договора", nextDate: "6 августа" },
+  { id: "C-108", name: "Елена Крылова", phone: "+7 911 287-15-73", email: "e.krylova@gmail.com", city: "Краснодар", since: "июля 2026", status: "lead", statusLabel: "Скоринг", nextAction: "Решение по скорингу", nextDate: "Сегодня" },
+  { id: "C-109", name: "Ирина Волкова", phone: "+7 981 512-38-27", email: "i.volkova@mail.ru", city: "Москва", since: "марта 2025", status: "closed", statusLabel: "Закрыта", nextAction: "—", nextDate: "—" },
+  { id: "C-110", name: "Олег Чернов", phone: "+7 921 774-51-19", email: "o.chernov@yandex.ru", city: "Казань", since: "апреля 2025", status: "closed", statusLabel: "Закрыта", nextAction: "—", nextDate: "—" },
+  { id: "C-111", name: "Роман Ветров", phone: "+7 911 845-20-63", email: "r.vetrov@gmail.com", city: "Санкт-Петербург", since: "августа 2026", status: "lead", statusLabel: "Новая заявка", nextAction: "Первичный звонок", nextDate: "Сегодня" },
+  { id: "C-112", name: "Ольга Смирнова", phone: "+7 981 067-92-14", email: "o.smirnova@mail.ru", city: "Москва", since: "августа 2026", status: "lead", statusLabel: "Новая заявка", nextAction: "Уточнить сумму", nextDate: "6 августа" },
+  { id: "C-113", name: "Игорь Лапин", phone: "+7 921 330-58-47", email: "i.lapin@yandex.ru", city: "Екатеринбург", since: "августа 2026", status: "lead", statusLabel: "Новая заявка", nextAction: "Перезвонить", nextDate: "6 августа" },
+  { id: "C-114", name: "Павел Козлов", phone: "+7 911 452-77-08", email: "p.kozlov@gmail.com", city: "Новосибирск", since: "июля 2026", status: "lead", statusLabel: "Проверка", nextAction: "Проверить ИНН", nextDate: "7 августа" },
+  { id: "C-115", name: "Дарья Ильина", phone: "+7 981 619-04-25", email: "d.ilina@mail.ru", city: "Краснодар", since: "июля 2026", status: "lead", statusLabel: "Подписание", nextAction: "Созвон в 15:00", nextDate: "Сегодня" },
 ];
 
-export interface PaymentHistoryItem {
-  date: string;
-  amount: number;
-  status: "paid" | "due" | "overdue";
-}
-
-export const clientDetail = {
-  id: "C-101",
-  name: "Марина Котова",
-  phone: "+7 921 402-18-55",
-  email: "m.kotova@mail.ru",
-  since: "марта 2026",
-  deals: [
-    { id: "R-1042", amount: 96000, paid: 40000, months: 12, monthly: 8000, status: "В графике" },
-  ],
-  history: [
-    { date: "5 августа", amount: 8000, status: "due" },
-    { date: "5 июля", amount: 8000, status: "paid" },
-    { date: "5 июня", amount: 8000, status: "paid" },
-    { date: "5 мая", amount: 8000, status: "paid" },
-    { date: "5 апреля", amount: 8000, status: "paid" },
-    { date: "5 марта", amount: 8000, status: "paid" },
-  ] as PaymentHistoryItem[],
-  nextAction: "Принять платёж 8 000 ₽ сегодня до 18:00",
-};
+export const clientById = (id: string) => clients.find((c) => c.id === id);
 
 // Календарь платежей: август 2026 (1 августа — суббота)
 export interface CalendarDay {

@@ -1,17 +1,25 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, SearchX, X, Phone, Mail, ArrowRight } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Search, SearchX } from "lucide-react";
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui";
-import { clients, clientDetail, fmt, type Client } from "@/lib/data";
+import {
+  clients,
+  dealsOfClient,
+  dealState,
+  paidCount,
+  type Client,
+} from "@/lib/data";
+import { buildSchedule, money } from "@/lib/schedule";
 
-const statusTone: Record<Client["status"], "green" | "red" | "gray" | "blue"> =
-  {
-    active: "green",
-    overdue: "red",
-    closed: "gray",
-    lead: "blue",
-  };
+const statusTone: Record<Client["status"], "green" | "red" | "gray" | "blue"> = {
+  active: "green",
+  overdue: "red",
+  closed: "gray",
+  lead: "blue",
+};
 
 const filters = [
   { key: "all", label: "Все" },
@@ -21,21 +29,43 @@ const filters = [
   { key: "closed", label: "Закрытые" },
 ] as const;
 
-export default function ClientsPage() {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] =
-    useState<(typeof filters)[number]["key"]>("all");
-  const [selected, setSelected] = useState<string | null>(null);
+// Сводка по каждому клиенту считается из его сделок
+const rows = clients.map((client) => {
+  const list = dealsOfClient(client.id);
+  const portfolio = list
+    .filter((d) => dealState(d) === "active")
+    .reduce((sum, d) => {
+      const schedule = buildSchedule(
+        d.amount,
+        d.months,
+        paidCount(d),
+        d.openedAt
+      );
+      const paidSum = schedule
+        .filter((p) => p.status === "paid")
+        .reduce((s, p) => s + p.amount, 0);
+      return sum + (d.amount - paidSum);
+    }, 0);
+  return { client, deals: list.length, portfolio };
+});
 
-  const list = useMemo(
-    () =>
-      clients.filter(
-        (c) =>
-          (filter === "all" || c.status === filter) &&
-          c.name.toLowerCase().includes(query.trim().toLowerCase())
-      ),
-    [query, filter]
-  );
+export default function ClientsPage() {
+  const router = useRouter();
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<(typeof filters)[number]["key"]>("all");
+
+  const list = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const digits = query.replace(/\D/g, "");
+    return rows.filter(
+      ({ client }) =>
+        (filter === "all" || client.status === filter) &&
+        (q === "" ||
+          client.name.toLowerCase().includes(q) ||
+          (digits.length >= 3 &&
+            client.phone.replace(/\D/g, "").includes(digits)))
+    );
+  }, [query, filter]);
 
   return (
     <>
@@ -56,7 +86,7 @@ export default function ClientsPage() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Поиск по имени"
+              placeholder="Поиск по имени или телефону"
               className="w-full rounded-[10px] border border-line bg-surface py-2 pr-3 pl-9 text-sm outline-none focus:border-brand"
             />
           </label>
@@ -102,7 +132,7 @@ export default function ClientsPage() {
                     <th className="px-5 py-3 font-medium">Клиент</th>
                     <th className="px-5 py-3 font-medium">Статус</th>
                     <th className="px-5 py-3 font-medium">Сделки</th>
-                    <th className="px-5 py-3 font-medium">Портфель</th>
+                    <th className="px-5 py-3 font-medium">Остаток</th>
                     <th className="px-5 py-3 font-medium">
                       Ближайшее действие
                     </th>
@@ -110,14 +140,20 @@ export default function ClientsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {list.map((c) => (
+                  {list.map(({ client: c, deals, portfolio }) => (
                     <tr
                       key={c.id}
-                      onClick={() => setSelected(c.id)}
+                      onClick={() => router.push(`/clients/${c.id}`)}
                       className="cursor-pointer transition-colors hover:bg-canvas"
                     >
                       <td className="px-5 py-3.5">
-                        <p className="font-medium">{c.name}</p>
+                        <Link
+                          href={`/clients/${c.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="font-medium hover:text-brand-deep"
+                        >
+                          {c.name}
+                        </Link>
                         <p className="text-xs text-mute">{c.phone}</p>
                       </td>
                       <td className="px-5 py-3.5">
@@ -125,9 +161,9 @@ export default function ClientsPage() {
                           {c.statusLabel}
                         </Badge>
                       </td>
-                      <td className="px-5 py-3.5">{c.deals}</td>
+                      <td className="px-5 py-3.5">{deals}</td>
                       <td className="px-5 py-3.5 font-medium">
-                        {c.portfolio ? fmt(c.portfolio) : "—"}
+                        {portfolio ? money(portfolio) : "—"}
                       </td>
                       <td className="px-5 py-3.5 text-mute">{c.nextAction}</td>
                       <td
@@ -147,115 +183,9 @@ export default function ClientsPage() {
           )}
         </Card>
         <p className="mt-3 text-xs text-mute">
-          Нажмите на строку, чтобы открыть карточку клиента.
+          Нажмите на строку, чтобы открыть карточку клиента со всеми сделками.
         </p>
       </div>
-
-      {/* Карточка клиента */}
-      {selected && (
-        <div className="fixed inset-0 z-40">
-          <button
-            aria-label="Закрыть карточку"
-            className="absolute inset-0 bg-ink/30"
-            onClick={() => setSelected(null)}
-          />
-          <aside className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col overflow-y-auto bg-surface shadow-pop">
-            <div className="flex items-start justify-between border-b border-line px-6 py-5">
-              <div>
-                <h2 className="text-lg font-semibold tracking-tight">
-                  {clientDetail.name}
-                </h2>
-                <p className="mt-0.5 text-sm text-mute">
-                  Клиент с {clientDetail.since} · {clientDetail.id}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelected(null)}
-                aria-label="Закрыть"
-                className="rounded-[10px] p-2 text-mute hover:bg-canvas"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-5 px-6 py-5">
-              <div className="rounded-[12px] bg-brand-soft p-4">
-                <p className="text-xs font-medium text-brand-deep">
-                  Ближайшее действие
-                </p>
-                <p className="mt-1 text-sm font-medium text-ink">
-                  {clientDetail.nextAction}
-                </p>
-                <button className="mt-3 flex items-center gap-1.5 rounded-[10px] bg-brand px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-deep">
-                  Принять платёж <ArrowRight size={15} aria-hidden />
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-2 text-sm">
-                <p className="flex items-center gap-2.5 text-mute">
-                  <Phone size={15} aria-hidden /> {clientDetail.phone}
-                </p>
-                <p className="flex items-center gap-2.5 text-mute">
-                  <Mail size={15} aria-hidden /> {clientDetail.email}
-                </p>
-              </div>
-
-              <section>
-                <h3 className="mb-2 text-sm font-semibold">Активные сделки</h3>
-                {clientDetail.deals.map((d) => (
-                  <div
-                    key={d.id}
-                    className="rounded-[12px] border border-line p-4"
-                  >
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium">{d.id}</p>
-                      <Badge tone="green">{d.status}</Badge>
-                    </div>
-                    <p className="mt-1 text-sm text-mute">
-                      {fmt(d.amount)} · {d.months} месяцев ·{" "}
-                      {fmt(d.monthly)}/мес
-                    </p>
-                    <div
-                      className="mt-3 h-1.5 overflow-hidden rounded-full bg-line"
-                      role="progressbar"
-                      aria-valuenow={Math.round((d.paid / d.amount) * 100)}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-label="Выплачено по сделке"
-                    >
-                      <div
-                        className="h-full rounded-full bg-brand"
-                        style={{ width: `${(d.paid / d.amount) * 100}%` }}
-                      />
-                    </div>
-                    <p className="mt-2 text-xs text-mute">
-                      Выплачено {fmt(d.paid)} из {fmt(d.amount)}
-                    </p>
-                  </div>
-                ))}
-              </section>
-
-              <section>
-                <h3 className="mb-2 text-sm font-semibold">История платежей</h3>
-                <ul className="divide-y divide-line">
-                  {clientDetail.history.map((h) => (
-                    <li
-                      key={h.date}
-                      className="flex items-center justify-between py-2.5 text-sm"
-                    >
-                      <span className="text-mute">{h.date}</span>
-                      <span className="font-medium">{fmt(h.amount)}</span>
-                      <Badge tone={h.status === "paid" ? "green" : "blue"}>
-                        {h.status === "paid" ? "Оплачен" : "Ожидается"}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            </div>
-          </aside>
-        </div>
-      )}
     </>
   );
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Zap, Check, Phone, MessageCircle, CalendarDays } from "lucide-react";
-import { deals, clients, paidPayments, clientTokens, fmt } from "@/lib/data";
+import { deals, clientById, paidCount, clientTokens, fmt } from "@/lib/data";
 import { buildSchedule, money } from "@/lib/schedule";
 
 export function generateStaticParams() {
@@ -23,10 +23,15 @@ export default async function ClientPortalPage({
   const deal = deals.find((d) => d.id === dealId);
   if (!deal) notFound();
 
-  const client = clients.find((c) => c.name === deal.client);
+  const client = clientById(deal.clientId);
   const firstName = deal.client.split(" ")[0];
-  const paid = paidPayments[deal.id] ?? 0;
-  const schedule = buildSchedule(deal.amount, deal.months, paid);
+  const paid = paidCount(deal);
+  const schedule = buildSchedule(
+    deal.amount,
+    deal.months,
+    paid,
+    deal.openedAt
+  );
   const paidSum = schedule
     .filter((p) => p.status === "paid")
     .reduce((s, p) => s + p.amount, 0);
