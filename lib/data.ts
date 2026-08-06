@@ -41,6 +41,13 @@ export const deals: Deal[] = [
   { id: "R-1031", client: "Татьяна Горина", amount: 88000, months: 10, stage: "active", status: "Просрочка 2 дня", statusTone: "red", nextStep: "Нужен новый график", urgent: true, manager: "МК" },
 ];
 
+// Сколько платежей уже прошло — только у активных сделок
+export const paidPayments: Record<string, number> = {
+  "R-1042": 5,
+  "R-1038": 3,
+  "R-1031": 2,
+};
+
 export interface Client {
   id: string;
   name: string;

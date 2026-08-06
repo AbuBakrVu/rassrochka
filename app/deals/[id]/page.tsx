@@ -16,7 +16,7 @@ import {
   History,
 } from "lucide-react";
 import { Card, Badge } from "@/components/ui";
-import { deals, clients, fmt, stages } from "@/lib/data";
+import { deals, clients, fmt, stages, paidPayments } from "@/lib/data";
 
 export function generateStaticParams() {
   return deals.map((d) => ({ id: d.id }));
@@ -47,13 +47,6 @@ interface Installment {
   remaining: number;
   status: "paid" | "due" | "overdue";
 }
-
-// Сколько платежей уже прошло — только у активных сделок
-const paidByDeal: Record<string, number> = {
-  "R-1042": 5,
-  "R-1038": 3,
-  "R-1031": 2,
-};
 
 function buildSchedule(amount: number, months: number, paid: number) {
   const monthly = Math.round(amount / months);
@@ -161,7 +154,7 @@ export default async function DealPage({
   if (!deal) notFound();
 
   const client = clients.find((c) => c.name === deal.client);
-  const paid = paidByDeal[deal.id] ?? 0;
+  const paid = paidPayments[deal.id] ?? 0;
   const schedule = buildSchedule(deal.amount, deal.months, paid);
   const monthly = Math.round(deal.amount / deal.months);
   const paidSum = schedule

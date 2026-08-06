@@ -4,12 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import NewClientModal from "@/components/new-client-modal";
 import NewDealModal from "@/components/new-deal-modal";
+import AcceptPaymentModal from "@/components/accept-payment-modal";
 import {
   Search,
   Bell,
   Inbox,
   UserPlus,
   FilePlus2,
+  HandCoins,
   ChevronDown,
   type LucideIcon,
 } from "lucide-react";
@@ -61,7 +63,9 @@ export function PageHeader({
 
 function CtaMenu({ label }: { label: string }) {
   const [open, setOpen] = useState(false);
-  const [modal, setModal] = useState<"client" | "deal" | null>(null);
+  const [modal, setModal] = useState<"client" | "deal" | "payment" | null>(
+    null
+  );
   const wrap = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
@@ -90,6 +94,11 @@ function CtaMenu({ label }: { label: string }) {
       icon: UserPlus,
       label: "Создать клиента",
       action: () => setModal("client"),
+    },
+    {
+      icon: HandCoins,
+      label: "Принять платёж",
+      action: () => setModal("payment"),
     },
   ];
 
@@ -131,6 +140,9 @@ function CtaMenu({ label }: { label: string }) {
       )}
       {modal === "client" && <NewClientModal onClose={() => setModal(null)} />}
       {modal === "deal" && <NewDealModal onClose={() => setModal(null)} />}
+      {modal === "payment" && (
+        <AcceptPaymentModal onClose={() => setModal(null)} />
+      )}
     </div>
   );
 }
