@@ -9,7 +9,7 @@ import {
   CornerDownLeft,
   SearchX,
 } from "lucide-react";
-import { clients, deals } from "@/lib/data";
+import { useData } from "@/lib/store";
 
 const initials = (name: string) =>
   name
@@ -18,6 +18,7 @@ const initials = (name: string) =>
     .join("");
 
 export default function CommandPalette() {
+  const { clients, deals } = useData();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const router = useRouter();
@@ -57,7 +58,7 @@ export default function CommandPalette() {
           (digits.length >= 3 && c.phone.replace(/\D/g, "").includes(digits))
       )
       .slice(0, 6);
-  }, [q, digits]);
+  }, [q, digits, clients]);
 
   const dealResults = useMemo(() => {
     if (!q) return deals.slice(0, 5);
@@ -69,7 +70,7 @@ export default function CommandPalette() {
           d.client.toLowerCase().includes(q)
       )
       .slice(0, 6);
-  }, [q]);
+  }, [q, deals]);
 
   const go = (path: string) => {
     setOpen(false);

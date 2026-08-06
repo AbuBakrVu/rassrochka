@@ -5,14 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, SearchX } from "lucide-react";
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui";
-import {
-  clients,
-  dealsOfClient,
-  dealState,
-  paidCount,
-  type Client,
-} from "@/lib/data";
+import { dealsOfClient, dealState, paidCount, type Client } from "@/lib/data";
 import { buildSchedule, money } from "@/lib/schedule";
+import { useData } from "@/lib/store";
 
 const statusTone: Record<Client["status"], "green" | "red" | "gray" | "blue"> = {
   active: "green",
@@ -29,30 +24,35 @@ const filters = [
   { key: "closed", label: "Закрытые" },
 ] as const;
 
-// Сводка по каждому клиенту считается из его сделок
-const rows = clients.map((client) => {
-  const list = dealsOfClient(client.id);
-  const portfolio = list
-    .filter((d) => dealState(d) === "active")
-    .reduce((sum, d) => {
-      const schedule = buildSchedule(
-        d.amount,
-        d.months,
-        paidCount(d),
-        d.openedAt
-      );
-      const paidSum = schedule
-        .filter((p) => p.status === "paid")
-        .reduce((s, p) => s + p.amount, 0);
-      return sum + (d.amount - paidSum);
-    }, 0);
-  return { client, deals: list.length, portfolio };
-});
-
 export default function ClientsPage() {
   const router = useRouter();
+  const { clients, deals, paidPayments } = useData();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<(typeof filters)[number]["key"]>("all");
+
+  // Сводка по каждому клиенту считается из его сделок
+  const rows = useMemo(
+    () =>
+      clients.map((client) => {
+        const list = dealsOfClient(deals, client.id);
+        const portfolio = list
+          .filter((d) => dealState(d) === "active")
+          .reduce((sum, d) => {
+            const schedule = buildSchedule(
+              d.amount,
+              d.months,
+              paidCount(d, paidPayments),
+              d.openedAt
+            );
+            const paidSum = schedule
+              .filter((p) => p.status === "paid")
+              .reduce((s, p) => s + p.amount, 0);
+            return sum + (d.amount - paidSum);
+          }, 0);
+        return { client, deals: list.length, portfolio };
+      }),
+    [clients, deals, paidPayments]
+  );
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -65,7 +65,7 @@ export default function ClientsPage() {
           (digits.length >= 3 &&
             client.phone.replace(/\D/g, "").includes(digits)))
     );
-  }, [query, filter]);
+  }, [rows, query, filter]);
 
   return (
     <>

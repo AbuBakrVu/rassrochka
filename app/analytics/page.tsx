@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Wallet,
   CheckCircle2,
@@ -7,19 +9,20 @@ import {
   Users,
 } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
-import { deals, stages, paidCount } from "@/lib/data";
+import { stages, paidCount, type Deal } from "@/lib/data";
 import { buildSchedule, money } from "@/lib/schedule";
+import { useData } from "@/lib/store";
 
 const decidedStages = ["active", "closed", "rejected"] as const;
 
-function activeRemaining() {
+function activeRemaining(deals: Deal[], paidPayments: Record<string, number>) {
   return deals
     .filter((d) => d.stage === "active")
     .reduce((sum, d) => {
       const schedule = buildSchedule(
         d.amount,
         d.months,
-        paidCount(d),
+        paidCount(d, paidPayments),
         d.openedAt
       );
       const paidSum = schedule
@@ -62,6 +65,7 @@ function Bar({
 }
 
 export default function AnalyticsPage() {
+  const { deals, paidPayments } = useData();
   const byStage = stages.map((s) => ({
     ...s,
     count: deals.filter((d) => d.stage === s.key).length,
@@ -111,7 +115,7 @@ export default function AnalyticsPage() {
   const kpis = [
     {
       label: "Портфель в работе",
-      value: money(activeRemaining()),
+      value: money(activeRemaining(deals, paidPayments)),
       note: "остаток по активным сделкам",
       icon: Wallet,
     },

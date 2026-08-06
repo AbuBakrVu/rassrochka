@@ -39,7 +39,9 @@ export const stages: { key: DealStage; title: string }[] = [
   { key: "active", title: "Активна" },
 ];
 
-export const deals: Deal[] = [
+// Затравочные данные — стартовое состояние клиентского стора (см. lib/store.tsx).
+// Сам по себе этот массив больше нигде не читается напрямую.
+export const seedDeals: Deal[] = [
   // Новые заявки
   { id: "R-1051", clientId: "C-106", client: "Анна Полякова", product: "MacBook Air 13″ M3", amount: 120000, months: 12, openedAt: "2026-08-05", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Ответить сегодня", manager: "АС" },
   { id: "R-1052", clientId: "C-111", client: "Роман Ветров", product: "Велосипед Merida Big Nine", amount: 85000, months: 10, openedAt: "2026-08-05", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Заявка 30 мин назад", manager: "МК" },
@@ -69,8 +71,8 @@ export const deals: Deal[] = [
   { id: "R-0930", clientId: "C-109", client: "Ирина Волкова", product: "Смартфон Xiaomi 14", amount: 62000, months: 8, openedAt: "2025-03-11", stage: "rejected", status: "Отклонена", statusTone: "red", nextStep: "Отказ: клиент передумал", manager: "ДС" },
 ];
 
-// Сколько платежей уже прошло у активных сделок
-export const paidPayments: Record<string, number> = {
+// Сколько платежей уже прошло у активных сделок — тоже затравка для стора
+export const seedPaidPayments: Record<string, number> = {
   "R-1042": 5,
   "R-1038": 3,
   "R-1031": 2,
@@ -78,7 +80,7 @@ export const paidPayments: Record<string, number> = {
 };
 
 // У закрытых сделок выплачены все платежи
-export const paidCount = (d: Deal) =>
+export const paidCount = (d: Deal, paidPayments: Record<string, number>) =>
   d.stage === "closed" ? d.months : (paidPayments[d.id] ?? 0);
 
 export const dealState = (d: Deal): DealState =>
@@ -86,7 +88,7 @@ export const dealState = (d: Deal): DealState =>
     ? d.stage
     : "pending";
 
-export const dealsOfClient = (clientId: string) =>
+export const dealsOfClient = (deals: Deal[], clientId: string) =>
   deals.filter((d) => d.clientId === clientId);
 
 // Русское склонение по числу: 1 сделка / 2 сделки / 5 сделок
@@ -109,8 +111,8 @@ export interface RiskAssessment {
 
 // Простая прозрачная скоринговая модель: каждый фактор виден в reasons,
 // решение не должно выглядеть чёрным ящиком для менеджера.
-export function assessRisk(clientId: string): RiskAssessment {
-  const list = dealsOfClient(clientId);
+export function assessRisk(deals: Deal[], clientId: string): RiskAssessment {
+  const list = dealsOfClient(deals, clientId);
   const closed = list.filter((d) => d.stage === "closed").length;
   const rejected = list.filter((d) => d.stage === "rejected").length;
   const activeOverdue = list.filter(
@@ -175,22 +177,17 @@ export function assessRisk(clientId: string): RiskAssessment {
   return { score, tone, label, reasons };
 }
 
-// Персональные ссылки клиентов: токен → номер сделки.
-// В реальной системе токен генерируется случайно при создании сделки.
-export const clientTokens: Record<string, string> = Object.fromEntries(
-  deals.map((d) => {
-    // Детерминированный «случайный» токен из id сделки
-    let h = 7;
-    for (const ch of d.id) h = (h * 31 + ch.charCodeAt(0)) % 46656;
-    return [
-      `${d.id.slice(2).toLowerCase()}-${h.toString(36).padStart(3, "0")}`,
-      d.id,
-    ];
-  })
-);
+// Персональная ссылка клиента: детерминированный «случайный» токен из id сделки.
+// В реальной системе он генерировался бы случайно при создании сделки и
+// хранился бы отдельно — здесь достаточно чистой функции от id.
+export const tokenForDeal = (dealId: string) => {
+  let h = 7;
+  for (const ch of dealId) h = (h * 31 + ch.charCodeAt(0)) % 46656;
+  return `${dealId.slice(2).toLowerCase()}-${h.toString(36).padStart(3, "0")}`;
+};
 
-export const tokenByDeal = (dealId: string) =>
-  Object.keys(clientTokens).find((t) => clientTokens[t] === dealId) ?? "";
+export const dealIdFromToken = (deals: Deal[], token: string) =>
+  deals.find((d) => tokenForDeal(d.id) === token)?.id;
 
 export type RouteKind = "overdue" | "deadline" | "review" | "request";
 
@@ -208,7 +205,7 @@ export interface RouteItem {
 // Маршрут менеджера на сегодня: объединяет всё, что требует действия,
 // в один приоритизированный список — из тех же данных о сделках,
 // без отдельного источника правды.
-export function buildRoute(): RouteItem[] {
+export function buildRoute(deals: Deal[]): RouteItem[] {
   const items: RouteItem[] = [];
 
   for (const d of deals) {
@@ -288,7 +285,8 @@ export interface Client {
   nextDate: string;
 }
 
-export const clients: Client[] = [
+// Затравочные данные — стартовое состояние клиентского стора (см. lib/store.tsx).
+export const seedClients: Client[] = [
   { id: "C-101", name: "Марина Котова", phone: "+7 921 402-18-55", email: "m.kotova@mail.ru", city: "Санкт-Петербург", since: "сентября 2025", status: "active", statusLabel: "В графике", nextAction: "Платёж 8 000 ₽", nextDate: "Сегодня" },
   { id: "C-102", name: "Никита Абрамов", phone: "+7 911 733-02-14", email: "n.abramov@gmail.com", city: "Санкт-Петербург", since: "июня 2025", status: "active", statusLabel: "В графике", nextAction: "Платёж 10 143 ₽", nextDate: "9 августа" },
   { id: "C-103", name: "Татьяна Горина", phone: "+7 981 220-47-90", email: "gorina.t@yandex.ru", city: "Москва", since: "февраля 2026", status: "overdue", statusLabel: "Просрочка 2 дня", nextAction: "Звонок о новом графике", nextDate: "Сегодня" },
@@ -306,7 +304,8 @@ export const clients: Client[] = [
   { id: "C-115", name: "Дарья Ильина", phone: "+7 981 619-04-25", email: "d.ilina@mail.ru", city: "Краснодар", since: "июля 2026", status: "lead", statusLabel: "Подписание", nextAction: "Созвон в 15:00", nextDate: "Сегодня" },
 ];
 
-export const clientById = (id: string) => clients.find((c) => c.id === id);
+export const clientById = (clients: Client[], id: string) =>
+  clients.find((c) => c.id === id);
 
 // Календарь платежей: август 2026 (1 августа — суббота)
 export interface CalendarDay {

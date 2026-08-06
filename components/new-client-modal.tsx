@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
+import { useData } from "@/lib/store";
+import type { Client } from "@/lib/data";
 
 // Маска +7 (999) 999-99-99
 function maskPhone(raw: string) {
@@ -64,7 +67,15 @@ function Section({
   );
 }
 
-export default function NewClientModal({ onClose }: { onClose: () => void }) {
+export default function NewClientModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated?: (client: Client) => void;
+}) {
+  const { addClient } = useData();
+  const router = useRouter();
   const [form, setForm] = useState({
     lastName: "",
     firstName: "",
@@ -106,8 +117,19 @@ export default function NewClientModal({ onClose }: { onClose: () => void }) {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!ready) return;
+    const created = addClient({
+      lastName: form.lastName.trim(),
+      firstName: form.firstName.trim(),
+      phone: form.phone,
+    });
     setSaved(true);
-    setTimeout(onClose, 1200);
+    onCreated?.(created);
+    setTimeout(() => {
+      onClose();
+      // Если это не часть другого сценария (например, мастера сделки) —
+      // сразу открываем карточку нового клиента, чтобы было видно результат
+      if (!onCreated) router.push(`/clients/${created.id}`);
+    }, 1200);
   };
 
   return (

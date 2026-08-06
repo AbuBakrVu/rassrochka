@@ -14,6 +14,7 @@ import {
 import { PageHeader, Card } from "@/components/ui";
 import { buildRoute, type RouteKind } from "@/lib/data";
 import { money } from "@/lib/schedule";
+import { useData } from "@/lib/store";
 
 const kindMeta: Record<
   RouteKind,
@@ -38,7 +39,8 @@ const tabs = [
 ] as const;
 
 export default function RoutePage() {
-  const items = useMemo(() => buildRoute(), []);
+  const { deals } = useData();
+  const items = useMemo(() => buildRoute(deals), [deals]);
   const [done, setDone] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<(typeof tabs)[number]["key"]>("left");
 

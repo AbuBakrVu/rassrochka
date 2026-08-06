@@ -12,13 +12,8 @@ import {
   Landmark,
   CalendarDays,
 } from "lucide-react";
-import {
-  deals,
-  clientById,
-  paidCount,
-  dealState,
-  type Deal,
-} from "@/lib/data";
+import { clientById, paidCount, dealState, type Deal } from "@/lib/data";
+import { useData } from "@/lib/store";
 import { Badge } from "@/components/ui";
 
 const money = (n: number) =>
@@ -47,6 +42,7 @@ export default function AcceptPaymentModal({
 }: {
   onClose: () => void;
 }) {
+  const { deals, clients, paidPayments, acceptPayment } = useData();
   const [query, setQuery] = useState("");
   const [deal, setDeal] = useState<Deal | null>(null);
   const [amount, setAmount] = useState("");
@@ -75,8 +71,8 @@ export default function AcceptPaymentModal({
       // Платёж можно принять только по действующей или готовящейся сделке
       .filter((d) => dealState(d) === "active" || dealState(d) === "pending")
       .map((d) => {
-        const client = clientById(d.clientId);
-        const paid = paidCount(d);
+        const client = clientById(clients, d.clientId);
+        const paid = paidCount(d, paidPayments);
         const monthly = Math.round(d.amount / d.months);
         return {
           deal: d,
@@ -92,7 +88,7 @@ export default function AcceptPaymentModal({
           d.id.toLowerCase().includes(q) ||
           (qd.length >= 3 && digits(phone).includes(qd))
       );
-  }, [query]);
+  }, [query, deals, clients, paidPayments]);
 
   const selected = deal
     ? rows.find((r) => r.deal.id === deal.id) ?? {
@@ -112,7 +108,8 @@ export default function AcceptPaymentModal({
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ready) return;
+    if (!ready || !deal) return;
+    acceptPayment(deal.id);
     setSaved(true);
     setTimeout(onClose, 1300);
   };

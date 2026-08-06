@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   X,
   Package,
@@ -28,7 +29,8 @@ import {
   CalendarDays,
   type LucideIcon,
 } from "lucide-react";
-import { clients, fmt } from "@/lib/data";
+import type { Client } from "@/lib/data";
+import { useData } from "@/lib/store";
 import NewClientModal from "@/components/new-client-modal";
 
 const steps = [
@@ -132,6 +134,8 @@ function StepHead({
 }
 
 export default function NewDealModal({ onClose }: { onClose: () => void }) {
+  const { clients, addDeal } = useData();
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const [created, setCreated] = useState(false);
   const [clientFormOpen, setClientFormOpen] = useState(false);
@@ -151,7 +155,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
   const [firstPayment, setFirstPayment] = useState("");
 
   const [clientQuery, setClientQuery] = useState("");
-  const [client, setClient] = useState<(typeof clients)[number] | null>(null);
+  const [client, setClient] = useState<Client | null>(null);
   const [guarantors, setGuarantors] = useState<string[]>([]);
 
   useEffect(() => {
@@ -216,8 +220,20 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
   };
 
   const create = () => {
+    if (!client) return;
+    const deal = addDeal({
+      product: name,
+      amount: Math.round(calc.financed),
+      months,
+      openedAt: dealDate,
+      clientId: client.id,
+      clientName: client.name,
+    });
     setCreated(true);
-    setTimeout(onClose, 1400);
+    setTimeout(() => {
+      onClose();
+      router.push(`/deals/${deal.id}`);
+    }, 1400);
   };
 
   return (
@@ -970,7 +986,10 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
       </div>
 
       {clientFormOpen && (
-        <NewClientModal onClose={() => setClientFormOpen(false)} />
+        <NewClientModal
+          onClose={() => setClientFormOpen(false)}
+          onCreated={(c) => setClient(c)}
+        />
       )}
     </div>
   );

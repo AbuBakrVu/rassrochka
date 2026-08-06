@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { PageHeader, Badge } from "@/components/ui";
-import { deals, stages, fmt } from "@/lib/data";
+import { stages, fmt } from "@/lib/data";
+import { useData } from "@/lib/store";
 
 const months = (n: number) => {
   const last = n % 10;
@@ -11,6 +14,7 @@ const months = (n: number) => {
 };
 
 export default function DealsPage() {
+  const { deals } = useData();
   return (
     <>
       <PageHeader

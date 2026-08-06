@@ -11,6 +11,7 @@ export default function DealActions({
   monthly,
   primaryLabel,
   canRestructure,
+  onPrimary,
 }: {
   dealId: string;
   clientName: string;
@@ -18,6 +19,7 @@ export default function DealActions({
   monthly: number;
   primaryLabel: string;
   canRestructure: boolean;
+  onPrimary?: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -33,7 +35,12 @@ export default function DealActions({
           <span className="hidden sm:inline">Изменить график</span>
         </button>
       )}
-      <button className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep">
+      <button
+        type="button"
+        onClick={onPrimary}
+        disabled={!onPrimary}
+        className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:opacity-60"
+      >
         {primaryLabel} <ArrowRight size={15} aria-hidden />
       </button>
       {open && (
