@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ArrowLeft,
-  ArrowRight,
   Package,
   Phone,
   MessageCircle,
@@ -16,6 +15,7 @@ import {
   History,
 } from "lucide-react";
 import { Card, Badge } from "@/components/ui";
+import DealActions from "@/components/deal-actions";
 import {
   deals,
   clientById,
@@ -264,10 +264,14 @@ export default async function DealPage({
                   : deal.nextStep}
             </p>
           </div>
-          <button className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep">
-            {active ? "Принять платёж" : "Продолжить работу"}
-            <ArrowRight size={15} aria-hidden />
-          </button>
+          <DealActions
+            dealId={deal.id}
+            clientName={deal.client}
+            remaining={remaining}
+            monthly={monthly}
+            canRestructure={active}
+            primaryLabel={active ? "Принять платёж" : "Продолжить работу"}
+          />
         </div>
       )}
 
