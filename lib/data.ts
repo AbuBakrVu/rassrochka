@@ -48,6 +48,20 @@ export const paidPayments: Record<string, number> = {
   "R-1031": 2,
 };
 
+// Персональные ссылки клиентов: токен → номер сделки.
+// В реальной системе токен генерируется случайно при создании сделки.
+export const clientTokens: Record<string, string> = Object.fromEntries(
+  deals.map((d) => {
+    // Детерминированный «случайный» токен из id сделки
+    let h = 7;
+    for (const ch of d.id) h = (h * 31 + ch.charCodeAt(0)) % 46656;
+    return [`${d.id.slice(2).toLowerCase()}-${h.toString(36).padStart(3, "0")}`, d.id];
+  })
+);
+
+export const tokenByDeal = (dealId: string) =>
+  Object.keys(clientTokens).find((t) => clientTokens[t] === dealId) ?? "";
+
 export interface Client {
   id: string;
   name: string;

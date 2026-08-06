@@ -16,61 +16,12 @@ import {
   History,
 } from "lucide-react";
 import { Card, Badge } from "@/components/ui";
-import { deals, clients, fmt, stages, paidPayments } from "@/lib/data";
+import { deals, clients, fmt, stages, paidPayments, tokenByDeal } from "@/lib/data";
+import { buildSchedule, money, type Installment } from "@/lib/schedule";
+import CopyLinkButton from "@/components/copy-link";
 
 export function generateStaticParams() {
   return deals.map((d) => ({ id: d.id }));
-}
-
-const money = (n: number) =>
-  new Intl.NumberFormat("ru-RU").format(Math.round(n)) + " ₽";
-
-const monthNames = [
-  "января",
-  "февраля",
-  "марта",
-  "апреля",
-  "мая",
-  "июня",
-  "июля",
-  "августа",
-  "сентября",
-  "октября",
-  "ноября",
-  "декабря",
-];
-
-interface Installment {
-  n: number;
-  date: string;
-  amount: number;
-  remaining: number;
-  status: "paid" | "due" | "overdue";
-}
-
-function buildSchedule(amount: number, months: number, paid: number) {
-  const monthly = Math.round(amount / months);
-  const list: Installment[] = [];
-  let remaining = amount;
-  for (let i = 0; i < months; i++) {
-    // Первый платёж — 5 сентября 2026, дальше ежемесячно
-    const m = 8 + i; // сентябрь = индекс 8
-    const year = 2026 + Math.floor(m / 12);
-    const last = i === months - 1;
-    const sum = last ? remaining : monthly;
-    remaining -= sum;
-    list.push({
-      n: i + 1,
-      date: `5 ${monthNames[m % 12]} ${year}`,
-      amount: sum,
-      remaining,
-      status: i < paid ? "paid" : i === paid ? "due" : "overdue",
-    });
-  }
-  // Всё после ближайшего — просто ожидается
-  return list.map((p) =>
-    p.status === "overdue" ? { ...p, status: "due" as const } : p
-  );
 }
 
 function BalanceChart({ schedule, amount }: { schedule: Installment[]; amount: number }) {
@@ -437,6 +388,14 @@ export default async function DealPage({
             <p className="mt-2 text-center text-xs text-mute">
               Сообщение уйдёт в WhatsApp по шаблону из «Рассылок»
             </p>
+            <div className="mt-4 border-t border-line pt-4">
+              <p className="text-sm font-medium">Кабинет клиента</p>
+              <p className="mt-0.5 mb-3 text-xs text-mute">
+                Персональная страница с графиком и остатком — отправьте её
+                клиенту
+              </p>
+              <CopyLinkButton path={`/pay/${tokenByDeal(deal.id)}`} />
+            </div>
           </Card>
 
           <Card className="p-5">
