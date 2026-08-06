@@ -9,6 +9,9 @@ import {
   MessageCircle,
   Wallet,
   Link2,
+  ShieldCheck,
+  Plus,
+  Minus,
 } from "lucide-react";
 import { Card, Badge } from "@/components/ui";
 import ClientDeals, { type DealCardData } from "@/components/client-deals";
@@ -20,6 +23,7 @@ import {
   dealState,
   paidCount,
   tokenByDeal,
+  assessRisk,
   type Client,
 } from "@/lib/data";
 import { buildSchedule, money, longDate } from "@/lib/schedule";
@@ -51,6 +55,7 @@ export default async function ClientPage({
   if (!client) notFound();
 
   const clientDeals = dealsOfClient(client.id);
+  const risk = assessRisk(client.id);
 
   // Считаем графики один раз и используем для карточек, сводки и истории
   const computed = clientDeals.map((deal) => {
@@ -220,6 +225,83 @@ export default async function ClientPage({
 
         {/* Правая колонка */}
         <div className="flex flex-col gap-4">
+          <Card className="p-5">
+            <div className="mb-1 flex items-center gap-2">
+              <ShieldCheck
+                size={16}
+                className={
+                  risk.tone === "green"
+                    ? "text-good"
+                    : risk.tone === "yellow"
+                      ? "text-warn"
+                      : "text-danger"
+                }
+                aria-hidden
+              />
+              <h2 className="font-semibold">Оценка надёжности</h2>
+            </div>
+            <p className="mb-3 text-sm text-mute">
+              Считается по истории сделок клиента, не по кредитной истории
+            </p>
+            <div className="flex items-center gap-3">
+              <div
+                className="h-2 flex-1 overflow-hidden rounded-full bg-line"
+                role="progressbar"
+                aria-valuenow={risk.score}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Оценка надёжности клиента"
+              >
+                <div
+                  className={`h-full rounded-full ${
+                    risk.tone === "green"
+                      ? "bg-good"
+                      : risk.tone === "yellow"
+                        ? "bg-warn"
+                        : "bg-danger"
+                  }`}
+                  style={{ width: `${risk.score}%` }}
+                />
+              </div>
+              <span className="text-sm font-semibold tabular-nums">
+                {risk.score}
+              </span>
+            </div>
+            <div className="mt-3">
+              <Badge
+                tone={
+                  risk.tone === "green"
+                    ? "green"
+                    : risk.tone === "yellow"
+                      ? "yellow"
+                      : "red"
+                }
+              >
+                {risk.label}
+              </Badge>
+            </div>
+            <ul className="mt-3 flex flex-col gap-1.5">
+              {risk.reasons.map((r) => (
+                <li key={r.text} className="flex items-start gap-2 text-sm">
+                  <span
+                    className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
+                      r.positive
+                        ? "bg-good-soft text-good"
+                        : "bg-danger-soft text-danger"
+                    }`}
+                  >
+                    {r.positive ? (
+                      <Plus size={10} aria-hidden />
+                    ) : (
+                      <Minus size={10} aria-hidden />
+                    )}
+                  </span>
+                  <span className="text-mute">{r.text}</span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+
           <Card className="p-5">
             <h2 className="mb-1 font-semibold">История платежей</h2>
             {history.length === 0 ? (

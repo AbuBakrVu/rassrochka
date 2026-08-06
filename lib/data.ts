@@ -89,6 +89,92 @@ export const dealState = (d: Deal): DealState =>
 export const dealsOfClient = (clientId: string) =>
   deals.filter((d) => d.clientId === clientId);
 
+// Русское склонение по числу: 1 сделка / 2 сделки / 5 сделок
+export const ruPlural = (n: number, one: string, few: string, many: string) => {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+};
+
+export type RiskTone = "green" | "yellow" | "red";
+
+export interface RiskAssessment {
+  score: number; // 0–100, выше — надёжнее
+  tone: RiskTone;
+  label: string;
+  reasons: { text: string; positive: boolean }[];
+}
+
+// Простая прозрачная скоринговая модель: каждый фактор виден в reasons,
+// решение не должно выглядеть чёрным ящиком для менеджера.
+export function assessRisk(clientId: string): RiskAssessment {
+  const list = dealsOfClient(clientId);
+  const closed = list.filter((d) => d.stage === "closed").length;
+  const rejected = list.filter((d) => d.stage === "rejected").length;
+  const activeOverdue = list.filter(
+    (d) => d.stage === "active" && d.statusTone === "red"
+  ).length;
+  const activeOk = list.filter(
+    (d) => d.stage === "active" && d.statusTone !== "red"
+  ).length;
+
+  const reasons: RiskAssessment["reasons"] = [];
+  let score = 70;
+
+  if (list.length === 0) {
+    return {
+      score: 55,
+      tone: "yellow",
+      label: "Недостаточно истории",
+      reasons: [
+        { text: "У клиента ещё не было сделок", positive: false },
+      ],
+    };
+  }
+
+  if (closed > 0) {
+    score += Math.min(closed * 8, 24);
+    reasons.push({
+      text: `${closed} ${ruPlural(closed, "закрытая сделка", "закрытые сделки", "закрытых сделок")} выплачено полностью`,
+      positive: true,
+    });
+  }
+  if (activeOk > 0) {
+    score += 5;
+    reasons.push({
+      text: `${activeOk} ${ruPlural(activeOk, "активная сделка", "активные сделки", "активных сделок")} без просрочек`,
+      positive: true,
+    });
+  }
+  if (activeOverdue > 0) {
+    score -= 25;
+    reasons.push({
+      text: "Есть просрочка по действующей сделке",
+      positive: false,
+    });
+  }
+  if (rejected > 0) {
+    score -= rejected * 12;
+    reasons.push({
+      text: `${rejected} ${ruPlural(rejected, "отклонённая заявка", "отклонённые заявки", "отклонённых заявок")} в прошлом`,
+      positive: false,
+    });
+  }
+
+  score = Math.max(5, Math.min(98, Math.round(score)));
+  const tone: RiskTone = score >= 75 ? "green" : score >= 50 ? "yellow" : "red";
+  const label =
+    tone === "green"
+      ? "Надёжный клиент"
+      : tone === "yellow"
+        ? "Стандартный риск"
+        : "Повышенный риск";
+
+  return { score, tone, label, reasons };
+}
+
 // Персональные ссылки клиентов: токен → номер сделки.
 // В реальной системе токен генерируется случайно при создании сделки.
 export const clientTokens: Record<string, string> = Object.fromEntries(
