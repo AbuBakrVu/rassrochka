@@ -192,6 +192,89 @@ export const clientTokens: Record<string, string> = Object.fromEntries(
 export const tokenByDeal = (dealId: string) =>
   Object.keys(clientTokens).find((t) => clientTokens[t] === dealId) ?? "";
 
+export type RouteKind = "overdue" | "deadline" | "review" | "request";
+
+export interface RouteItem {
+  key: string;
+  dealId: string;
+  clientId: string;
+  clientName: string;
+  kind: RouteKind;
+  text: string;
+  amount: number;
+  priority: number;
+}
+
+// Маршрут менеджера на сегодня: объединяет всё, что требует действия,
+// в один приоритизированный список — из тех же данных о сделках,
+// без отдельного источника правды.
+export function buildRoute(): RouteItem[] {
+  const items: RouteItem[] = [];
+
+  for (const d of deals) {
+    if (d.stage === "closed" || d.stage === "rejected") continue;
+
+    if (d.stage === "active") {
+      if (d.statusTone === "red" || d.urgent) {
+        items.push({
+          key: d.id,
+          dealId: d.id,
+          clientId: d.clientId,
+          clientName: d.client,
+          kind: "overdue",
+          text: d.nextStep,
+          amount: Math.round(d.amount / d.months),
+          priority: 100,
+        });
+      }
+      continue;
+    }
+
+    if (d.stage === "signing") {
+      items.push({
+        key: d.id,
+        dealId: d.id,
+        clientId: d.clientId,
+        clientName: d.client,
+        kind: "deadline",
+        text: d.nextStep,
+        amount: d.amount,
+        priority: d.urgent ? 95 : 80,
+      });
+      continue;
+    }
+
+    if (d.stage === "check") {
+      items.push({
+        key: d.id,
+        dealId: d.id,
+        clientId: d.clientId,
+        clientName: d.client,
+        kind: d.urgent ? "deadline" : "review",
+        text: d.nextStep,
+        amount: d.amount,
+        priority: d.urgent ? 90 : 55,
+      });
+      continue;
+    }
+
+    if (d.stage === "new") {
+      items.push({
+        key: d.id,
+        dealId: d.id,
+        clientId: d.clientId,
+        clientName: d.client,
+        kind: "request",
+        text: d.nextStep,
+        amount: d.amount,
+        priority: 40,
+      });
+    }
+  }
+
+  return items.sort((a, b) => b.priority - a.priority);
+}
+
 export interface Client {
   id: string;
   name: string;

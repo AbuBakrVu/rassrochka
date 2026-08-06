@@ -165,7 +165,7 @@ export default function Home() {
             <div className="mb-1 flex items-center justify-between">
               <h3 className="font-semibold">Приоритеты</h3>
               <Link
-                href="/payments"
+                href="/route"
                 className="flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-deep"
               >
                 Все <ArrowRight size={15} aria-hidden />
