@@ -19,6 +19,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import CommandPalette from "@/components/command-palette";
 
 const nav = [
   { href: "/", label: "Главная", icon: LayoutGrid },
@@ -122,6 +123,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         </header>
         <main className="min-w-0 flex-1">{children}</main>
       </div>
+      <CommandPalette />
     </div>
   );
 }

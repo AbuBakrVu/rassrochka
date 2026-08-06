@@ -35,18 +35,19 @@ export function PageHeader({
           <p className="mt-0.5 truncate text-sm text-mute">{subtitle}</p>
         </div>
         {searchPlaceholder && (
-          <label className="relative hidden md:block">
-            <Search
-              size={16}
-              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-mute"
-              aria-hidden
-            />
-            <input
-              type="search"
-              placeholder={searchPlaceholder}
-              className="w-64 rounded-[10px] border border-line bg-canvas py-2 pr-3 pl-9 text-sm outline-none focus:border-brand"
-            />
-          </label>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("open-command-palette"))}
+            className="hidden w-64 items-center gap-2 rounded-[10px] border border-line bg-canvas px-3 py-2 text-sm text-mute transition-colors hover:border-brand/40 hover:text-ink md:flex"
+          >
+            <Search size={16} className="shrink-0" aria-hidden />
+            <span className="flex-1 truncate text-left">
+              {searchPlaceholder}
+            </span>
+            <kbd className="shrink-0 rounded border border-line bg-surface px-1.5 py-0.5 text-[11px] font-medium">
+              ⌘K
+            </kbd>
+          </button>
         )}
         <button
           aria-label="Уведомления"
