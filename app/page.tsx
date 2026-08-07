@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   Clock,
@@ -7,95 +9,110 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { PageHeader, Card, Badge } from "@/components/ui";
-import {
-  fmt,
-  kpi,
-  priorities,
-  newRequests,
-  deadlines,
-  inflowChart,
-} from "@/lib/data";
+import { ruPlural, type RouteKind } from "@/lib/data";
+import { money } from "@/lib/schedule";
+import { useData } from "@/lib/store";
+import { computeDashboard } from "@/lib/derive";
 
-const dotTone = {
-  blue: "bg-brand",
-  yellow: "bg-warn",
-  red: "bg-danger",
-} as const;
+const dotTone: Record<RouteKind, string> = {
+  overdue: "bg-danger",
+  deadline: "bg-warn",
+  review: "bg-warn",
+  request: "bg-brand",
+};
 
-function InflowChart() {
+// Столбики по дням месяца: видно, в какие даты приходят деньги.
+// Линия здесь была бы честной только при плотном графике платежей —
+// на нескольких сделках она превращалась в две точки и полку.
+function InflowChart({ points }: { points: { day: number; sum: number }[] }) {
+  const days = 31;
   const w = 700;
-  const h = 220;
-  const max = 220;
-  const pts = inflowChart.map((p) => ({
-    x: ((p.d - 1) / 30) * w,
-    y: h - (p.v / max) * h,
-  }));
-  const line = pts.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ");
-  const area = `${line} L${w},${h} L0,${h} Z`;
+  const h = 200;
+  const max = Math.max(...points.map((p) => p.sum), 1);
+  const slot = w / days;
+  const barW = Math.min(slot * 0.55, 14);
+  const byDay = new Map(points.map((p) => [p.day, p.sum]));
+
   return (
     <svg
       viewBox={`0 0 ${w} ${h}`}
       className="h-48 w-full sm:h-56"
-      preserveAspectRatio="none"
       role="img"
-      aria-label="График плановых поступлений за август"
+      aria-label={`Ожидаемые поступления по дням августа, максимум за день ${money(max)}`}
     >
-      {[0.25, 0.5, 0.75].map((t) => (
+      {[0.25, 0.5, 0.75, 1].map((t) => (
         <line
           key={t}
           x1="0"
           x2={w}
-          y1={h * t}
-          y2={h * t}
+          y1={h - h * t}
+          y2={h - h * t}
           stroke="var(--color-line)"
           strokeWidth="1"
         />
       ))}
-      <path d={area} fill="var(--color-brand)" opacity="0.12" />
-      <path
-        d={line}
-        fill="none"
-        stroke="var(--color-brand)"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      {Array.from({ length: days }, (_, i) => {
+        const day = i + 1;
+        const sum = byDay.get(day);
+        if (!sum) return null;
+        const barH = Math.max((sum / max) * (h - 8), 4);
+        return (
+          <rect
+            key={day}
+            x={slot * i + (slot - barW) / 2}
+            y={h - barH}
+            width={barW}
+            height={barH}
+            rx="3"
+            fill="var(--color-brand)"
+          >
+            <title>{`${day} августа — ${money(sum)}`}</title>
+          </rect>
+        );
+      })}
     </svg>
   );
 }
 
-const kpis = [
-  {
-    label: "К оплате сегодня",
-    value: fmt(kpi.dueToday.value),
-    note: kpi.dueToday.note,
-    noteClass: "text-mute",
-    icon: Clock,
-  },
-  {
-    label: "Портфель",
-    value: "4,82 млн ₽",
-    note: kpi.portfolio.note,
-    noteClass: "text-good",
-    icon: Briefcase,
-  },
-  {
-    label: "Просрочка",
-    value: fmt(kpi.overdue.value),
-    note: kpi.overdue.note,
-    noteClass: "text-danger",
-    icon: AlertCircle,
-  },
-  {
-    label: "Активные клиенты",
-    value: String(kpi.activeClients.value),
-    note: kpi.activeClients.note,
-    noteClass: "text-mute",
-    icon: Users,
-  },
-];
-
 export default function Home() {
+  const { deals, clients, paidPayments } = useData();
+  const d = computeDashboard(deals, clients, paidPayments);
+
+  const kpis = [
+    {
+      label: "К оплате сегодня",
+      value: money(d.dueToday.sum),
+      note: d.dueToday.count
+        ? `${d.dueToday.count} ${ruPlural(d.dueToday.count, "платёж", "платежа", "платежей")} до 18:00`
+        : "на сегодня платежей нет",
+      noteClass: "text-mute",
+      icon: Clock,
+    },
+    {
+      label: "Портфель",
+      value: money(d.portfolio),
+      note: "остаток по активным сделкам",
+      noteClass: "text-good",
+      icon: Briefcase,
+    },
+    {
+      label: "Просрочка",
+      value: money(d.overdue.sum),
+      note: d.overdue.count
+        ? `${d.overdue.count} ${ruPlural(d.overdue.count, "сделка требует", "сделки требуют", "сделок требуют")} контакта`
+        : "просрочек нет",
+      noteClass: d.overdue.count ? "text-danger" : "text-mute",
+      icon: AlertCircle,
+    },
+    {
+      label: "Активные клиенты",
+      value: String(d.activeClients),
+      note: "с действующей рассрочкой",
+      noteClass: "text-mute",
+      icon: Users,
+    },
+  ];
+
   return (
     <>
       <PageHeader
@@ -151,14 +168,22 @@ export default function Home() {
               </Link>
             </div>
             <p className="mb-4 text-sm text-mute">
-              Факт и ожидаемые оплаты за август
+              Ожидаемые оплаты по дням августа — всего {money(d.inflowTotal)}
             </p>
-            <InflowChart />
-            <div className="mt-2 flex justify-between text-xs text-mute">
-              {["1 авг", "8 авг", "15 авг", "22 авг", "31 авг"].map((d) => (
-                <span key={d}>{d}</span>
-              ))}
-            </div>
+            {d.inflow.length === 0 ? (
+              <p className="py-16 text-center text-sm text-mute">
+                В августе платежей не запланировано.
+              </p>
+            ) : (
+              <>
+                <InflowChart points={d.inflow} />
+                <div className="mt-2 flex justify-between text-xs text-mute">
+                  {["1 авг", "8 авг", "15 авг", "22 авг", "31 авг"].map((x) => (
+                    <span key={x}>{x}</span>
+                  ))}
+                </div>
+              </>
+            )}
           </Card>
 
           <Card className="p-5 sm:p-6">
@@ -173,24 +198,29 @@ export default function Home() {
             </div>
             <p className="mb-2 text-sm text-mute">Очередь на сегодня</p>
             <ul className="divide-y divide-line">
-              {priorities.map((p) => (
-                <li key={p.name} className="flex items-center gap-3 py-3.5">
+              {d.priorities.map((p) => (
+                <li key={p.key} className="flex items-center gap-3 py-3.5">
                   <span
-                    className={`h-2 w-2 shrink-0 rounded-full ${dotTone[p.tone]}`}
+                    className={`h-2 w-2 shrink-0 rounded-full ${dotTone[p.kind]}`}
                     aria-hidden
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{p.name}</p>
+                    <Link
+                      href={`/deals/${p.dealId}`}
+                      className="block truncate text-sm font-medium hover:text-brand-deep"
+                    >
+                      {p.clientName}
+                    </Link>
                     <p
                       className={`truncate text-sm ${
-                        p.tone === "red" ? "text-danger" : "text-mute"
+                        p.kind === "overdue" ? "text-danger" : "text-mute"
                       }`}
                     >
-                      {p.reason}
+                      {p.text}
                     </p>
                   </div>
                   <span className="text-sm font-semibold whitespace-nowrap">
-                    {fmt(p.amount)}
+                    {money(p.amount)}
                   </span>
                 </li>
               ))}
@@ -213,26 +243,35 @@ export default function Home() {
             <p className="mb-2 text-sm text-mute">
               Быстрая квалификация без лишних экранов
             </p>
-            <ul className="divide-y divide-line">
-              {newRequests.map((r) => (
-                <li key={r.name} className="flex items-center gap-3 py-3.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{r.name}</p>
-                    <p className="truncate text-sm text-mute">{r.text}</p>
-                  </div>
-                  <button className="rounded-[10px] bg-brand-soft px-3.5 py-2 text-sm font-medium text-brand-deep hover:bg-brand hover:text-white">
-                    Проверить
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {d.newRequests.length === 0 ? (
+              <p className="py-6 text-sm text-mute">
+                Новых заявок нет — все разобраны.
+              </p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {d.newRequests.map((r) => (
+                  <li key={r.dealId} className="flex items-center gap-3 py-3.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{r.name}</p>
+                      <p className="truncate text-sm text-mute">{r.text}</p>
+                    </div>
+                    <Link
+                      href={`/deals/${r.dealId}`}
+                      className="rounded-[10px] bg-brand-soft px-3.5 py-2 text-sm font-medium text-brand-deep hover:bg-brand hover:text-white"
+                    >
+                      Проверить
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
 
           <Card className="p-5 sm:p-6">
             <div className="mb-1 flex items-center justify-between">
               <h3 className="font-semibold">Контроль срока</h3>
               <Link
-                href="/payments"
+                href="/route"
                 className="flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-deep"
               >
                 Открыть <ArrowRight size={15} aria-hidden />
@@ -241,17 +280,28 @@ export default function Home() {
             <p className="mb-2 text-sm text-mute">
               Договоры с ближайшими событиями
             </p>
-            <ul className="divide-y divide-line">
-              {deadlines.map((d) => (
-                <li key={d.title} className="flex items-center gap-3 py-3.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{d.title}</p>
-                    <p className="truncate text-sm text-mute">{d.text}</p>
-                  </div>
-                  <Badge tone={d.tone}>{d.badge}</Badge>
-                </li>
-              ))}
-            </ul>
+            {d.deadlines.length === 0 ? (
+              <p className="py-6 text-sm text-mute">
+                Ближайших дедлайнов нет.
+              </p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {d.deadlines.map((x) => (
+                  <li key={x.dealId} className="flex items-center gap-3 py-3.5">
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/deals/${x.dealId}`}
+                        className="block truncate text-sm font-medium hover:text-brand-deep"
+                      >
+                        {x.title}
+                      </Link>
+                      <p className="truncate text-sm text-mute">{x.text}</p>
+                    </div>
+                    <Badge tone="red">{x.badge}</Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </div>
       </div>

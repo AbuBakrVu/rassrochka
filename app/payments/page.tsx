@@ -1,9 +1,14 @@
+"use client";
+
+import Link from "next/link";
 import { Phone, CircleDollarSign, Flag, Video } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
-import { calendarDays, todayAgenda, fmt } from "@/lib/data";
+import { money } from "@/lib/schedule";
+import { useData } from "@/lib/store";
+import { computeCalendar } from "@/lib/derive";
 
 const short = (n: number) =>
-  new Intl.NumberFormat("ru-RU").format(n / 1000).replace(",", ".") + " т.";
+  new Intl.NumberFormat("ru-RU").format(Math.round(n / 1000)) + " т.";
 
 const kindIcon = {
   Звонок: Phone,
@@ -13,11 +18,17 @@ const kindIcon = {
 } as const;
 
 export default function PaymentsPage() {
+  const { deals, paidPayments } = useData();
+  const { cells: monthCells, todaySum, agenda } = computeCalendar(
+    deals,
+    paidPayments
+  );
+
   // Август 2026 начинается с субботы → 5 пустых ячеек (Пн–Пт)
   const lead = 5;
-  const cells: (typeof calendarDays[number] | null)[] = [
+  const cells: (typeof monthCells[number] | null)[] = [
     ...Array.from({ length: lead }, () => null),
-    ...calendarDays,
+    ...monthCells,
   ];
   while (cells.length % 7 !== 0) cells.push(null);
 
@@ -39,7 +50,7 @@ export default function PaymentsPage() {
                   Август 2026
                 </h2>
                 <p className="text-sm text-mute">
-                  Выберите день, чтобы увидеть все оплаты
+                  Платежи по активным сделкам — суммы обновляются сразу
                 </p>
               </div>
               <button className="rounded-[10px] border border-line bg-surface px-4 py-2 text-sm text-mute hover:text-ink">
@@ -102,41 +113,52 @@ export default function PaymentsPage() {
             <h3 className="font-semibold">Сегодня · 5 августа</h3>
             <p className="mt-1 text-sm text-mute">Сумма к получению</p>
             <p className="mt-1 text-[26px] font-semibold tracking-tight">
-              {fmt(todayAgenda.sum)}
+              {money(todaySum)}
             </p>
-            <ul className="mt-4 divide-y divide-line">
-              {todayAgenda.items.map((it) => {
-                const Icon =
-                  kindIcon[it.kind as keyof typeof kindIcon] ??
-                  CircleDollarSign;
-                return (
-                  <li key={it.time + it.text} className="flex gap-3 py-3">
-                    <span
-                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ${
-                        it.urgent
-                          ? "bg-danger-soft text-danger"
-                          : "bg-brand-soft text-brand"
-                      }`}
-                    >
-                      <Icon size={15} aria-hidden />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs text-mute">
-                        {it.time} · {it.kind}
-                        {it.urgent && (
-                          <span className="ml-1.5 font-medium text-danger">
-                            срочно
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-sm font-medium break-words">
-                        {it.text}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            {agenda.length === 0 ? (
+              <p className="mt-4 text-sm text-mute">
+                На сегодня дел не запланировано.
+              </p>
+            ) : (
+              <ul className="mt-4 divide-y divide-line">
+                {agenda.map((it) => {
+                  const Icon =
+                    kindIcon[it.kind as keyof typeof kindIcon] ??
+                    CircleDollarSign;
+                  return (
+                    <li key={it.dealId + it.kind}>
+                      <Link
+                        href={`/deals/${it.dealId}`}
+                        className="-mx-2 flex gap-3 rounded-[10px] px-2 py-3 hover:bg-canvas"
+                      >
+                        <span
+                          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ${
+                            it.urgent
+                              ? "bg-danger-soft text-danger"
+                              : "bg-brand-soft text-brand"
+                          }`}
+                        >
+                          <Icon size={15} aria-hidden />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs text-mute">
+                            {it.time} · {it.kind}
+                            {it.urgent && (
+                              <span className="ml-1.5 font-medium text-danger">
+                                срочно
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-sm font-medium break-words">
+                            {it.text}
+                          </p>
+                        </div>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </Card>
         </div>
       </div>

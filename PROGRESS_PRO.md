@@ -65,12 +65,12 @@ CRM «Финора» для небольшой компании, выдающе�
 ```
 app/
   layout.tsx            — корневой layout, оборачивает всё в <DataProvider><Shell>
-  page.tsx               — Главная (дашборд, KPI, приоритеты) — decorative-моки, НЕ из стора
+  page.tsx               — Главная (дашборд, KPI, приоритеты, план поступлений) — из стора через lib/derive.ts
   globals.css             — design tokens
   loading.tsx             — глобальный скелетон загрузки
   analytics/page.tsx      — воронка, причины отказов, нагрузка по сотрудникам (из стора)
   route/page.tsx           — маршрут менеджера на день (из стора)
-  payments/page.tsx        — календарь платежей (decorative-моки, НЕ из стора)
+  payments/page.tsx        — календарь платежей + повестка дня — из стора через lib/derive.ts
   deals/
     page.tsx                — канбан сделок (из стора)
     [id]/page.tsx            — тонкая серверная обёртка → components/deal-detail.tsx
@@ -102,6 +102,8 @@ lib/
   data.ts    — типы, сид-данные (seedDeals/seedClients/seedPaidPayments), чистые функции
   schedule.ts — buildSchedule/money/longDate/monthNames — общий расчёт графика платежей
   store.tsx   — React Context + localStorage, DataProvider + useData()
+  derive.ts   — производные для дашборда и календаря: computeDashboard/computeCalendar/computeActive,
+                TODAY_ISO = "2026-08-05" (зафиксированное «сегодня» приложения)
 ```
 
 ## 5. Модель данных
@@ -276,11 +278,6 @@ Server Components с `generateStaticParams()` и читали статическ
 - **Нет бэкенда/БД** (см. §2) — данные не синхронизируются между
   устройствами и пользователями, живут в localStorage одного браузера.
 - **Реструктуризация не персистится** (см. §6).
-- **`Главная` и `Платежи` не подключены к стору** — используют отдельные
-  decorative-моки (`kpi`, `priorities`, `newRequests`, `deadlines`,
-  `inflowChart`, `todayAgenda`, `calendarDays` в `lib/data.ts`), которые
-  не реагируют на создание сделок/клиентов. Это осознанно не трогали при
-  рефакторинге — не было явного запроса, а объём был и так большой.
 - **Пустые заглушки без функциональности**: Рассылки, Соинвесторы, Кассы,
   Реестр клиентов, Сотрудники, Настройки (`components/stub.tsx`).
 - **Нет онлайн-оплаты** в клиентском кабинете — только «Позвонить»/
