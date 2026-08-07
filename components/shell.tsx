@@ -39,8 +39,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
-  // Клиентский кабинет /pay/... живёт без CRM-оболочки
-  if (pathname.startsWith("/pay")) return <>{children}</>;
+  // Клиентский кабинет /pay/<токен> живёт без CRM-оболочки.
+  // Слэш обязателен: без него сюда попадал и раздел /payments.
+  if (pathname.startsWith("/pay/")) return <>{children}</>;
 
   const menu = (
     <nav className="flex flex-col gap-0.5 px-3" aria-label="Основные разделы">
