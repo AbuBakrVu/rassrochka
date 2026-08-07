@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import NewClientModal from "@/components/new-client-modal";
 import NewDealModal from "@/components/new-deal-modal";
 import AcceptPaymentModal from "@/components/accept-payment-modal";
+import NotificationsMenu from "@/components/notifications-menu";
 import {
   Search,
-  Bell,
   Inbox,
   UserPlus,
   FilePlus2,
@@ -49,13 +49,7 @@ export function PageHeader({
             </kbd>
           </button>
         )}
-        <button
-          aria-label="Уведомления"
-          className="relative rounded-[10px] border border-line bg-surface p-2.5 text-mute hover:text-ink"
-        >
-          <Bell size={17} />
-          <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-danger" />
-        </button>
+        <NotificationsMenu />
         {cta && <CtaMenu label={cta} />}
       </div>
     </div>

@@ -272,6 +272,50 @@ export function buildRoute(deals: Deal[]): RouteItem[] {
   return items.sort((a, b) => b.priority - a.priority);
 }
 
+export interface NotificationItem {
+  key: string;
+  dealId: string;
+  clientId: string;
+  kind: RouteKind;
+  title: string;
+  text: string;
+  time: string;
+}
+
+const notificationTitles: Record<RouteKind, string> = {
+  overdue: "Просрочка платежа",
+  deadline: "Приближается дедлайн",
+  review: "Сделка на проверке",
+  request: "Новая заявка",
+};
+
+// Не настоящие метки времени (у сделок нет event-лога) — просто
+// правдоподобная лесенка «свежее выше», по порядку приоритета маршрута.
+const notificationTimes = [
+  "5 минут назад",
+  "32 минуты назад",
+  "1 час назад",
+  "3 часа назад",
+  "Вчера",
+  "2 дня назад",
+];
+
+// Уведомления в шапке — тот же приоритизированный список, что и маршрут
+// менеджера, просто оформленный как лента событий, а не список дел.
+export function buildNotifications(deals: Deal[]): NotificationItem[] {
+  return buildRoute(deals)
+    .slice(0, 6)
+    .map((item, i) => ({
+      key: item.key,
+      dealId: item.dealId,
+      clientId: item.clientId,
+      kind: item.kind,
+      title: notificationTitles[item.kind],
+      text: `${item.clientName} — ${item.text}`,
+      time: notificationTimes[i] ?? "Ранее",
+    }));
+}
+
 export interface Client {
   id: string;
   name: string;
