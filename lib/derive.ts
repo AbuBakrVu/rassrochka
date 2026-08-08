@@ -13,9 +13,11 @@ import {
   type RouteItem,
 } from "./data";
 import { buildSchedule, type Installment } from "./schedule";
+import { todayIso } from "./status";
 
-// «Сегодня» приложения зафиксировано, как и во всех моках
-export const TODAY_ISO = "2026-08-05";
+// «Сегодня» — настоящее. До этапа 3 здесь стояла зафиксированная дата
+// "2026-08-05", потому что все данные были моками, построенными вокруг неё.
+export { todayIso } from "./status";
 
 export interface DealComputed {
   deal: Deal;
@@ -73,9 +75,10 @@ export function computeDashboard(
   clients: Client[],
   paidPayments: Record<string, number>
 ): DashboardData {
+  const today = todayIso();
   const active = computeActive(deals, paidPayments);
 
-  const dueTodayList = active.filter((c) => c.next?.iso === TODAY_ISO);
+  const dueTodayList = active.filter((c) => c.next?.iso === today);
   const overdueList = active.filter((c) => c.deal.statusTone === "red");
 
   const activeClientIds = new Set(active.map((c) => c.deal.clientId));
@@ -102,7 +105,7 @@ export function computeDashboard(
     }));
 
   // План поступлений: платежи активных сделок в августе 2026, накопительно
-  const monthPrefix = TODAY_ISO.slice(0, 7); // "2026-08"
+  const monthPrefix = today.slice(0, 7);
   const byDay = new Map<number, number>();
   for (const c of active) {
     for (const p of c.schedule) {
@@ -164,8 +167,9 @@ export function computeCalendar(
   deals: Deal[],
   paidPayments: Record<string, number>
 ): CalendarData {
+  const today = todayIso();
   const active = computeActive(deals, paidPayments);
-  const monthPrefix = TODAY_ISO.slice(0, 7);
+  const monthPrefix = today.slice(0, 7);
 
   const byDay = new Map<number, { count: number; sum: number }>();
   for (const c of active) {
@@ -210,7 +214,7 @@ export function computeCalendar(
     });
   }
   for (const c of active) {
-    if (c.next?.iso === TODAY_ISO && c.deal.statusTone !== "red") {
+    if (c.next?.iso === today && c.deal.statusTone !== "red") {
       agenda.push({
         dealId: c.deal.id,
         time: "",
@@ -233,7 +237,7 @@ export function computeCalendar(
   });
 
   const todaySum = active
-    .filter((c) => c.next?.iso === TODAY_ISO)
+    .filter((c) => c.next?.iso === today)
     .reduce((s, c) => s + (c.next?.amount ?? 0), 0);
 
   return { cells, todaySum, agenda };
@@ -264,7 +268,7 @@ const agingRanges: { key: AgingBucket["key"]; label: string; min: number; max: n
 // Просроченной считаем сделку по тому же признаку, что и везде в
 // приложении (Главная, Маршрут, Сотрудники) — statusTone "red" на активном
 // этапе, а не пересчитываем факт просрочки заново по датам графика: у
-// мок-данных день следующего взноса иногда совпадает с TODAY_ISO, из-за
+// мок-данных день следующего взноса иногда совпадал с «сегодня», из-за
 // чего чисто дневной расчёт разошёлся бы с остальными разделами. Число
 // дней просрочки при этом берём из графика, минимум 1 — для бакетинга.
 export function computeAging(
@@ -272,7 +276,7 @@ export function computeAging(
   paidPayments: Record<string, number>
 ): AgingBucket[] {
   const active = computeActive(deals, paidPayments);
-  const today = new Date(TODAY_ISO).getTime();
+  const today = new Date(todayIso()).getTime();
 
   const items: AgingItem[] = [];
   for (const c of active) {

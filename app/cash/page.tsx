@@ -15,9 +15,9 @@ import {
 } from "lucide-react";
 import { PageHeader, Card, EmptyState } from "@/components/ui";
 import { money, longDate } from "@/lib/schedule";
-import { useData, CASH_OPENING_BALANCE, type CashKind } from "@/lib/store";
+import { useData, type CashKind } from "@/lib/store";
 import { cashSummary } from "@/lib/cash";
-import { TODAY_ISO } from "@/lib/derive";
+import { todayIso } from "@/lib/derive";
 
 const kindMeta: Record<
   CashKind,
@@ -58,7 +58,7 @@ function AdjustmentModal({ onClose }: { onClose: () => void }) {
   const [direction, setDirection] = useState<"in" | "out">("in");
   const [amount, setAmount] = useState("");
   const [title, setTitle] = useState("");
-  const [date, setDate] = useState(TODAY_ISO);
+  const [date, setDate] = useState(todayIso());
 
   const ready = Number(amount) > 0 && title.trim() !== "";
 
@@ -197,13 +197,13 @@ function AdjustmentModal({ onClose }: { onClose: () => void }) {
 }
 
 export default function CashPage() {
-  const { cash } = useData();
+  const { cash, cashOpeningBalance } = useData();
   const [filter, setFilter] = useState<(typeof filters)[number]["key"]>("all");
   const [modal, setModal] = useState(false);
 
-  const monthPrefix = TODAY_ISO.slice(0, 7);
+  const monthPrefix = todayIso().slice(0, 7);
   const summary = useMemo(
-    () => cashSummary(CASH_OPENING_BALANCE, cash, monthPrefix),
+    () => cashSummary(cashOpeningBalance, cash, monthPrefix),
     [cash, monthPrefix]
   );
 
@@ -219,7 +219,7 @@ export default function CashPage() {
     {
       label: "Остаток в кассе",
       value: money(summary.balance),
-      note: `открытие ${money(CASH_OPENING_BALANCE)}`,
+      note: `открытие ${money(cashOpeningBalance)}`,
       cls: summary.balance < 0 ? "text-danger" : "",
       icon: Wallet,
     },

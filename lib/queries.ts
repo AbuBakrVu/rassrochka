@@ -427,3 +427,60 @@ export async function addCashAdjustment(
     title: row.title,
   };
 }
+
+// ── Кабинет клиента ────────────────────────────────────────────────────
+
+export interface PortalDeal {
+  id: string;
+  clientFirstName: string;
+  product: string;
+  amount: number;
+  months: number;
+  openedAt: string;
+  paid: number;
+}
+
+/**
+ * Данные для страницы /pay/<token>. Отдаём РОВНО одну сделку и ничего
+ * больше: заёмщик открывает её по ссылке без всякой авторизации.
+ *
+ * Раньше кабинет вызывал useData() и получал в браузер все сделки и всех
+ * клиентов компании — то есть любой заёмщик мог прочитать персональные
+ * данные остальных. Наценка и закупочная цена сюда тоже не попадают:
+ * это внутренняя экономика компании, клиенту её знать незачем.
+ */
+export async function loadPortalDeal(
+  dbName: string,
+  token: string
+): Promise<PortalDeal | undefined> {
+  const row = await queryOne<{
+    id: string;
+    client_name: string;
+    product: string;
+    amount: number;
+    months: number;
+    opened_at: string;
+    paid_count: number;
+    stage: DealStage;
+  }>(
+    dbName,
+    `select d.id, c.name as client_name, d.product, d.amount, d.months,
+            d.opened_at, d.paid_count, d.stage
+     from deals d join clients c on c.id = d.client_id
+     where d.portal_token = $1`,
+    [token]
+  );
+
+  if (!row) return undefined;
+
+  return {
+    id: row.id,
+    clientFirstName: row.client_name.split(" ")[1] ?? row.client_name,
+    product: row.product,
+    amount: row.amount,
+    months: row.months,
+    openedAt: row.opened_at,
+    // у закрытой сделки выплачены все взносы — та же логика, что в paidCount
+    paid: row.stage === "closed" ? row.months : row.paid_count,
+  };
+}

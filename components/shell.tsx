@@ -20,6 +20,7 @@ import {
   Zap,
 } from "lucide-react";
 import CommandPalette from "@/components/command-palette";
+import { DataProvider } from "@/lib/store";
 
 const nav = [
   { href: "/", label: "Главная", icon: LayoutGrid },
@@ -39,7 +40,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
-  // Клиентский кабинет /pay/<токен> живёт без CRM-оболочки.
+  // Клиентский кабинет /pay/<токен> живёт без CRM-оболочки и БЕЗ общего
+  // стора: он грузит только свою сделку через /api/portal. Провайдер стоит
+  // ниже этой проверки намеренно — иначе заёмщик тянул бы в браузер все
+  // сделки и всех клиентов компании.
   // Слэш обязателен: без него сюда попадал и раздел /payments.
   if (pathname.startsWith("/pay/")) return <>{children}</>;
 
@@ -69,62 +73,64 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="flex min-h-screen print:hidden">
-      {/* Десктопный сайдбар */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line bg-surface lg:flex">
-        <div className="flex items-center gap-2.5 px-6 py-5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-white">
-            <Zap size={18} aria-hidden />
-          </span>
-          <span className="text-lg font-semibold tracking-tight">Финора</span>
-        </div>
-        {menu}
-      </aside>
+    <DataProvider>
+      <div className="flex min-h-screen print:hidden">
+        {/* Десктопный сайдбар */}
+        <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line bg-surface lg:flex">
+          <div className="flex items-center gap-2.5 px-6 py-5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-white">
+              <Zap size={18} aria-hidden />
+            </span>
+            <span className="text-lg font-semibold tracking-tight">Финора</span>
+          </div>
+          {menu}
+        </aside>
 
-      {/* Мобильная шторка */}
-      {open && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <button
-            aria-label="Закрыть меню"
-            className="absolute inset-0 bg-ink/30"
-            onClick={() => setOpen(false)}
-          />
-          <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-surface shadow-pop">
-            <div className="flex items-center justify-between px-5 py-4">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-brand text-white">
-                  <Zap size={16} aria-hidden />
-                </span>
-                <span className="font-semibold">Финора</span>
+        {/* Мобильная шторка */}
+        {open && (
+          <div className="fixed inset-0 z-40 lg:hidden">
+            <button
+              aria-label="Закрыть меню"
+              className="absolute inset-0 bg-ink/30"
+              onClick={() => setOpen(false)}
+            />
+            <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-surface shadow-pop">
+              <div className="flex items-center justify-between px-5 py-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-brand text-white">
+                    <Zap size={16} aria-hidden />
+                  </span>
+                  <span className="font-semibold">Финора</span>
+                </div>
+                <button
+                  onClick={() => setOpen(false)}
+                  aria-label="Закрыть"
+                  className="rounded-[10px] p-2 text-mute hover:bg-canvas"
+                >
+                  <X size={18} />
+                </button>
               </div>
-              <button
-                onClick={() => setOpen(false)}
-                aria-label="Закрыть"
-                className="rounded-[10px] p-2 text-mute hover:bg-canvas"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            {menu}
-          </aside>
-        </div>
-      )}
+              {menu}
+            </aside>
+          </div>
+        )}
 
-      <div className="flex min-w-0 flex-1 flex-col lg:pl-60">
-        {/* Мобильная шапка */}
-        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-surface px-4 py-3 lg:hidden">
-          <button
-            onClick={() => setOpen(true)}
-            aria-label="Открыть меню"
-            className="rounded-[10px] p-2 text-ink hover:bg-canvas"
-          >
-            <Menu size={20} />
-          </button>
-          <span className="font-semibold">Финора</span>
-        </header>
-        <main className="min-w-0 flex-1">{children}</main>
+        <div className="flex min-w-0 flex-1 flex-col lg:pl-60">
+          {/* Мобильная шапка */}
+          <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-surface px-4 py-3 lg:hidden">
+            <button
+              onClick={() => setOpen(true)}
+              aria-label="Открыть меню"
+              className="rounded-[10px] p-2 text-ink hover:bg-canvas"
+            >
+              <Menu size={20} />
+            </button>
+            <span className="font-semibold">Финора</span>
+          </header>
+          <main className="min-w-0 flex-1">{children}</main>
+        </div>
+        <CommandPalette />
       </div>
-      <CommandPalette />
-    </div>
+    </DataProvider>
   );
 }

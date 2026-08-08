@@ -13,6 +13,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { clientById, paidCount, dealState, type Deal } from "@/lib/data";
+import { todayIso } from "@/lib/derive";
 import { useData } from "@/lib/store";
 import { Badge } from "@/components/ui";
 
@@ -48,7 +49,7 @@ export default function AcceptPaymentModal({
   const [amount, setAmount] = useState("");
   const [method, setMethod] =
     useState<(typeof methods)[number]["key"]>("cash");
-  const [date, setDate] = useState("2026-08-05");
+  const [date, setDate] = useState(todayIso());
   const [saved, setSaved] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 

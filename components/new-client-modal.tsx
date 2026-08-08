@@ -91,6 +91,8 @@ export default function NewClientModal({
     inn: "",
   });
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const firstField = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -114,14 +116,24 @@ export default function NewClientModal({
     form.firstName.trim() !== "" &&
     form.phone.replace(/\D/g, "").length === 11;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ready) return;
-    const created = addClient({
-      lastName: form.lastName.trim(),
-      firstName: form.firstName.trim(),
-      phone: form.phone,
-    });
+    if (!ready || saving) return;
+
+    setSaving(true);
+    setError(null);
+    let created;
+    try {
+      created = await addClient({
+        lastName: form.lastName.trim(),
+        firstName: form.firstName.trim(),
+        phone: form.phone,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось сохранить");
+      setSaving(false);
+      return;
+    }
     setSaved(true);
     onCreated?.(created);
     setTimeout(() => {
@@ -291,11 +303,17 @@ export default function NewClientModal({
             role="status"
             aria-live="polite"
           >
-            {saved
-              ? "Клиент создан"
-              : ready
-                ? "Можно сохранять"
-                : "Заполните фамилию, имя и телефон"}
+            {error ? (
+              <span className="text-danger">{error}</span>
+            ) : saved ? (
+              "Клиент создан"
+            ) : saving ? (
+              "Сохраняем…"
+            ) : ready ? (
+              "Можно сохранять"
+            ) : (
+              "Заполните фамилию, имя и телефон"
+            )}
           </p>
           <button
             type="button"
@@ -306,10 +324,10 @@ export default function NewClientModal({
           </button>
           <button
             type="submit"
-            disabled={!ready || saved}
+            disabled={!ready || saved || saving}
             className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
-            {saved ? "Клиент создан" : "Создать клиента"}
+            {saved ? "Клиент создан" : saving ? "Сохраняем…" : "Создать клиента"}
           </button>
         </footer>
       </form>

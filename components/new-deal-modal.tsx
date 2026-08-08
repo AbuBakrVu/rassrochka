@@ -30,7 +30,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { seedEmployees, type Client } from "@/lib/data";
-import { useData, CASH_OPENING_BALANCE } from "@/lib/store";
+import { todayIso } from "@/lib/derive";
+import { useData } from "@/lib/store";
 import { cashBalance } from "@/lib/cash";
 import NewClientModal from "@/components/new-client-modal";
 
@@ -133,11 +134,13 @@ function StepHead({
 }
 
 export default function NewDealModal({ onClose }: { onClose: () => void }) {
-  const { clients, cash, addDeal } = useData();
-  const cashNow = cashBalance(CASH_OPENING_BALANCE, cash);
+  const { clients, cash, cashOpeningBalance, addDeal } = useData();
+  const cashNow = cashBalance(cashOpeningBalance, cash);
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [created, setCreated] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [clientFormOpen, setClientFormOpen] = useState(false);
 
   const [name, setName] = useState("");
@@ -151,7 +154,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
   const [downMode, setDownMode] = useState<"percent" | "rub">("rub");
   const [down, setDown] = useState("");
   const [months, setMonths] = useState(6);
-  const [dealDate, setDealDate] = useState("2026-08-05");
+  const [dealDate, setDealDate] = useState(todayIso());
   const [firstPayment, setFirstPayment] = useState("");
   const [manager, setManager] = useState(seedEmployees[0].id);
 
@@ -220,18 +223,28 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
     setPhotos((p) => [...p, ...next]);
   };
 
-  const create = () => {
-    if (!client) return;
-    const deal = addDeal({
-      product: name,
-      amount: Math.round(calc.financed),
-      months,
-      openedAt: dealDate,
-      clientId: client.id,
-      clientName: client.name,
-      manager,
-      markupPct: calc.markupPct,
-    });
+  const create = async () => {
+    if (!client || saving) return;
+
+    setSaving(true);
+    setError(null);
+    let deal;
+    try {
+      deal = await addDeal({
+        product: name,
+        amount: Math.round(calc.financed),
+        months,
+        openedAt: dealDate,
+        clientId: client.id,
+        clientName: client.name,
+        manager,
+        markupPct: calc.markupPct,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось создать сделку");
+      setSaving(false);
+      return;
+    }
     setCreated(true);
     setTimeout(() => {
       onClose();
@@ -979,9 +992,14 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
 
         <footer className="flex flex-wrap items-center gap-3 border-t border-line px-5 py-4 sm:px-7">
           <p className="mr-auto text-sm text-mute" role="status" aria-live="polite">
-            {created
-              ? "Сделка создана"
-              : stepReady[step]
+            {error ? (
+              <span className="text-danger">{error}</span>
+            ) : created ? (
+              "Сделка создана"
+            ) : saving ? (
+              "Сохраняем…"
+            ) : (
+              stepReady[step]
                 ? step === 3
                   ? "Всё готово к созданию"
                   : "Можно продолжать"
@@ -990,7 +1008,8 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                     "Укажите закупочную цену и срок",
                     "Выберите клиента",
                     "",
-                  ][step]}
+                  ][step]
+            )}
           </p>
           {step > 0 && (
             <button
@@ -1011,11 +1030,11 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
           ) : (
             <button
               onClick={create}
-              disabled={created}
+              disabled={created || saving}
               className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:bg-line disabled:text-mute"
             >
               <Check size={15} aria-hidden />
-              {created ? "Сделка создана" : "Создать сделку"}
+              {created ? "Сделка создана" : saving ? "Сохраняем…" : "Создать сделку"}
             </button>
           )}
         </footer>

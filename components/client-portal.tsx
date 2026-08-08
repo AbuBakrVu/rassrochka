@@ -1,34 +1,98 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Zap, Check, Phone, MessageCircle, CalendarDays, SearchX } from "lucide-react";
-import { clientById, paidCount, dealIdFromToken, fmt } from "@/lib/data";
-import { buildSchedule, money } from "@/lib/schedule";
-import { useData } from "@/lib/store";
+import { fmt } from "@/lib/data";
+import { buildSchedule, longDate, money } from "@/lib/schedule";
+
+// Кабинет намеренно НЕ пользуется общим стором: заёмщик открывает страницу
+// по ссылке без авторизации, и useData() отдал бы ему в браузер все сделки
+// и всех клиентов компании. Здесь приходит ровно одна сделка.
+interface PortalDeal {
+  id: string;
+  clientFirstName: string;
+  product: string;
+  amount: number;
+  months: number;
+  openedAt: string;
+  paid: number;
+}
+
+function Centered({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
+      <div className="flex max-w-sm flex-col items-center rounded-card border border-line bg-surface p-8 text-center shadow-card">
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export default function ClientPortal({ token }: { token: string }) {
-  const { deals, clients, paidPayments } = useData();
-  const dealId = dealIdFromToken(deals, token);
-  const deal = deals.find((d) => d.id === dealId);
+  const [deal, setDeal] = useState<PortalDeal | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "missing" | "failed">(
+    "loading"
+  );
 
-  if (!deal) {
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch(`/api/portal/${encodeURIComponent(token)}`)
+      .then(async (res) => {
+        if (cancelled) return;
+        if (res.status === 404) return setState("missing");
+        if (!res.ok) return setState("failed");
+        setDeal(await res.json());
+        setState("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setState("failed");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  if (state === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
-        <div className="flex max-w-sm flex-col items-center rounded-card border border-line bg-surface p-8 text-center shadow-card">
-          <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-brand-soft text-brand">
-            <SearchX size={20} aria-hidden />
-          </span>
-          <p className="font-medium">Ссылка недействительна</p>
-          <p className="mt-1 text-sm text-mute">
-            Такой рассрочки нет в системе — уточните ссылку у менеджера.
-          </p>
-        </div>
-      </div>
+      <Centered>
+        <div className="h-11 w-11 animate-pulse rounded-full bg-brand-soft" />
+        <div className="mt-3 h-4 w-32 animate-pulse rounded bg-line" />
+      </Centered>
     );
   }
 
-  const client = clientById(clients, deal.clientId);
-  const firstName = deal.client.split(" ")[0];
-  const paid = paidCount(deal, paidPayments);
+  if (state === "failed") {
+    return (
+      <Centered>
+        <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-danger-soft text-danger">
+          <SearchX size={20} aria-hidden />
+        </span>
+        <p className="font-medium">Не удалось загрузить</p>
+        <p className="mt-1 text-sm text-mute">
+          Проверьте соединение и обновите страницу.
+        </p>
+      </Centered>
+    );
+  }
+
+  if (state === "missing" || !deal) {
+    return (
+      <Centered>
+        <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-brand-soft text-brand">
+          <SearchX size={20} aria-hidden />
+        </span>
+        <p className="font-medium">Ссылка недействительна</p>
+        <p className="mt-1 text-sm text-mute">
+          Такой рассрочки нет в системе — уточните ссылку у менеджера.
+        </p>
+      </Centered>
+    );
+  }
+
+  const firstName = deal.clientFirstName;
+  const paid = deal.paid;
   const schedule = buildSchedule(deal.amount, deal.months, paid, deal.openedAt);
   const paidSum = schedule
     .filter((p) => p.status === "paid")
@@ -180,8 +244,8 @@ export default function ClientPortal({ token }: { token: string }) {
         </section>
 
         <p className="text-center text-xs text-mute">
-          Ссылка персональная — не передавайте её другим.
-          {client ? ` Данные на 5 августа 2026 г.` : ""}
+          Ссылка персональная — не передавайте её другим. Данные на{" "}
+          {longDate(new Date())} г.
         </p>
       </div>
     </div>

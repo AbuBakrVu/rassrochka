@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Shell from "@/components/shell";
-import { DataProvider } from "@/lib/store";
 
 const inter = Inter({
   subsets: ["latin", "cyrillic"],
@@ -20,9 +19,7 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body className={`${inter.variable} antialiased`}>
-        <DataProvider>
-          <Shell>{children}</Shell>
-        </DataProvider>
+        <Shell>{children}</Shell>
       </body>
     </html>
   );
