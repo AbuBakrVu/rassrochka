@@ -6,17 +6,23 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:migrate": "node scripts/migrate-all.mjs",
+    "db:tenant:create": "node scripts/create-tenant.mjs",
+    "db:tenant:drop": "node scripts/drop-tenant.mjs"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
     "lucide-react": "^1.28.0",
     "next": "16.3.0",
+    "pg": "^8.22.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.21.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
