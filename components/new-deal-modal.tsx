@@ -230,6 +230,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
       clientId: client.id,
       clientName: client.name,
       manager,
+      markupPct: calc.markupPct,
     });
     setCreated(true);
     setTimeout(() => {

@@ -69,7 +69,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen print:hidden">
       {/* Десктопный сайдбар */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line bg-surface lg:flex">
         <div className="flex items-center gap-2.5 px-6 py-5">

@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal, flushSync } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -8,7 +10,7 @@ import {
   Phone,
   MessageCircle,
   Pencil,
-  Download,
+  Printer,
   FileText,
   FileSpreadsheet,
   ShieldCheck,
@@ -22,7 +24,9 @@ import DealActions from "@/components/deal-actions";
 import { useData } from "@/lib/store";
 import { clientById, fmt, stages, paidCount, tokenForDeal } from "@/lib/data";
 import { buildSchedule, money, longDate, type Installment } from "@/lib/schedule";
+import { dealEvents } from "@/lib/events";
 import CopyLinkButton from "@/components/copy-link";
+import DealPrint, { type PrintMode } from "@/components/deal-print";
 
 function BalanceChart({ schedule, amount }: { schedule: Installment[]; amount: number }) {
   const w = 640;
@@ -96,9 +100,21 @@ function BalanceChart({ schedule, amount }: { schedule: Installment[]; amount: n
 }
 
 export default function DealDetail({ id }: { id: string }) {
-  const { deals, clients, paidPayments, acceptPayment } = useData();
+  const { deals, clients, paidPayments, events, acceptPayment } = useData();
   const router = useRouter();
   const deal = deals.find((d) => d.id === id);
+  const [printMode, setPrintMode] = useState<PrintMode | null>(null);
+
+  useEffect(() => {
+    const reset = () => setPrintMode(null);
+    window.addEventListener("afterprint", reset);
+    return () => window.removeEventListener("afterprint", reset);
+  }, []);
+
+  const print = (mode: PrintMode) => {
+    flushSync(() => setPrintMode(mode));
+    window.print();
+  };
 
   if (!deal) {
     return (
@@ -124,7 +140,7 @@ export default function DealDetail({ id }: { id: string }) {
     .filter((p) => p.status === "paid")
     .reduce((s, p) => s + p.amount, 0);
   const remaining = deal.amount - paidSum;
-  const markup = Math.round(deal.amount * 0.15);
+  const markup = Math.round((deal.amount * deal.markupPct) / 100);
   const purchase = deal.amount - markup;
   const stageTitle =
     stages.find((s) => s.key === deal.stage)?.title ??
@@ -134,20 +150,10 @@ export default function DealDetail({ id }: { id: string }) {
   const openedLabel = longDate(new Date(deal.openedAt));
   const nextPayment = schedule.find((p) => p.status !== "paid");
 
-  const history = [
-    ...(paid > 0
-      ? [
-          {
-            date: schedule[paid - 1].date,
-            text: `Платёж ${paid} из ${deal.months} — ${money(schedule[paid - 1].amount)}`,
-          },
-        ]
-      : []),
-    ...(active
-      ? [{ date: openedLabel, text: "Сделка переведена в «Активна»" }]
-      : []),
-    { date: openedLabel, text: "Сделка создана" },
-  ];
+  const history = dealEvents(events, deal.id).map((e) => ({
+    date: longDate(new Date(e.date)),
+    text: e.text,
+  }));
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-8">
@@ -283,7 +289,7 @@ export default function DealDetail({ id }: { id: string }) {
             <dl className="divide-y divide-line text-sm">
               {[
                 ["Закупочная цена", money(purchase)],
-                ["Наценка рассрочки · 15%", `+${money(markup)}`],
+                [`Наценка рассрочки · ${deal.markupPct}%`, `+${money(markup)}`],
                 ["Итоговая цена для клиента", fmt(deal.amount)],
               ].map(([k, v]) => (
                 <div key={k} className="flex items-center justify-between py-2.5">
@@ -473,14 +479,16 @@ export default function DealDetail({ id }: { id: string }) {
                 {
                   icon: FileText,
                   title: "Договор рассрочки",
-                  text: "Условия и график платежей",
+                  text: "Условия и полный график платежей",
+                  mode: "contract" as PrintMode,
                 },
                 {
                   icon: FileSpreadsheet,
                   title: "Сводка по сделке",
-                  text: "Детали для клиента",
+                  text: paid > 0 ? "Детали и квитанция о платеже" : "Детали для клиента",
+                  mode: "summary" as PrintMode,
                 },
-              ].map(({ icon: Icon, title, text }) => (
+              ].map(({ icon: Icon, title, text, mode }) => (
                 <li
                   key={title}
                   className="flex items-center gap-3 rounded-[10px] border border-line px-3.5 py-2.5"
@@ -491,10 +499,11 @@ export default function DealDetail({ id }: { id: string }) {
                     <p className="truncate text-xs text-mute">{text}</p>
                   </div>
                   <button
-                    aria-label={`Скачать «${title}»`}
+                    onClick={() => print(mode)}
+                    aria-label={`Печать «${title}»`}
                     className="rounded-lg p-1.5 text-mute hover:bg-canvas hover:text-ink"
                   >
-                    <Download size={15} />
+                    <Printer size={15} />
                   </button>
                 </li>
               ))}
@@ -528,6 +537,21 @@ export default function DealDetail({ id }: { id: string }) {
           </Card>
         </div>
       </div>
+
+      {printMode &&
+        createPortal(
+          <DealPrint
+            mode={printMode}
+            deal={deal}
+            client={client}
+            schedule={schedule}
+            paid={paid}
+            monthly={monthly}
+            paidSum={paidSum}
+            remaining={remaining}
+          />,
+          document.body
+        )}
     </div>
   );
 }

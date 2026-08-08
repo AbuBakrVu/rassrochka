@@ -7,9 +7,9 @@ import { buildSchedule } from "./schedule";
 import type { CashTx } from "./store";
 
 // Закупочная цена — та же формула, что на странице сделки и в аналитике:
-// наценка условно 15% от суммы рассрочки (см. PROGRESS_PRO.md §5)
+// вычитаем реальную наценку сделки (deal.markupPct) из суммы рассрочки
 export const purchasePrice = (deal: Deal) =>
-  deal.amount - Math.round(deal.amount * 0.15);
+  deal.amount - Math.round((deal.amount * deal.markupPct) / 100);
 
 export const cashBalance = (opening: number, txs: CashTx[]) =>
   txs.reduce((sum, t) => sum + t.amount, opening);

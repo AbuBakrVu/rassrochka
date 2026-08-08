@@ -91,7 +91,7 @@ export default function AnalyticsPage() {
 
   const profit = deals
     .filter((d) => d.stage === "active" || d.stage === "closed")
-    .reduce((s, d) => s + Math.round(d.amount * 0.15), 0);
+    .reduce((s, d) => s + Math.round((d.amount * d.markupPct) / 100), 0);
 
   const reasons = rejectedDeals.reduce<Record<string, number>>((acc, d) => {
     const reason = d.nextStep.replace(/^Отказ:\s*/, "");

@@ -20,10 +20,11 @@ import {
   type Deal,
   type Client,
 } from "./data";
-import { buildSchedule, monthNames } from "./schedule";
+import { buildSchedule, monthNames, money } from "./schedule";
 import { buildSeedCash, purchasePrice } from "./cash";
+import { buildSeedEvents, type DealEvent } from "./events";
 
-const STORAGE_KEY = "finora-store-v2";
+const STORAGE_KEY = "finora-store-v3";
 
 // Касса: стартовый остаток и лента операций. Закупка товара списывает
 // деньги, платёж клиента возвращает — так виден реальный оборот.
@@ -46,6 +47,7 @@ interface StoredShape {
   clients: Client[];
   paidPayments: Record<string, number>;
   cash: CashTx[];
+  events: DealEvent[];
 }
 
 // Ширина номера сохраняем как у самого длинного существующего id
@@ -77,6 +79,7 @@ export interface NewDealInput {
   clientId: string;
   clientName: string;
   manager: string;
+  markupPct: number;
 }
 
 export interface NewClientInput {
@@ -106,6 +109,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     clients: seedClients,
     paidPayments: seedPaidPayments,
     cash: buildSeedCash(seedDeals, seedPaidPayments),
+    events: buildSeedEvents(seedDeals, seedPaidPayments),
   });
   const [hydrated, setHydrated] = useState(false);
 
@@ -124,6 +128,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           clients: saved.clients ?? seed.clients,
           paidPayments: saved.paidPayments ?? seed.paidPayments,
           cash: saved.cash ?? buildSeedCash(
+            saved.deals ?? seed.deals,
+            saved.paidPayments ?? seed.paidPayments
+          ),
+          events: saved.events ?? buildSeedEvents(
             saved.deals ?? seed.deals,
             saved.paidPayments ?? seed.paidPayments
           ),
@@ -157,6 +165,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         statusTone: "blue",
         nextStep: "Ответить сегодня",
         manager: input.manager,
+        markupPct: input.markupPct,
       };
       // Закупка товара сразу уменьшает остаток кассы
       const tx: CashTx = {
@@ -168,10 +177,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         title: `Закупка товара · ${created.product}`,
         note: created.client,
       };
+      const event: DealEvent = {
+        id: `${id}-created`,
+        dealId: id,
+        date: created.openedAt,
+        text: `Сделка создана · ответственный ${created.manager}`,
+      };
       return {
         ...s,
         deals: [created, ...s.deals],
         cash: [...s.cash, tx],
+        events: [...s.events, event],
       };
     });
     return created;
@@ -224,11 +240,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         title: `Платёж ${next} из ${deal.months} · ${deal.client}`,
         note: deal.product,
       };
+      const event: DealEvent = {
+        id: `${dealId}-p${next}`,
+        dealId,
+        date: installment.iso,
+        text: `Платёж ${next} из ${deal.months} принят — ${money(installment.amount)}`,
+      };
 
       return {
         ...s,
         paidPayments: { ...s.paidPayments, [dealId]: next },
         cash: [...s.cash, tx],
+        events: [...s.events, event],
       };
     });
   }, []);

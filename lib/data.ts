@@ -30,6 +30,7 @@ export interface Deal {
   deadline?: string;
   urgent?: boolean;
   manager: string;
+  markupPct: number; // реальная наценка сделки в %, введённая при создании
 }
 
 export const stages: { key: DealStage; title: string }[] = [
@@ -43,32 +44,32 @@ export const stages: { key: DealStage; title: string }[] = [
 // Сам по себе этот массив больше нигде не читается напрямую.
 export const seedDeals: Deal[] = [
   // Новые заявки
-  { id: "R-1051", clientId: "C-106", client: "Анна Полякова", product: "MacBook Air 13″ M3", amount: 120000, months: 12, openedAt: "2026-08-05", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Ответить сегодня", manager: "АС" },
-  { id: "R-1052", clientId: "C-111", client: "Роман Ветров", product: "Велосипед Merida Big Nine", amount: 85000, months: 10, openedAt: "2026-08-05", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Заявка 30 мин назад", manager: "МК" },
-  { id: "R-1053", clientId: "C-112", client: "Ольга Смирнова", product: "Стиральная машина Bosch", amount: 64000, months: 6, openedAt: "2026-08-04", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Уточнить сумму", manager: "АС" },
-  { id: "R-1054", clientId: "C-113", client: "Игорь Лапин", product: "Кухонный гарнитур на заказ", amount: 150000, months: 18, openedAt: "2026-08-04", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Перезвонить завтра", manager: "ДС" },
+  { id: "R-1051", clientId: "C-106", client: "Анна Полякова", product: "MacBook Air 13″ M3", amount: 120000, months: 12, openedAt: "2026-08-05", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Ответить сегодня", manager: "АС", markupPct: 15 },
+  { id: "R-1052", clientId: "C-111", client: "Роман Ветров", product: "Велосипед Merida Big Nine", amount: 85000, months: 10, openedAt: "2026-08-05", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Заявка 30 мин назад", manager: "МК", markupPct: 15 },
+  { id: "R-1053", clientId: "C-112", client: "Ольга Смирнова", product: "Стиральная машина Bosch", amount: 64000, months: 6, openedAt: "2026-08-04", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Уточнить сумму", manager: "АС", markupPct: 15 },
+  { id: "R-1054", clientId: "C-113", client: "Игорь Лапин", product: "Кухонный гарнитур на заказ", amount: 150000, months: 18, openedAt: "2026-08-04", stage: "new", status: "Новая", statusTone: "blue", nextStep: "Перезвонить завтра", manager: "ДС", markupPct: 15 },
   // Проверка
-  { id: "R-1045", clientId: "C-105", client: "Виктор Данилов", product: "Автоприцеп МЗСА", amount: 240000, months: 18, openedAt: "2026-08-01", stage: "check", status: "Документы", statusTone: "yellow", nextStep: "Ждём паспорт", manager: "АС" },
-  { id: "R-1046", clientId: "C-108", client: "Елена Крылова", product: "iPhone 15 Pro 256 ГБ", amount: 74000, months: 8, openedAt: "2026-07-31", stage: "check", status: "Скоринг", statusTone: "yellow", nextStep: "Срок сегодня", urgent: true, manager: "ДС" },
-  { id: "R-1047", clientId: "C-114", client: "Павел Козлов", product: "Телевизор LG OLED 55″", amount: 96000, months: 12, openedAt: "2026-07-30", stage: "check", status: "Документы", statusTone: "yellow", nextStep: "Проверить ИНН", manager: "МК" },
+  { id: "R-1045", clientId: "C-105", client: "Виктор Данилов", product: "Автоприцеп МЗСА", amount: 240000, months: 18, openedAt: "2026-08-01", stage: "check", status: "Документы", statusTone: "yellow", nextStep: "Ждём паспорт", manager: "АС", markupPct: 15 },
+  { id: "R-1046", clientId: "C-108", client: "Елена Крылова", product: "iPhone 15 Pro 256 ГБ", amount: 74000, months: 8, openedAt: "2026-07-31", stage: "check", status: "Скоринг", statusTone: "yellow", nextStep: "Срок сегодня", urgent: true, manager: "ДС", markupPct: 15 },
+  { id: "R-1047", clientId: "C-114", client: "Павел Козлов", product: "Телевизор LG OLED 55″", amount: 96000, months: 12, openedAt: "2026-07-30", stage: "check", status: "Документы", statusTone: "yellow", nextStep: "Проверить ИНН", manager: "МК", markupPct: 15 },
   // Подписание
-  { id: "R-1017", clientId: "C-107", client: "Сергей Миронов", product: "Ноутбук ASUS Vivobook 16", amount: 58500, months: 6, openedAt: "2026-07-28", stage: "signing", status: "Отправлен договор", statusTone: "blue", nextStep: "Подписать до 6 авг", deadline: "6 августа", manager: "МК" },
-  { id: "R-1044", clientId: "C-115", client: "Дарья Ильина", product: "Диван Bergen + кресло", amount: 132000, months: 12, openedAt: "2026-07-27", stage: "signing", status: "Согласование", statusTone: "blue", nextStep: "Созвон в 15:00", manager: "АС" },
+  { id: "R-1017", clientId: "C-107", client: "Сергей Миронов", product: "Ноутбук ASUS Vivobook 16", amount: 58500, months: 6, openedAt: "2026-07-28", stage: "signing", status: "Отправлен договор", statusTone: "blue", nextStep: "Подписать до 6 авг", deadline: "6 августа", manager: "МК", markupPct: 15 },
+  { id: "R-1044", clientId: "C-115", client: "Дарья Ильина", product: "Диван Bergen + кресло", amount: 132000, months: 12, openedAt: "2026-07-27", stage: "signing", status: "Согласование", statusTone: "blue", nextStep: "Созвон в 15:00", manager: "АС", markupPct: 15 },
   // Активные
-  { id: "R-1042", clientId: "C-101", client: "Марина Котова", product: "iPhone 15 Pro Max 256 ГБ", amount: 96000, months: 12, openedAt: "2026-03-05", stage: "active", status: "В графике", statusTone: "green", nextStep: "Оплата сегодня", manager: "АС" },
-  { id: "R-1038", clientId: "C-102", client: "Никита Абрамов", product: "Холодильник Bosch Serie 6", amount: 142000, months: 14, openedAt: "2026-04-05", stage: "active", status: "В графике", statusTone: "green", nextStep: "Платёж 9 августа", manager: "ДС" },
-  { id: "R-1031", clientId: "C-103", client: "Татьяна Горина", product: "Мебель для спальни", amount: 88000, months: 10, openedAt: "2026-05-05", stage: "active", status: "Просрочка 2 дня", statusTone: "red", nextStep: "Нужен новый график", urgent: true, manager: "МК" },
-  { id: "R-1040", clientId: "C-104", client: "Дмитрий Савельев", product: "Ноутбук Lenovo IdeaPad", amount: 75000, months: 10, openedAt: "2026-03-20", stage: "active", status: "В графике", statusTone: "green", nextStep: "Напомнить об оплате", manager: "АС" },
+  { id: "R-1042", clientId: "C-101", client: "Марина Котова", product: "iPhone 15 Pro Max 256 ГБ", amount: 96000, months: 12, openedAt: "2026-03-05", stage: "active", status: "В графике", statusTone: "green", nextStep: "Оплата сегодня", manager: "АС", markupPct: 15 },
+  { id: "R-1038", clientId: "C-102", client: "Никита Абрамов", product: "Холодильник Bosch Serie 6", amount: 142000, months: 14, openedAt: "2026-04-05", stage: "active", status: "В графике", statusTone: "green", nextStep: "Платёж 9 августа", manager: "ДС", markupPct: 15 },
+  { id: "R-1031", clientId: "C-103", client: "Татьяна Горина", product: "Мебель для спальни", amount: 88000, months: 10, openedAt: "2026-05-05", stage: "active", status: "Просрочка 2 дня", statusTone: "red", nextStep: "Нужен новый график", urgent: true, manager: "МК", markupPct: 15 },
+  { id: "R-1040", clientId: "C-104", client: "Дмитрий Савельев", product: "Ноутбук Lenovo IdeaPad", amount: 75000, months: 10, openedAt: "2026-03-20", stage: "active", status: "В графике", statusTone: "green", nextStep: "Напомнить об оплате", manager: "АС", markupPct: 15 },
   // Закрытые
-  { id: "R-0988", clientId: "C-101", client: "Марина Котова", product: "Samsung Galaxy A55", amount: 48000, months: 6, openedAt: "2025-09-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "АС" },
-  { id: "R-0975", clientId: "C-102", client: "Никита Абрамов", product: "Стиральная машина LG", amount: 64000, months: 8, openedAt: "2025-06-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "ДС" },
-  { id: "R-0961", clientId: "C-109", client: "Ирина Волкова", product: "Кухонный гарнитур", amount: 55000, months: 6, openedAt: "2025-08-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "МК" },
-  { id: "R-0954", clientId: "C-110", client: "Олег Чернов", product: "Телевизор Samsung 55″", amount: 39000, months: 4, openedAt: "2025-10-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "АС" },
-  { id: "R-0942", clientId: "C-110", client: "Олег Чернов", product: "Ноутбук HP Pavilion", amount: 72000, months: 9, openedAt: "2025-04-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "АС" },
+  { id: "R-0988", clientId: "C-101", client: "Марина Котова", product: "Samsung Galaxy A55", amount: 48000, months: 6, openedAt: "2025-09-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "АС", markupPct: 15 },
+  { id: "R-0975", clientId: "C-102", client: "Никита Абрамов", product: "Стиральная машина LG", amount: 64000, months: 8, openedAt: "2025-06-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "ДС", markupPct: 15 },
+  { id: "R-0961", clientId: "C-109", client: "Ирина Волкова", product: "Кухонный гарнитур", amount: 55000, months: 6, openedAt: "2025-08-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "МК", markupPct: 15 },
+  { id: "R-0954", clientId: "C-110", client: "Олег Чернов", product: "Телевизор Samsung 55″", amount: 39000, months: 4, openedAt: "2025-10-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "АС", markupPct: 15 },
+  { id: "R-0942", clientId: "C-110", client: "Олег Чернов", product: "Ноутбук HP Pavilion", amount: 72000, months: 9, openedAt: "2025-04-05", stage: "closed", status: "Закрыта", statusTone: "gray", nextStep: "Выплачена полностью", manager: "АС", markupPct: 15 },
   // Отклонённые
-  { id: "R-1012", clientId: "C-103", client: "Татьяна Горина", product: "Автомобиль Kia Rio", amount: 320000, months: 24, openedAt: "2026-02-14", stage: "rejected", status: "Отклонена", statusTone: "red", nextStep: "Отказ: высокая нагрузка", manager: "МК" },
-  { id: "R-1029", clientId: "C-105", client: "Виктор Данилов", product: "Мотоцикл Bajaj", amount: 210000, months: 18, openedAt: "2026-04-22", stage: "rejected", status: "Отклонена", statusTone: "red", nextStep: "Отказ: нет подтверждения дохода", manager: "АС" },
-  { id: "R-0930", clientId: "C-109", client: "Ирина Волкова", product: "Смартфон Xiaomi 14", amount: 62000, months: 8, openedAt: "2025-03-11", stage: "rejected", status: "Отклонена", statusTone: "red", nextStep: "Отказ: клиент передумал", manager: "ДС" },
+  { id: "R-1012", clientId: "C-103", client: "Татьяна Горина", product: "Автомобиль Kia Rio", amount: 320000, months: 24, openedAt: "2026-02-14", stage: "rejected", status: "Отклонена", statusTone: "red", nextStep: "Отказ: высокая нагрузка", manager: "МК", markupPct: 15 },
+  { id: "R-1029", clientId: "C-105", client: "Виктор Данилов", product: "Мотоцикл Bajaj", amount: 210000, months: 18, openedAt: "2026-04-22", stage: "rejected", status: "Отклонена", statusTone: "red", nextStep: "Отказ: нет подтверждения дохода", manager: "АС", markupPct: 15 },
+  { id: "R-0930", clientId: "C-109", client: "Ирина Волкова", product: "Смартфон Xiaomi 14", amount: 62000, months: 8, openedAt: "2025-03-11", stage: "rejected", status: "Отклонена", statusTone: "red", nextStep: "Отказ: клиент передумал", manager: "ДС", markupPct: 15 },
 ];
 
 // Сколько платежей уже прошло у активных сделок — тоже затравка для стора
