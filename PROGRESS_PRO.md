@@ -78,7 +78,8 @@ app/
     page.tsx                 — реестр клиентов (из стора)
     [id]/page.tsx             — тонкая серверная обёртка → components/client-detail.tsx
   pay/[token]/page.tsx        — клиентский кабинет, тонкая обёртка → components/client-portal.tsx
-  cash/, coinvestors/, employees/, mailings/, registry/, settings/
+  cash/page.tsx                — Кассы: лента операций, KPI, ручные корректировки (из стора, lib/cash.ts)
+  coinvestors/, employees/, mailings/, registry/, settings/
                                 — пустые заглушки через components/stub.tsx (EmptyState)
 
 components/
@@ -104,6 +105,7 @@ lib/
   store.tsx   — React Context + localStorage, DataProvider + useData()
   derive.ts   — производные для дашборда и календаря: computeDashboard/computeCalendar/computeActive,
                 TODAY_ISO = "2026-08-05" (зафиксированное «сегодня» приложения)
+  cash.ts     — касса: purchasePrice/cashBalance/cashSummary/buildSeedCash, чистые функции над CashTx[]
 ```
 
 ## 5. Модель данных
@@ -152,6 +154,27 @@ interface Client {
 `city: "—"` — форма их не собирает (только ФИО, телефон, паспорт, адреса,
 но `Client` эти поля не хранит).
 
+### `CashTx` (lib/store.tsx) — касса
+```ts
+interface CashTx {
+  id: string;
+  kind: "purchase" | "payment" | "adjustment";
+  amount: number;   // отрицательная — расход, положительная — приход
+  date: string;     // ISO
+  dealId?: string;  // есть у purchase/payment, нет у ручных adjustment
+  title: string;
+  note?: string;
+}
+```
+Остаток кассы = `CASH_OPENING_BALANCE` (1 240 000 ₽, захардкожено в
+`lib/store.tsx`) + сумма всех `amount`. Закупочная цена сделки считается
+той же формулой, что и «Экономика сделки» — `purchasePrice(deal)` в
+`lib/cash.ts` берёт 15%-ю наценку в обратную сторону
+(`amount - amount*0.15`), так что цифры на странице сделки и в кассе
+всегда совпадают. `buildSeedCash()` восстанавливает правдоподобную
+историю операций по затравочным сделкам при первом запуске (иначе касса
+на чистом сторе выглядела бы пустой, хотя портфель уже не с нуля).
+
 ### `dealState(deal)` vs `deal.stage`
 `stage` — этап канбана (6 значений). `dealState()` — производное для
 карточки клиента: `active`/`closed`/`rejected` как есть, а `new`/`check`/
@@ -186,25 +209,40 @@ interface Client {
 
 ```
 DataProvider (в app/layout.tsx, оборачивает <Shell>)
-  useState<StoredShape>({ deals, clients, paidPayments })
-  useEffect #1 (mount only): читает localStorage, если есть — заменяет state
+  useState<StoredShape>({ deals, clients, paidPayments, cash })
+  useEffect #1 (mount only): читает localStorage, мержит с затравкой
+                              (см. ниже про смену схемы), заменяет state
   useEffect #2 (после hydrated=true): пишет state в localStorage при каждом изменении
-  addDeal / addClient / acceptPayment — useCallback, мутируют через setState
+  addDeal / addClient / acceptPayment / addCashAdjustment — useCallback, мутируют через setState
   useData() — хук, бросает Error если вызван вне провайдера
 ```
 
 **SSR-safe паттерн**: на сервере и при первом клиентском рендере всегда
-используется затравка (`seedDeals`/`seedClients`/`seedPaidPayments`) —
-чтобы не словить hydration mismatch. Только **после** монтирования читаем
-`localStorage` и подменяем состояние (это вызывает второй, чисто
-клиентский рендер — нормально и ожидаемо, не баг).
+используется затравка (`seedDeals`/`seedClients`/`seedPaidPayments`,
+касса — `buildSeedCash()`) — чтобы не словить hydration mismatch. Только
+**после** монтирования читаем `localStorage` и подменяем состояние (это
+вызывает второй, чисто клиентский рендер — нормально и ожидаемо, не баг).
 
-**Кто пишет в стор:** только три модалки —
+**Смена схемы стора.** Ключ `localStorage` версионирован
+(`finora-store-v2`) — когда в `StoredShape` добавляется новое поле (как
+`cash`), ключ бампается, а чтение сохранённых данных **мержится** с
+затравкой по каждому полю отдельно (`saved.cash ?? buildSeedCash(...)`),
+а не подставляется целиком. Так старые сохранения в браузере пользователя
+не роняют приложение с `TypeError: cash is not iterable` — это реальный
+баг, который встретился при разработке (hot-reload успел записать
+промежуточную схему в localStorage). При следующем добавлении поля в
+`StoredShape` — либо повторить этот паттерн мержа, либо снова бампнуть
+версию ключа.
+
+**Кто пишет в стор:** четыре модалки —
 `new-deal-modal.tsx` (addDeal + опционально addClient через
-`new-client-modal`), `new-client-modal.tsx` (addClient, с опциональным
-`onCreated` коллбэком — используется, когда форма открыта изнутри мастера
-сделки, чтобы сразу выбрать созданного клиента), `accept-payment-modal.tsx`
-и `deal-actions.tsx`/`deal-detail.tsx` (acceptPayment).
+`new-client-modal`; addDeal попутно списывает закупочную цену из кассы),
+`new-client-modal.tsx` (addClient, с опциональным `onCreated` коллбэком —
+используется, когда форма открыта изнутри мастера сделки, чтобы сразу
+выбрать созданного клиента), `accept-payment-modal.tsx` и
+`deal-actions.tsx`/`deal-detail.tsx` (acceptPayment, попутно приходует
+платёж в кассу), `app/cash/page.tsx` (addCashAdjustment — ручное
+внесение/изъятие).
 
 **Кто НЕ пишет в стор:** `restructure-modal.tsx` — визуальная имитация,
 показывает успех и закрывается, но `months`/график сделки не меняет.
@@ -272,13 +310,20 @@ Server Components с `generateStaticParams()` и читали статическ
     у сделок нет временных меток создания событий). Красная точка на
     колокольчике гаснет после первого открытия за сессию (локальный
     `useState`, не персистится — как и чек-лист `/route`).
+17. Главная и Платежи переведены с декоративных моков на расчёт из стора
+    (`lib/derive.ts`) — последние два экрана, не реагировавшие на созданные
+    сделки. Осиротевшие моки (`kpi`, `priorities`, `todayAgenda`,
+    `calendarDays` и др.) удалены из `lib/data.ts`.
+18. Кассы (`/cash`) — реальная лента операций (`lib/cash.ts`): закупка при
+    создании сделки, приход при платеже, ручные корректировки. Баланс в
+    мастере сделки перестал быть захардкоженным.
 
 ## 9. Известные ограничения и пробелы
 
 - **Нет бэкенда/БД** (см. §2) — данные не синхронизируются между
   устройствами и пользователями, живут в localStorage одного браузера.
 - **Реструктуризация не персистится** (см. §6).
-- **Пустые заглушки без функциональности**: Рассылки, Соинвесторы, Кассы,
+- **Пустые заглушки без функциональности**: Рассылки, Соинвесторы,
   Реестр клиентов, Сотрудники, Настройки (`components/stub.tsx`).
 - **Нет онлайн-оплаты** в клиентском кабинете — только «Позвонить»/
   «Написать».

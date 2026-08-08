@@ -20,14 +20,32 @@ import {
   type Deal,
   type Client,
 } from "./data";
-import { monthNames } from "./schedule";
+import { buildSchedule, monthNames } from "./schedule";
+import { buildSeedCash, purchasePrice } from "./cash";
 
-const STORAGE_KEY = "finora-store-v1";
+const STORAGE_KEY = "finora-store-v2";
+
+// Касса: стартовый остаток и лента операций. Закупка товара списывает
+// деньги, платёж клиента возвращает — так виден реальный оборот.
+export const CASH_OPENING_BALANCE = 1_240_000;
+
+export type CashKind = "purchase" | "payment" | "adjustment";
+
+export interface CashTx {
+  id: string;
+  kind: CashKind;
+  amount: number; // отрицательная — расход, положительная — приход
+  date: string; // ISO
+  dealId?: string;
+  title: string;
+  note?: string;
+}
 
 interface StoredShape {
   deals: Deal[];
   clients: Client[];
   paidPayments: Record<string, number>;
+  cash: CashTx[];
 }
 
 // Ширина номера сохраняем как у самого длинного существующего id
@@ -66,10 +84,17 @@ export interface NewClientInput {
   phone: string;
 }
 
+export interface CashAdjustmentInput {
+  amount: number; // положительная — внесение, отрицательная — изъятие
+  title: string;
+  date: string;
+}
+
 interface DataContextValue extends StoredShape {
   addDeal: (input: NewDealInput) => Deal;
   addClient: (input: NewClientInput) => Client;
   acceptPayment: (dealId: string) => void;
+  addCashAdjustment: (input: CashAdjustmentInput) => void;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -79,6 +104,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     deals: seedDeals,
     clients: seedClients,
     paidPayments: seedPaidPayments,
+    cash: buildSeedCash(seedDeals, seedPaidPayments),
   });
   const [hydrated, setHydrated] = useState(false);
 
@@ -88,7 +114,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) setState(JSON.parse(raw) as StoredShape);
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<StoredShape>;
+        // Мержим с затравкой: сохранённое состояние может быть от более
+        // ранней версии схемы и не содержать новых полей
+        setState((seed) => ({
+          deals: saved.deals ?? seed.deals,
+          clients: saved.clients ?? seed.clients,
+          paidPayments: saved.paidPayments ?? seed.paidPayments,
+          cash: saved.cash ?? buildSeedCash(
+            saved.deals ?? seed.deals,
+            saved.paidPayments ?? seed.paidPayments
+          ),
+        }));
+      }
     } catch {
       // Битые данные в localStorage — остаёмся на затравке
     }
@@ -118,7 +157,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         nextStep: "Ответить сегодня",
         manager: "АС",
       };
-      return { ...s, deals: [created, ...s.deals] };
+      // Закупка товара сразу уменьшает остаток кассы
+      const tx: CashTx = {
+        id: `${id}-purchase`,
+        kind: "purchase",
+        amount: -purchasePrice(created),
+        date: created.openedAt,
+        dealId: id,
+        title: `Закупка товара · ${created.product}`,
+        note: created.client,
+      };
+      return {
+        ...s,
+        deals: [created, ...s.deals],
+        cash: [...s.cash, tx],
+      };
     });
     return created;
   }, []);
@@ -149,17 +202,55 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const deal = s.deals.find((d) => d.id === dealId);
       if (!deal) return s;
       const current = s.paidPayments[dealId] ?? 0;
-      const next = Math.min(current + 1, deal.months);
+      if (current >= deal.months) return s;
+      const next = current + 1;
+
+      // Принятый взнос приходит в кассу — сумму берём из графика,
+      // чтобы последний платёж закрывал остаток без ошибок округления
+      const schedule = buildSchedule(
+        deal.amount,
+        deal.months,
+        next,
+        deal.openedAt
+      );
+      const installment = schedule[next - 1];
+      const tx: CashTx = {
+        id: `${dealId}-p${next}`,
+        kind: "payment",
+        amount: installment.amount,
+        date: installment.iso,
+        dealId,
+        title: `Платёж ${next} из ${deal.months} · ${deal.client}`,
+        note: deal.product,
+      };
+
       return {
         ...s,
         paidPayments: { ...s.paidPayments, [dealId]: next },
+        cash: [...s.cash, tx],
       };
     });
   }, []);
 
+  const addCashAdjustment = useCallback((input: CashAdjustmentInput) => {
+    setState((s) => ({
+      ...s,
+      cash: [
+        ...s.cash,
+        {
+          id: `adj-${Date.now()}`,
+          kind: "adjustment",
+          amount: input.amount,
+          date: input.date,
+          title: input.title,
+        },
+      ],
+    }));
+  }, []);
+
   const value = useMemo<DataContextValue>(
-    () => ({ ...state, addDeal, addClient, acceptPayment }),
-    [state, addDeal, addClient, acceptPayment]
+    () => ({ ...state, addDeal, addClient, acceptPayment, addCashAdjustment }),
+    [state, addDeal, addClient, acceptPayment, addCashAdjustment]
   );
 
   return (

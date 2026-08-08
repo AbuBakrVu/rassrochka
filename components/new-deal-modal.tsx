@@ -30,7 +30,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Client } from "@/lib/data";
-import { useData } from "@/lib/store";
+import { useData, CASH_OPENING_BALANCE } from "@/lib/store";
+import { cashBalance } from "@/lib/cash";
 import NewClientModal from "@/components/new-client-modal";
 
 const steps = [
@@ -63,8 +64,6 @@ const cities = [
 ];
 
 const terms = [3, 4, 6, 9, 12, 18, 24];
-
-const CASH_BALANCE = 1_240_000;
 
 const input =
   "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
@@ -134,7 +133,8 @@ function StepHead({
 }
 
 export default function NewDealModal({ onClose }: { onClose: () => void }) {
-  const { clients, addDeal } = useData();
+  const { clients, cash, addDeal } = useData();
+  const cashNow = cashBalance(CASH_OPENING_BALANCE, cash);
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [created, setCreated] = useState(false);
@@ -194,9 +194,9 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
       financed,
       monthly: months ? financed / months : 0,
       roi: base ? (markupSum / base) * 100 : 0,
-      cashAfter: CASH_BALANCE - base + downSum,
+      cashAfter: cashNow - base + downSum,
     };
-  }, [price, markup, down, downMode, months]);
+  }, [price, markup, down, downMode, months, cashNow]);
 
   const firstDate = firstPayment || (dealDate ? addMonth(dealDate) : "");
 
@@ -615,7 +615,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                         Основная
                       </span>
                       <span className="text-sm text-mute">
-                        Баланс {money(CASH_BALANCE)}
+                        Баланс {money(cashNow)}
                       </span>
                     </div>
                   </div>
