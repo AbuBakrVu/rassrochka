@@ -27,6 +27,7 @@ interface DealRow extends Record<string, unknown> {
   opened_at: string;
   stage: DealStage;
   manager_initials: string | null;
+  manager_id: number | null;
   paid_count: number;
   next_step: string | null;
   deadline: string | null;
@@ -117,6 +118,7 @@ function toDeal(row: DealRow, today: string): Deal {
     nextStep,
     markupPct: row.markup_pct,
     manager: row.manager_initials ?? "—",
+    managerId: row.manager_id,
     ...(row.deadline ? { deadline: shortDate(row.deadline) } : {}),
     ...(urgent ? { urgent: true } : {}),
   };
@@ -159,7 +161,7 @@ const DEALS_SELECT = `
   select d.id, d.client_id, c.name as client_name, d.product, d.amount,
          d.months, d.markup_pct, d.opened_at, d.stage, d.paid_count,
          d.next_step, d.deadline, d.reject_reason,
-         u.initials as manager_initials
+         d.manager_id, u.initials as manager_initials
   from deals d
   join clients c on c.id = d.client_id
   left join users u on u.id = d.manager_id
@@ -168,7 +170,20 @@ const DEALS_SELECT = `
 const DEALS_SQL = `${DEALS_SELECT} order by d.created_at desc`;
 const DEAL_BY_ID_SQL = `${DEALS_SELECT} where d.id = $1`;
 
+export interface Employee {
+  id: number;
+  name: string;
+  initials: string;
+  email: string;
+  phone: string;
+  role: "admin" | "manager";
+  since: string;
+  active: boolean;
+}
+
 export interface Bootstrap {
+  user: { id: number; name: string; initials: string; email: string; role: string };
+  employees: Employee[];
   deals: Deal[];
   clients: Client[];
   paidPayments: Record<string, number>;
@@ -182,16 +197,28 @@ export interface Bootstrap {
  * При сотнях сделок это дешевле, чем множить запросы по страницам; когда
  * данных станет много, разделим по разделам.
  */
-export async function loadBootstrap(dbName: string): Promise<Bootstrap> {
+export async function loadBootstrap(
+  dbName: string,
+  currentUser: { id: number; name: string; initials: string; email: string; role: string }
+): Promise<Bootstrap> {
   const today = todayIso();
 
-  const [dealRows, clientRows, cashRows, eventRows, settingRows] =
+  const [dealRows, clientRows, cashRows, eventRows, settingRows, userRows] =
     await Promise.all([
       query<DealRow>(dbName, DEALS_SQL),
       query<ClientRow>(dbName, "select * from clients order by created_at desc"),
       query<CashRow>(dbName, "select * from cash_tx order by occurred_at, id"),
       query<EventRow>(dbName, "select * from deal_events order by occurred_at desc"),
       query<{ key: string; value: unknown }>(dbName, "select key, value from settings"),
+      query<{
+        id: number; name: string; initials: string; email: string;
+        phone: string | null; role: "admin" | "manager"; active: boolean;
+        created_at: Date;
+      }>(
+        dbName,
+        `select id, name, initials, email, phone, role, active, created_at
+         from users order by active desc, name`
+      ),
     ]);
 
   const deals = dealRows.map((r) => toDeal(r, today));
@@ -202,6 +229,17 @@ export async function loadBootstrap(dbName: string): Promise<Bootstrap> {
   const opening = settingRows.find((s) => s.key === "cash_opening_balance");
 
   return {
+    user: currentUser,
+    employees: userRows.map((u) => ({
+      id: u.id,
+      name: u.name,
+      initials: u.initials,
+      email: u.email,
+      phone: u.phone ?? "—",
+      role: u.role,
+      since: sinceLabel(u.created_at.toISOString().slice(0, 10)),
+      active: u.active,
+    })),
     deals,
     clients: clientRows.map((r) => toClient(r, deals, today)),
     paidPayments,
@@ -258,7 +296,7 @@ export interface NewDealInput {
   months: number;
   openedAt: string;
   clientId: string;
-  managerInitials: string;
+  managerId: number;
   markupPct: number;
 }
 
@@ -273,7 +311,7 @@ export async function createDeal(
       `insert into deals (client_id, product, amount, months, markup_pct, opened_at,
                           manager_id, stage)
        values ($1, $2, $3, $4, $5, $6,
-               (select id from users where initials = $7 and active limit 1), 'new')
+               (select id from users where id = $7 and active), 'new')
        returning id, product`,
       [
         input.clientId,
@@ -282,7 +320,7 @@ export async function createDeal(
         input.months,
         input.markupPct,
         input.openedAt,
-        input.managerInitials,
+        input.managerId,
       ]
     );
     const deal = rows[0];
@@ -300,10 +338,17 @@ export async function createDeal(
       [-purchase, input.openedAt, deal.id, `Закупка товара · ${deal.product}`, clientName]
     );
 
+    const { rows: managerRows } = await client.query<{ name: string }>(
+      "select name from users where id = $1",
+      [input.managerId]
+    );
     await client.query(
-      `insert into deal_events (deal_id, text, user_id)
-       values ($1, $2, (select id from users where initials = $3 and active limit 1))`,
-      [deal.id, `Сделка создана · ответственный ${input.managerInitials}`, input.managerInitials]
+      `insert into deal_events (deal_id, text, user_id) values ($1, $2, $3)`,
+      [
+        deal.id,
+        `Сделка создана · ответственный ${managerRows[0]?.name ?? "не назначен"}`,
+        input.managerId,
+      ]
     );
 
     return deal.id;
@@ -483,4 +528,74 @@ export async function loadPortalDeal(
     // у закрытой сделки выплачены все взносы — та же логика, что в paidCount
     paid: row.stage === "closed" ? row.months : row.paid_count,
   };
+}
+
+// ── Сотрудники ─────────────────────────────────────────────────────────
+
+export interface NewEmployeeInput {
+  name: string;
+  email: string;
+  phone: string;
+  role: "admin" | "manager";
+}
+
+/**
+ * Заводит сотрудника с временным паролем. Пароль возвращается ОДИН раз —
+ * в базе лежит только хеш, показать его повторно неоткуда.
+ */
+export async function createEmployee(
+  dbName: string,
+  input: NewEmployeeInput
+): Promise<{ id: number; password: string }> {
+  const { generatePassword, hashPassword, initialsFrom } = await import("./auth");
+  const password = generatePassword();
+
+  const existing = await queryOne<{ id: number }>(
+    dbName,
+    "select id from users where email = $1",
+    [input.email]
+  );
+  if (existing) throw new Error("EMAIL_TAKEN");
+
+  const row = await queryOne<{ id: number }>(
+    dbName,
+    `insert into users (email, password_hash, name, initials, role, phone,
+                        must_change_password)
+     values ($1, $2, $3, $4, $5, $6, true)
+     returning id`,
+    [
+      input.email,
+      await hashPassword(password),
+      input.name,
+      initialsFrom(input.name),
+      input.role,
+      input.phone || null,
+    ]
+  );
+  if (!row) throw new Error("Сотрудник не создан");
+
+  return { id: row.id, password };
+}
+
+/** Отключает или включает доступ. Сделки сотрудника остаются за ним. */
+export async function setEmployeeActive(
+  dbName: string,
+  userId: number,
+  active: boolean
+): Promise<void> {
+  await transaction(dbName, async (client) => {
+    // Нельзя отключить последнего администратора — иначе компания
+    // останется без того, кто может заводить сотрудников
+    if (!active) {
+      const { rows } = await client.query<{ count: string }>(
+        "select count(*) from users where role = 'admin' and active and id <> $1",
+        [userId]
+      );
+      if (Number(rows[0].count) === 0) throw new Error("LAST_ADMIN");
+    }
+    await client.query("update users set active = $2 where id = $1", [userId, active]);
+    if (!active) {
+      await client.query("delete from sessions where user_id = $1", [userId]);
+    }
+  });
 }

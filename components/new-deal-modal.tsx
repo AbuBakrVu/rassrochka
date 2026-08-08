@@ -29,7 +29,7 @@ import {
   CalendarDays,
   type LucideIcon,
 } from "lucide-react";
-import { seedEmployees, type Client } from "@/lib/data";
+import { type Client } from "@/lib/data";
 import { todayIso } from "@/lib/derive";
 import { useData } from "@/lib/store";
 import { cashBalance } from "@/lib/cash";
@@ -134,7 +134,9 @@ function StepHead({
 }
 
 export default function NewDealModal({ onClose }: { onClose: () => void }) {
-  const { clients, cash, cashOpeningBalance, addDeal } = useData();
+  const { clients, cash, cashOpeningBalance, employees, addDeal } = useData();
+  // Ответственным можно назначить только действующего сотрудника
+  const managers = employees.filter((e) => e.active);
   const cashNow = cashBalance(cashOpeningBalance, cash);
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -156,7 +158,15 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
   const [months, setMonths] = useState(6);
   const [dealDate, setDealDate] = useState(todayIso());
   const [firstPayment, setFirstPayment] = useState("");
-  const [manager, setManager] = useState(seedEmployees[0].id);
+  const [manager, setManager] = useState<number | null>(null);
+
+  // По умолчанию ответственный — тот, кто создаёт сделку
+  const { user } = useData();
+  useEffect(() => {
+    if (manager === null && managers.length > 0) {
+      setManager(managers.some((m) => m.id === user.id) ? user.id : managers[0].id);
+    }
+  }, [manager, managers, user.id]);
 
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState<Client | null>(null);
@@ -206,7 +216,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
 
   const stepReady = [
     name.trim() !== "" && category !== "" && city !== "",
-    calc.base > 0 && months > 0 && dealDate !== "",
+    calc.base > 0 && months > 0 && dealDate !== "" && manager !== null,
     client !== null,
     true,
   ];
@@ -237,7 +247,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
         openedAt: dealDate,
         clientId: client.id,
         clientName: client.name,
-        manager,
+        managerId: manager!,
         markupPct: calc.markupPct,
       });
     } catch (err) {
@@ -639,7 +649,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                   <div>
                     <Label required>Ответственный</Label>
                     <div className="flex flex-wrap gap-2">
-                      {seedEmployees.map((e) => (
+                      {managers.map((e) => (
                         <button
                           key={e.id}
                           onClick={() => setManager(e.id)}
@@ -657,7 +667,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                                 : "bg-surface text-mute"
                             }`}
                           >
-                            {e.id}
+                            {e.initials}
                           </span>
                           {e.name}
                         </button>
@@ -871,7 +881,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                     )}
                     <p className="mt-2 text-sm text-mute">
                       Ответственный:{" "}
-                      {seedEmployees.find((e) => e.id === manager)?.name}
+                      {managers.find((e) => e.id === manager)?.name}
                     </p>
                   </div>
 

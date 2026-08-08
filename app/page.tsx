@@ -75,7 +75,11 @@ function InflowChart({ points }: { points: { day: number; sum: number }[] }) {
 }
 
 export default function Home() {
-  const { deals, clients, paidPayments } = useData();
+  const { deals, clients, paidPayments, user } = useData();
+  const shortToday = new Date().toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+  });
   const d = computeDashboard(deals, clients, paidPayments);
 
   const kpis = [
@@ -125,7 +129,7 @@ export default function Home() {
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Добрый день, Алексей
+              Добрый день, {user.name.split(" ")[0]}
             </h2>
             <p className="mt-1 text-sm text-mute">
               Здесь собраны только действия и цифры, которые требуют решения
@@ -133,7 +137,7 @@ export default function Home() {
             </p>
           </div>
           <span className="rounded-[10px] border border-line bg-surface px-4 py-2 text-sm text-mute">
-            Сегодня · 5 августа
+            Сегодня · {shortToday}
           </span>
         </div>
 

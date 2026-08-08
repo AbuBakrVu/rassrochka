@@ -4,7 +4,15 @@ import "server-only";
 // формат ошибок. Роуты остаются тонкими — вся работа в lib/queries.ts.
 
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { TenantNotFoundError, resolveTenant, type Tenant } from "@/lib/tenant";
+import {
+  ForbiddenError,
+  SESSION_COOKIE,
+  UnauthorizedError,
+  findSessionUser,
+  type SessionUser,
+} from "@/lib/auth";
 
 export class BadRequestError extends Error {
   constructor(message: string) {
@@ -13,14 +21,31 @@ export class BadRequestError extends Error {
   }
 }
 
-type Handler<T> = (ctx: { tenant: Tenant; body: unknown }) => Promise<T>;
+type Handler<T> = (ctx: {
+  tenant: Tenant;
+  body: unknown;
+  user: SessionUser;
+}) => Promise<T>;
+
+interface Options {
+  /** Роут только для администратора компании. */
+  adminOnly?: boolean;
+}
 
 export async function handle<T>(
   request: Request,
-  fn: Handler<T>
+  fn: Handler<T>,
+  options: Options = {}
 ): Promise<NextResponse> {
   try {
     const tenant = await resolveTenant(request.headers.get("host"));
+
+    // Единственная точка проверки доступа: через handle() проходят все
+    // роуты, кроме публичных входа и кабинета заёмщика
+    const token = (await cookies()).get(SESSION_COOKIE)?.value;
+    const user = await findSessionUser(tenant.dbName, token);
+    if (!user) throw new UnauthorizedError();
+    if (options.adminOnly && user.role !== "admin") throw new ForbiddenError();
 
     // Тело читаем как текст: у части запросов его нет вовсе (например,
     // «принять платёж» — всё нужное уже в пути), и request.json() на
@@ -37,8 +62,14 @@ export async function handle<T>(
       }
     }
 
-    return NextResponse.json(await fn({ tenant, body }));
+    return NextResponse.json(await fn({ tenant, body, user }));
   } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
+    if (err instanceof ForbiddenError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
     if (err instanceof TenantNotFoundError) {
       return NextResponse.json({ error: err.message }, { status: 404 });
     }

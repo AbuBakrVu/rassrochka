@@ -10,7 +10,7 @@ export async function POST(request: Request) {
       markupPct: num(body, "markupPct", { min: 0, max: 1000 }),
       openedAt: isoDate(body, "openedAt"),
       clientId: str(body, "clientId", { max: 20 }),
-      managerInitials: str(body, "manager", { max: 8 }),
+      managerId: num(body, "managerId", { min: 1, integer: true }),
     })
   );
 }

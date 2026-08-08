@@ -6,12 +6,11 @@ import {
   paidCount,
   buildRoute,
   fmt,
-  seedEmployees,
   type Deal,
   type Client,
-  type Employee,
   type RouteItem,
 } from "./data";
+import type { Employee } from "./store";
 import { buildSchedule, type Installment } from "./schedule";
 import { todayIso } from "./status";
 
@@ -322,13 +321,16 @@ export interface EmployeeStats {
 }
 
 export function computeEmployees(
+  employees: Employee[],
   deals: Deal[],
   paidPayments: Record<string, number>
 ): EmployeeStats[] {
   const route = buildRoute(deals);
 
-  return seedEmployees.map((employee) => {
-    const list = deals.filter((d) => d.manager === employee.id);
+  // Связываем по managerId, а не по инициалам: у двух сотрудников они
+  // легко совпадут («Алексей Соколов» и «Анна Смирнова» оба дают «АС»)
+  return employees.map((employee) => {
+    const list = deals.filter((d) => d.managerId === employee.id);
     const active = computeActive(list, paidPayments);
 
     return {
@@ -341,10 +343,9 @@ export function computeEmployees(
       rejected: list.filter((d) => d.stage === "rejected").length,
       portfolio: active.reduce((s, c) => s + c.remaining, 0),
       collected: active.reduce((s, c) => s + c.paidSum, 0),
-      topItems: route.filter((r) => {
-        const d = deals.find((x) => x.id === r.dealId);
-        return d?.manager === employee.id;
-      }).slice(0, 3),
+      topItems: route
+        .filter((r) => deals.find((x) => x.id === r.dealId)?.managerId === employee.id)
+        .slice(0, 3),
     };
   });
 }

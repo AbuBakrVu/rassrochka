@@ -29,7 +29,8 @@ export interface Deal {
   nextStep: string;
   deadline?: string;
   urgent?: boolean;
-  manager: string;
+  manager: string; // инициалы для показа на карточках, напр. "АС"
+  managerId?: number | null; // связь с users.id: инициалы не уникальны
   markupPct: number; // реальная наценка сделки в %, введённая при создании
 }
 

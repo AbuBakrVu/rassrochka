@@ -18,6 +18,12 @@ pg.types.setTypeParser(1700, (v) => Number.parseFloat(v));
 // календарная дата без времени — оставляем строкой, как в схеме.
 pg.types.setTypeParser(1082, (v) => v);
 
+// bigint (bigserial) приезжает строкой, потому что не всякий int8 влезает в
+// double. Из-за этого id пользователя был "1" вместо 1, и сравнения вида
+// Number(id) === user.id молча возвращали false. Наши id — счётчики строк,
+// до 2^53 им бесконечно далеко, поэтому разбираем их числом.
+pg.types.setTypeParser(20, (v) => Number.parseInt(v, 10));
+
 const PG_BASE_URL = (
   process.env.PG_BASE_URL ?? "postgres://localhost:5432"
 ).replace(/\/+$/, "");

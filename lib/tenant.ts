@@ -60,15 +60,6 @@ function slugFromHost(_host: string | null): string | null {
 }
 
 export async function resolveTenant(host: string | null): Promise<Tenant> {
-  // ВРЕМЕННЫЙ ПРЕДОХРАНИТЕЛЬ (снять на этапе 4, когда появится авторизация).
-  // Сейчас API отдаёт данные любому, кто знает адрес. Пока этого не
-  // исправили, приложение не должно случайно оказаться в production.
-  if (process.env.NODE_ENV === "production" && !process.env.FINORA_ALLOW_NO_AUTH) {
-    throw new Error(
-      "API пока без авторизации — нельзя запускать в production. См. MIGRATION.md, этап 4."
-    );
-  }
-
   const slug = slugFromHost(host);
   if (!slug) {
     throw new TenantNotFoundError(

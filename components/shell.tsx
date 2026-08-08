@@ -40,12 +40,16 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
-  // Клиентский кабинет /pay/<токен> живёт без CRM-оболочки и БЕЗ общего
-  // стора: он грузит только свою сделку через /api/portal. Провайдер стоит
-  // ниже этой проверки намеренно — иначе заёмщик тянул бы в браузер все
-  // сделки и всех клиентов компании.
-  // Слэш обязателен: без него сюда попадал и раздел /payments.
-  if (pathname.startsWith("/pay/")) return <>{children}</>;
+  // Страницы без CRM-оболочки и БЕЗ общего стора:
+  //   /pay/<токен> — кабинет заёмщика, грузит только свою сделку через
+  //     /api/portal. Провайдер ниже этой проверки намеренно, иначе заёмщик
+  //     тянул бы в браузер все сделки и всех клиентов компании.
+  //   /login — на нём сессии ещё нет, и DataProvider ушёл бы в петлю:
+  //     bootstrap → 401 → редирект на /login → снова bootstrap.
+  // Слэш в "/pay/" обязателен: без него сюда попадал и раздел /payments.
+  if (pathname.startsWith("/pay/") || pathname === "/login") {
+    return <>{children}</>;
+  }
 
   const menu = (
     <nav className="flex flex-col gap-0.5 px-3" aria-label="Основные разделы">

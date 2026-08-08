@@ -20,6 +20,25 @@ import {
 import type { Deal, Client } from "./data";
 import type { DealEvent } from "./events";
 
+export interface CurrentUser {
+  id: number;
+  name: string;
+  initials: string;
+  email: string;
+  role: string;
+}
+
+export interface Employee {
+  id: number;
+  name: string;
+  initials: string;
+  email: string;
+  phone: string;
+  role: "admin" | "manager";
+  since: string;
+  active: boolean;
+}
+
 // Стартовый остаток кассы раньше был константой CASH_OPENING_BALANCE,
 // одинаковой для всех. Теперь это настройка компании: приезжает в bootstrap
 // как cashOpeningBalance и у каждой компании своя.
@@ -37,6 +56,8 @@ export interface CashTx {
 }
 
 interface Snapshot {
+  user: CurrentUser;
+  employees: Employee[];
   deals: Deal[];
   clients: Client[];
   paidPayments: Record<string, number>;
@@ -46,6 +67,8 @@ interface Snapshot {
 }
 
 const EMPTY: Snapshot = {
+  user: { id: 0, name: "", initials: "", email: "", role: "manager" },
+  employees: [],
   deals: [],
   clients: [],
   paidPayments: {},
@@ -61,7 +84,7 @@ export interface NewDealInput {
   openedAt: string;
   clientId: string;
   clientName: string;
-  manager: string;
+  managerId: number;
   markupPct: number;
 }
 
@@ -77,8 +100,18 @@ export interface CashAdjustmentInput {
   date: string;
 }
 
+export interface NewEmployeeInput {
+  name: string;
+  email: string;
+  phone: string;
+  role: "admin" | "manager";
+}
+
 interface DataContextValue extends Snapshot {
   addDeal: (input: NewDealInput) => Promise<Deal>;
+  addEmployee: (input: NewEmployeeInput) => Promise<{ password: string }>;
+  setEmployeeActive: (id: number, active: boolean) => Promise<void>;
+  logout: () => Promise<void>;
   addClient: (input: NewClientInput) => Promise<Client>;
   acceptPayment: (dealId: string) => Promise<void>;
   addCashAdjustment: (input: CashAdjustmentInput) => Promise<void>;
@@ -90,12 +123,19 @@ const DataContext = createContext<DataContextValue | null>(null);
 
 // ── Обращение к API ────────────────────────────────────────────────────
 
-async function api<T>(path: string, body?: unknown): Promise<T> {
+async function api<T>(path: string, body?: unknown, method?: string): Promise<T> {
   const res = await fetch(path, {
-    method: body === undefined ? "GET" : "POST",
+    method: method ?? (body === undefined ? "GET" : "POST"),
     headers: body === undefined ? undefined : { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+
+  // Сессия протухла посреди работы — отправляем на вход, а не показываем
+  // невнятную ошибку поверх пустых страниц
+  if (res.status === 401 && !path.startsWith("/api/auth/")) {
+    window.location.href = `/login?next=${encodeURIComponent(location.pathname)}`;
+    throw new Error("Требуется вход");
+  }
 
   if (!res.ok) {
     // Роуты отдают { error }, но при падении прокси придёт что угодно
@@ -121,6 +161,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const load = useCallback(async () => {
     const data = await api<BootstrapResponse>("/api/bootstrap");
     setState({
+      user: data.user,
+      employees: data.employees,
       deals: data.deals,
       clients: data.clients,
       paidPayments: data.paidPayments,
@@ -164,7 +206,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         markupPct: input.markupPct,
         openedAt: input.openedAt,
         clientId: input.clientId,
-        manager: input.manager,
+        managerId: input.managerId,
       });
       await load();
       return deal;
@@ -197,6 +239,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const addEmployee = useCallback(
+    async (input: NewEmployeeInput) => {
+      const res = await api<{ id: number; password: string }>("/api/employees", input);
+      await load();
+      return { password: res.password };
+    },
+    [load]
+  );
+
+  const setEmployeeActive = useCallback(
+    async (id: number, active: boolean) => {
+      await api(`/api/employees/${id}`, { active }, "PATCH");
+      await load();
+    },
+    [load]
+  );
+
+  const logout = useCallback(async () => {
+    await api("/api/auth/logout", {});
+    window.location.href = "/login";
+  }, []);
+
   const value = useMemo<DataContextValue>(
     () => ({
       ...state,
@@ -204,9 +268,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addClient,
       acceptPayment,
       addCashAdjustment,
+      addEmployee,
+      setEmployeeActive,
+      logout,
       refresh,
     }),
-    [state, addDeal, addClient, acceptPayment, addCashAdjustment, refresh]
+    [state, addDeal, addClient, acceptPayment, addCashAdjustment,
+     addEmployee, setEmployeeActive, logout, refresh]
   );
 
   // Пока состояние не загружено, страницы не рендерим: иначе каждая из них

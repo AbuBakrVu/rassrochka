@@ -116,8 +116,9 @@ async function main() {
 
       const passwordHash = await hash(password);
       await client.query(
-        `insert into users (email, password_hash, name, initials, role)
-         values ($1, $2, $3, $4, 'admin')`,
+        `insert into users (email, password_hash, name, initials, role,
+                            must_change_password)
+         values ($1, $2, $3, $4, 'admin', true)`,
         [adminEmail, passwordHash, adminName, initialsFrom(adminName)]
       );
 

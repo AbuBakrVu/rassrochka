@@ -19,6 +19,10 @@ const kindIcon = {
 
 export default function PaymentsPage() {
   const { deals, paidPayments } = useData();
+  const shortToday = new Date().toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+  });
   const { cells: monthCells, todaySum, agenda } = computeCalendar(
     deals,
     paidPayments
@@ -110,7 +114,7 @@ export default function PaymentsPage() {
 
           {/* Сегодня */}
           <Card className="h-fit p-5 sm:p-6">
-            <h3 className="font-semibold">Сегодня · 5 августа</h3>
+            <h3 className="font-semibold">Сегодня · {shortToday}</h3>
             <p className="mt-1 text-sm text-mute">Сумма к получению</p>
             <p className="mt-1 text-[26px] font-semibold tracking-tight">
               {money(todaySum)}
