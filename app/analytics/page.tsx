@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Wallet,
   CheckCircle2,
@@ -7,11 +8,13 @@ import {
   Receipt,
   TrendingUp,
   Users,
+  AlertTriangle,
 } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
 import { stages, paidCount, type Deal } from "@/lib/data";
 import { buildSchedule, money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
+import { computeAging } from "@/lib/derive";
 
 const decidedStages = ["active", "closed", "rejected"] as const;
 
@@ -97,6 +100,9 @@ export default function AnalyticsPage() {
   }, {});
   const reasonList = Object.entries(reasons).sort((a, b) => b[1] - a[1]);
   const maxReason = Math.max(...reasonList.map(([, n]) => n), 1);
+
+  const aging = computeAging(deals, paidPayments);
+  const agingTotal = aging.reduce((s, b) => s + b.sum, 0);
 
   const managers = [...new Set(deals.map((d) => d.manager))].sort();
   const managerStats = managers.map((m) => {
@@ -217,6 +223,66 @@ export default function AnalyticsPage() {
             )}
           </Card>
         </div>
+
+        <Card className="mt-4 p-5 sm:p-6">
+          <div className="mb-1 flex items-center gap-2">
+            <AlertTriangle size={16} className="text-danger" aria-hidden />
+            <h2 className="font-semibold">Лестница просрочки</h2>
+          </div>
+          <p className="mb-4 text-sm text-mute">
+            {agingTotal > 0
+              ? `Просрочено ${money(agingTotal)} по активным сделкам`
+              : "Просроченных платежей нет"}
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {aging.map((b) => {
+              const tone =
+                b.key === "1-7"
+                  ? { bg: "bg-warn-soft", text: "text-warn" }
+                  : { bg: "bg-danger-soft", text: "text-danger" };
+              return (
+                <div
+                  key={b.key}
+                  className="rounded-[12px] border border-line px-4 py-3.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${tone.bg} ${tone.text}`}
+                    >
+                      {b.label}
+                    </span>
+                    <span className="text-sm font-semibold">
+                      {b.items.length}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-lg font-semibold tracking-tight">
+                    {money(b.sum)}
+                  </p>
+                  {b.items.length === 0 ? (
+                    <p className="mt-2 text-sm text-mute">Нет сделок</p>
+                  ) : (
+                    <div className="mt-2 flex flex-col gap-1.5">
+                      {b.items.map((i) => (
+                        <Link
+                          key={i.dealId}
+                          href={`/deals/${i.dealId}`}
+                          className="block rounded-[8px] px-1.5 py-1 text-sm transition-colors hover:bg-canvas"
+                        >
+                          <span className="block truncate text-ink">
+                            {i.clientName}
+                          </span>
+                          <span className="text-mute">
+                            {i.daysLate} дн · {money(i.amount)}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
 
         <Card className="mt-4 overflow-hidden">
           <div className="flex items-center gap-2 px-5 pt-5 sm:px-6">

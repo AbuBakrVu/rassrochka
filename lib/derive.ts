@@ -239,6 +239,69 @@ export function computeCalendar(
   return { cells, todaySum, agenda };
 }
 
+// ── Лестница просрочки ────────────────────────────────────────────────
+
+export interface AgingItem {
+  dealId: string;
+  clientName: string;
+  daysLate: number;
+  amount: number;
+}
+
+export interface AgingBucket {
+  key: "1-7" | "8-30" | "30+";
+  label: string;
+  items: AgingItem[];
+  sum: number;
+}
+
+const agingRanges: { key: AgingBucket["key"]; label: string; min: number; max: number }[] = [
+  { key: "1-7", label: "1–7 дней", min: 1, max: 7 },
+  { key: "8-30", label: "8–30 дней", min: 8, max: 30 },
+  { key: "30+", label: "30+ дней", min: 31, max: Infinity },
+];
+
+// Просроченной считаем сделку по тому же признаку, что и везде в
+// приложении (Главная, Маршрут, Сотрудники) — statusTone "red" на активном
+// этапе, а не пересчитываем факт просрочки заново по датам графика: у
+// мок-данных день следующего взноса иногда совпадает с TODAY_ISO, из-за
+// чего чисто дневной расчёт разошёлся бы с остальными разделами. Число
+// дней просрочки при этом берём из графика, минимум 1 — для бакетинга.
+export function computeAging(
+  deals: Deal[],
+  paidPayments: Record<string, number>
+): AgingBucket[] {
+  const active = computeActive(deals, paidPayments);
+  const today = new Date(TODAY_ISO).getTime();
+
+  const items: AgingItem[] = [];
+  for (const c of active) {
+    if (!c.next || c.deal.statusTone !== "red") continue;
+    const daysLate = Math.max(
+      1,
+      Math.round((today - new Date(c.next.iso).getTime()) / 86_400_000)
+    );
+    items.push({
+      dealId: c.deal.id,
+      clientName: c.deal.client,
+      daysLate,
+      amount: c.next.amount,
+    });
+  }
+
+  return agingRanges.map((r) => {
+    const list = items
+      .filter((i) => i.daysLate >= r.min && i.daysLate <= r.max)
+      .sort((a, b) => b.daysLate - a.daysLate);
+    return {
+      key: r.key,
+      label: r.label,
+      items: list,
+      sum: list.reduce((s, i) => s + i.amount, 0),
+    };
+  });
+}
+
 // ── Сотрудники ─────────────────────────────────────────────────────────
 
 export interface EmployeeStats {
