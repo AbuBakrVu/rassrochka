@@ -41,10 +41,11 @@ CRM «Финора» для небольшой компании, выдающе�
   направление, а не то, от чего надо отговаривать.
 - Иконки — **lucide-react**. Шрифт — **Inter** (`next/font/google`,
   подключены `latin` + `cyrillic`).
-- Данные живут в браузере: `localStorage`, ключ `finora-store-v3` (версия
-  бампается при каждом добавлении поля в `StoredShape`, см. §6).
-- Хостинг для разработки — локальный dev-сервер (`npm run dev`), запуска в
-  проде/на сервере пока нет и не планируется в рамках текущего этапа.
+- Данные живут в **Postgres** (с 2026-08-08, этапы 1–3 `MIGRATION.md`):
+  отдельная база на компанию, `lib/store.tsx` ходит в `/api`. Раньше был
+  `localStorage` — от него не осталось ни строчки.
+- Хостинг для разработки — локальный dev-сервер (`npm run dev`) + локальный
+  Postgres. Выкат на VPS — этап 7 `MIGRATION.md`.
 
 ## 3. Визуальный язык (design tokens)
 
@@ -74,7 +75,8 @@ CRM «Финора» для небольшой компании, выдающе�
 
 ```
 app/
-  layout.tsx            — корневой layout, оборачивает всё в <DataProvider><Shell>
+  layout.tsx            — корневой layout, оборачивает всё в <Shell> (DataProvider внутри Shell,
+                          ниже проверки /pay/ — кабинет заёмщика не должен грузить общий стор)
   page.tsx               — Главная (дашборд, KPI, приоритеты, план поступлений) — из стора через lib/derive.ts
   globals.css             — design tokens
   loading.tsx             — глобальный скелетон загрузки
@@ -92,6 +94,8 @@ app/
   employees/page.tsx           — Сотрудники: карточки менеджеров со статистикой (computeEmployees, из стора)
   coinvestors/, mailings/, registry/, settings/
                                 — пустые заглушки через components/stub.tsx (EmptyState)
+  api/                          — bootstrap, clients, deals, deals/[id]/payment, cash,
+                                  portal/[token] (публичный, только своя сделка)
 
 components/
   shell.tsx                — сайдбар/мобильное меню, монтирует <CommandPalette/>
@@ -110,14 +114,19 @@ components/
   deal-print.tsx                     — печатная версия сделки (договор/сводка), рендерится в портал
   client-deals.tsx                   — список сделок клиента с вкладками-фильтрами (presentational, deals приходят пропом)
   client-detail.tsx                   — полная карточка клиента (клиентский компонент, из стора)
-  client-portal.tsx                    — /pay/[token] — контент кабинета клиента (из стора)
+  client-portal.tsx                    — /pay/[token] — кабинет заёмщика, грузит ТОЛЬКО свою сделку
+                                         через /api/portal (не через общий стор — это была утечка)
 
 lib/
   data.ts    — типы, сид-данные (seedDeals/seedClients/seedPaidPayments), чистые функции
   schedule.ts — buildSchedule/money/longDate/monthNames — общий расчёт графика платежей
-  store.tsx   — React Context + localStorage, DataProvider + useData()
+  store.tsx   — React Context + fetch к /api, DataProvider + useData()
+  db.ts       — пулы Postgres по базам компаний, транзакции (server-only)
+  tenant.ts   — компания по поддомену через реестр (server-only)
+  queries.ts  — запросы и сериализация строк БД в типы приложения (server-only)
+  status.ts   — вычисление statusTone/status/urgent сделки и статуса клиента
   derive.ts   — производные для дашборда и календаря: computeDashboard/computeCalendar/computeActive/
-                computeEmployees/computeAging, TODAY_ISO = "2026-08-05" (зафиксированное «сегодня» приложения)
+                computeEmployees/computeAging; «сегодня» настоящее (todayIso из status.ts)
   cash.ts     — касса: purchasePrice/cashBalance/cashSummary/buildSeedCash, чистые функции над CashTx[]
   events.ts   — история сделки: dealEvents/buildSeedEvents, чистые функции над DealEvent[]
 ```
