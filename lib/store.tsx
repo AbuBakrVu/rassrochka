@@ -76,6 +76,7 @@ export interface NewDealInput {
   openedAt: string;
   clientId: string;
   clientName: string;
+  manager: string;
 }
 
 export interface NewClientInput {
@@ -155,7 +156,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         status: "Новая",
         statusTone: "blue",
         nextStep: "Ответить сегодня",
-        manager: "АС",
+        manager: input.manager,
       };
       // Закупка товара сразу уменьшает остаток кассы
       const tx: CashTx = {

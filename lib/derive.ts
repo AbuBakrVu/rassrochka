@@ -6,8 +6,10 @@ import {
   paidCount,
   buildRoute,
   fmt,
+  seedEmployees,
   type Deal,
   type Client,
+  type Employee,
   type RouteItem,
 } from "./data";
 import { buildSchedule, type Installment } from "./schedule";
@@ -235,4 +237,47 @@ export function computeCalendar(
     .reduce((s, c) => s + (c.next?.amount ?? 0), 0);
 
   return { cells, todaySum, agenda };
+}
+
+// ── Сотрудники ─────────────────────────────────────────────────────────
+
+export interface EmployeeStats {
+  employee: Employee;
+  total: number;
+  active: number;
+  overdue: number;
+  newLeads: number;
+  closed: number;
+  rejected: number;
+  portfolio: number; // остаток по активным сделкам этого сотрудника
+  collected: number; // выплачено клиентами по его активным сделкам
+  topItems: RouteItem[]; // 3 самых приоритетных дела из его книги
+}
+
+export function computeEmployees(
+  deals: Deal[],
+  paidPayments: Record<string, number>
+): EmployeeStats[] {
+  const route = buildRoute(deals);
+
+  return seedEmployees.map((employee) => {
+    const list = deals.filter((d) => d.manager === employee.id);
+    const active = computeActive(list, paidPayments);
+
+    return {
+      employee,
+      total: list.length,
+      active: active.length,
+      overdue: active.filter((c) => c.deal.statusTone === "red").length,
+      newLeads: list.filter((d) => d.stage === "new").length,
+      closed: list.filter((d) => d.stage === "closed").length,
+      rejected: list.filter((d) => d.stage === "rejected").length,
+      portfolio: active.reduce((s, c) => s + c.remaining, 0),
+      collected: active.reduce((s, c) => s + c.paidSum, 0),
+      topItems: route.filter((r) => {
+        const d = deals.find((x) => x.id === r.dealId);
+        return d?.manager === employee.id;
+      }).slice(0, 3),
+    };
+  });
 }

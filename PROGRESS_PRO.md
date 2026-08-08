@@ -79,7 +79,8 @@ app/
     [id]/page.tsx             — тонкая серверная обёртка → components/client-detail.tsx
   pay/[token]/page.tsx        — клиентский кабинет, тонкая обёртка → components/client-portal.tsx
   cash/page.tsx                — Кассы: лента операций, KPI, ручные корректировки (из стора, lib/cash.ts)
-  coinvestors/, employees/, mailings/, registry/, settings/
+  employees/page.tsx           — Сотрудники: карточки менеджеров со статистикой (computeEmployees, из стора)
+  coinvestors/, mailings/, registry/, settings/
                                 — пустые заглушки через components/stub.tsx (EmptyState)
 
 components/
@@ -89,7 +90,8 @@ components/
   copy-link.tsx              — кнопка «Скопировать ссылку» (клиентский кабинет)
   command-palette.tsx         — ⌘K поиск по клиентам/сделкам, слушает keydown + custom event
   notifications-menu.tsx       — панель уведомлений (колокольчик в шапке), buildNotifications(deals) из стора
-  new-deal-modal.tsx           — мастер создания сделки (4 шага), пишет в стор через addDeal
+  new-deal-modal.tsx           — мастер создания сделки (4 шага), пишет в стор через addDeal; шаг «Условия»
+                                  включает обязательный выбор «Ответственный» из seedEmployees
   new-client-modal.tsx          — форма нового клиента, пишет в стор через addClient
   accept-payment-modal.tsx       — приём платежа, пишет в стор через acceptPayment
   restructure-modal.tsx           — «Изменить график» — ТОЛЬКО визуальная имитация, в стор не пишет
@@ -103,8 +105,8 @@ lib/
   data.ts    — типы, сид-данные (seedDeals/seedClients/seedPaidPayments), чистые функции
   schedule.ts — buildSchedule/money/longDate/monthNames — общий расчёт графика платежей
   store.tsx   — React Context + localStorage, DataProvider + useData()
-  derive.ts   — производные для дашборда и календаря: computeDashboard/computeCalendar/computeActive,
-                TODAY_ISO = "2026-08-05" (зафиксированное «сегодня» приложения)
+  derive.ts   — производные для дашборда и календаря: computeDashboard/computeCalendar/computeActive/
+                computeEmployees, TODAY_ISO = "2026-08-05" (зафиксированное «сегодня» приложения)
   cash.ts     — касса: purchasePrice/cashBalance/cashSummary/buildSeedCash, чистые функции над CashTx[]
 ```
 
@@ -126,7 +128,7 @@ interface Deal {
   nextStep: string;         // текст следующего действия; у rejected — "Отказ: <причина>"
   deadline?: string;
   urgent?: boolean;
-  manager: string;           // инициалы, напр. "АС"
+  manager: string;           // инициалы менеджера, совпадают с Employee.id, напр. "АС"
 }
 ```
 
@@ -174,6 +176,23 @@ interface CashTx {
 всегда совпадают. `buildSeedCash()` восстанавливает правдоподобную
 историю операций по затравочным сделкам при первом запуске (иначе касса
 на чистом сторе выглядела бы пустой, хотя портфель уже не с нуля).
+
+### `Employee` (lib/data.ts) — сотрудники
+```ts
+interface Employee {
+  id: string;      // "АС" — те же инициалы, что уже жили в Deal.manager
+  name, role, phone, email, since: string;
+}
+```
+`seedEmployees` — статический список из 3 менеджеров, `id` выбраны так,
+чтобы совпадать с уже существовавшими значениями `Deal.manager` в
+затравочных сделках — не понадобилась миграция/маппинг id при добавлении
+модели. `computeEmployees(deals, paidPayments)` (`lib/derive.ts`) считает
+по каждому сотруднику: активные/просрочки/новые/закрытые/отказы, портфель
+и собранное (через `computeActive`), топ-3 приоритетных дела (через
+`buildRoute`, отфильтрованные по `deal.manager === employee.id`). Список
+сотрудников не редактируется через UI — только выбор ответственного при
+создании сделки (`new-deal-modal.tsx`, шаг «Условия»).
 
 ### `dealState(deal)` vs `deal.stage`
 `stage` — этап канбана (6 значений). `dealState()` — производное для
@@ -317,6 +336,11 @@ Server Components с `generateStaticParams()` и читали статическ
 18. Кассы (`/cash`) — реальная лента операций (`lib/cash.ts`): закупка при
     создании сделки, приход при платеже, ручные корректировки. Баланс в
     мастере сделки перестал быть захардкоженным.
+19. Сотрудники (`/employees`) — карточки менеджеров с реальной статистикой
+    (`computeEmployees`, `lib/derive.ts`); мастер создания сделки получил
+    обязательный выбор «Ответственный» (`Employee`/`seedEmployees` в
+    `lib/data.ts`), значение пишется в `Deal.manager` вместо захардкоженного
+    `"АС"`.
 
 ## 9. Известные ограничения и пробелы
 
@@ -324,7 +348,8 @@ Server Components с `generateStaticParams()` и читали статическ
   устройствами и пользователями, живут в localStorage одного браузера.
 - **Реструктуризация не персистится** (см. §6).
 - **Пустые заглушки без функциональности**: Рассылки, Соинвесторы,
-  Реестр клиентов, Сотрудники, Настройки (`components/stub.tsx`).
+  Реестр клиентов, Настройки (`components/stub.tsx`). Кассы и Сотрудники
+  теперь работают (см. §8, п.18-19).
 - **Нет онлайн-оплаты** в клиентском кабинете — только «Позвонить»/
   «Написать».
 - **Нет авторизации** — единственный подразумеваемый пользователь

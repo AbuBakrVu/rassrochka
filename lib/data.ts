@@ -350,3 +350,44 @@ export const seedClients: Client[] = [
 
 export const clientById = (clients: Client[], id: string) =>
   clients.find((c) => c.id === id);
+
+// Сотрудники: id — те же инициалы, что уже жили в Deal.manager,
+// чтобы не заводить отдельную схему связи и не трогать сид-сделки.
+export interface Employee {
+  id: string; // "АС"
+  name: string;
+  role: string;
+  phone: string;
+  email: string;
+  since: string;
+}
+
+export const seedEmployees: Employee[] = [
+  {
+    id: "АС",
+    name: "Алексей Соколов",
+    role: "Старший менеджер",
+    phone: "+7 921 500-10-20",
+    email: "a.sokolov@finora.ru",
+    since: "января 2025",
+  },
+  {
+    id: "МК",
+    name: "Мария Кузнецова",
+    role: "Менеджер по продажам",
+    phone: "+7 911 500-20-30",
+    email: "m.kuznetsova@finora.ru",
+    since: "июня 2025",
+  },
+  {
+    id: "ДС",
+    name: "Дмитрий Соловьёв",
+    role: "Менеджер по продажам",
+    phone: "+7 981 500-30-40",
+    email: "d.solovyov@finora.ru",
+    since: "марта 2026",
+  },
+];
+
+export const employeeById = (employees: Employee[], id: string) =>
+  employees.find((e) => e.id === id);

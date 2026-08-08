@@ -29,7 +29,7 @@ import {
   CalendarDays,
   type LucideIcon,
 } from "lucide-react";
-import type { Client } from "@/lib/data";
+import { seedEmployees, type Client } from "@/lib/data";
 import { useData, CASH_OPENING_BALANCE } from "@/lib/store";
 import { cashBalance } from "@/lib/cash";
 import NewClientModal from "@/components/new-client-modal";
@@ -153,6 +153,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
   const [months, setMonths] = useState(6);
   const [dealDate, setDealDate] = useState("2026-08-05");
   const [firstPayment, setFirstPayment] = useState("");
+  const [manager, setManager] = useState(seedEmployees[0].id);
 
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState<Client | null>(null);
@@ -228,6 +229,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
       openedAt: dealDate,
       clientId: client.id,
       clientName: client.name,
+      manager,
     });
     setCreated(true);
     setTimeout(() => {
@@ -619,6 +621,35 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                       </span>
                     </div>
                   </div>
+
+                  <div>
+                    <Label required>Ответственный</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {seedEmployees.map((e) => (
+                        <button
+                          key={e.id}
+                          onClick={() => setManager(e.id)}
+                          aria-pressed={manager === e.id}
+                          className={`flex items-center gap-2 rounded-[10px] border px-3 py-2.5 text-left text-sm transition-colors ${
+                            manager === e.id
+                              ? "border-brand bg-brand-soft font-medium text-brand-deep"
+                              : "border-line bg-canvas text-mute hover:border-brand/40 hover:text-ink"
+                          }`}
+                        >
+                          <span
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                              manager === e.id
+                                ? "bg-brand text-white"
+                                : "bg-surface text-mute"
+                            }`}
+                          >
+                            {e.id}
+                          </span>
+                          {e.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </>
             )}
@@ -824,6 +855,10 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                         Поручители: {guarantors.join(", ")}
                       </p>
                     )}
+                    <p className="mt-2 text-sm text-mute">
+                      Ответственный:{" "}
+                      {seedEmployees.find((e) => e.id === manager)?.name}
+                    </p>
                   </div>
 
                   <div className="flex gap-3 rounded-[12px] bg-brand-soft px-4 py-3.5">
