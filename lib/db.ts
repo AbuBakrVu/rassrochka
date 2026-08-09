@@ -99,3 +99,47 @@ export async function transaction<T>(
     client.release();
   }
 }
+
+// ── Создание/удаление баз компаний ──────────────────────────────────────
+// Раньше это умели только scripts/db.mjs (CLI, вне сборки приложения).
+// Панель владельца платформы (lib/provisioning.ts) создаёт компании из
+// самого приложения, поэтому те же примитивы нужны и здесь — независимая
+// реализация, т.к. scripts/*.mjs не участвуют в сборке Next и не могут
+// быть импортированы отсюда.
+
+const MAINTENANCE_DB = process.env.PG_MAINTENANCE_DB ?? "postgres";
+
+export async function databaseExists(dbName: string): Promise<boolean> {
+  const row = await queryOne<{ exists: boolean }>(
+    MAINTENANCE_DB,
+    "select exists(select 1 from pg_database where datname = $1) as exists",
+    [dbName]
+  );
+  return row?.exists ?? false;
+}
+
+// CREATE/DROP DATABASE не работают внутри транзакции и не принимают
+// параметры — имя подставляем через quote_ident на стороне сервера, чтобы
+// не собирать SQL строкой из пользовательского ввода
+export async function createDatabase(dbName: string): Promise<void> {
+  const { rows } = await getPool(MAINTENANCE_DB).query<{ ident: string }>(
+    "select quote_ident($1) as ident",
+    [dbName]
+  );
+  await getPool(MAINTENANCE_DB).query(`create database ${rows[0].ident}`);
+}
+
+export async function dropDatabase(dbName: string): Promise<void> {
+  const { rows } = await getPool(MAINTENANCE_DB).query<{ ident: string }>(
+    "select quote_ident($1) as ident",
+    [dbName]
+  );
+  await getPool(MAINTENANCE_DB).query(`drop database if exists ${rows[0].ident}`);
+  // Закрываем пул уже удалённой базы — иначе он висит с мёртвым соединением
+  // до первого использования (getPool ленивый, но раз создан — не закрыт)
+  const pool = pools.get(dbName);
+  if (pool) {
+    pools.delete(dbName);
+    await pool.end().catch(() => {});
+  }
+}
