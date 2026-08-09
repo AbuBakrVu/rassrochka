@@ -7,13 +7,50 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth-shared";
+import { parseHost } from "@/lib/tenant-host";
 
 // Открыты без входа: страница входа, кабинет заёмщика по ссылке и роуты,
 // которые сами разбираются с доступом
-const PUBLIC = [/^\/login$/, /^\/pay\//, /^\/api\/auth\//, /^\/api\/portal\//];
+const PUBLIC = [
+  /^\/login$/,
+  /^\/company$/,
+  /^\/pay\//,
+  /^\/api\/auth\//,
+  /^\/api\/portal\//,
+  /^\/api\/internal\//,
+];
 
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+  const host = parseHost(request.headers.get("host"));
+
+  // На корневом домене компания не выбрана: показываем страницу, где её
+  // адрес можно ввести. Существует ли компания — проверяет уже сервер,
+  // middleware работает на edge и в Postgres сходить не может.
+  if (host.kind !== "tenant") {
+    // В разработке на голом localhost:3000 поддомена нет — там компанию
+    // подставляет DEV_TENANT_SLUG (см. lib/tenant.ts), не мешаем
+    const devFallback =
+      process.env.NODE_ENV !== "production" && !!process.env.DEV_TENANT_SLUG;
+
+    if (!devFallback) {
+      if (pathname === "/company") return NextResponse.next();
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Компания не выбрана" }, { status: 404 });
+      }
+      const url = request.nextUrl.clone();
+      url.pathname = "/company";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // На поддомене компании страница выбора не нужна
+  if (host.kind === "tenant" && pathname === "/company") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
 
   if (PUBLIC.some((re) => re.test(pathname))) return NextResponse.next();
 

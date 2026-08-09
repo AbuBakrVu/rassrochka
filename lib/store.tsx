@@ -143,7 +143,10 @@ async function api<T>(path: string, body?: unknown, method?: string): Promise<T>
       .json()
       .then((d) => (d as { error?: string }).error)
       .catch(() => null);
-    throw new Error(message ?? `Запрос ${path} завершился ошибкой ${res.status}`);
+    const err = new Error(message ?? `Запрос ${path} завершился ошибкой ${res.status}`);
+    // 404 на bootstrap означает не «нет данных», а «нет такой компании»
+    if (res.status === 404) err.name = "TenantMissing";
+    throw err;
   }
 
   return res.json() as Promise<T>;
@@ -155,7 +158,9 @@ interface BootstrapResponse extends Omit<Snapshot, "cashOpeningBalance"> {
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<Snapshot>(EMPTY);
-  const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [status, setStatus] = useState<
+    "loading" | "ready" | "failed" | "no-tenant"
+  >("loading");
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -180,7 +185,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       .catch((err: Error) => {
         if (cancelled) return;
         setError(err.message);
-        setStatus("failed");
+        setStatus(err.name === "TenantMissing" ? "no-tenant" : "failed");
       });
 
     return () => {
@@ -281,6 +286,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // мигнула бы пустым состоянием («сделок нет», «клиентов нет»), а раньше
   // данные были доступны мгновенно и ни одна страница загрузку не умеет.
   if (status === "loading") return <BootstrapSkeleton />;
+  if (status === "no-tenant") return <UnknownCompany message={error} />;
   if (status === "failed") return <BootstrapError message={error} />;
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
@@ -298,6 +304,26 @@ function BootstrapSkeleton() {
           ))}
         </div>
         <div className="h-64 animate-pulse rounded-card bg-surface" />
+      </div>
+    </div>
+  );
+}
+
+function UnknownCompany({ message }: { message: string | null }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
+      <div className="max-w-md rounded-card border border-line bg-surface p-8 text-center shadow-card">
+        <p className="font-medium">Компания не найдена</p>
+        <p className="mt-1 text-sm text-mute">
+          {message ?? "По этому адресу компании нет."} Проверьте адрес или
+          обратитесь к администратору.
+        </p>
+        <a
+          href="/company"
+          className="mt-4 inline-block rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-deep"
+        >
+          Ввести адрес компании
+        </a>
       </div>
     </div>
   );

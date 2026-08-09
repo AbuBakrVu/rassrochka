@@ -3,7 +3,7 @@
 
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { resolveTenant } from "@/lib/tenant";
+import { TenantNotFoundError, resolveTenant } from "@/lib/tenant";
 import { SESSION_COOKIE, createSession, verifyCredentials } from "@/lib/auth";
 
 export async function POST(request: Request) {
@@ -41,7 +41,14 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ user });
-  } catch {
+  } catch (err) {
+    if (err instanceof TenantNotFoundError) {
+      return NextResponse.json(
+        { error: "Компания по этому адресу не найдена" },
+        { status: 404 }
+      );
+    }
+    console.error("[login]", err instanceof Error ? err.message : err);
     return NextResponse.json({ error: "Не удалось войти" }, { status: 500 });
   }
 }

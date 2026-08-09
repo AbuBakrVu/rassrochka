@@ -7,6 +7,7 @@ import "server-only";
 // этап 5 изменит ровно одну функцию: slugFromHost().
 
 import { CONTROL_DB, queryOne } from "./db";
+import { parseHost } from "./tenant-host";
 
 export interface Tenant {
   slug: string;
@@ -53,18 +54,19 @@ export async function findTenant(slug: string): Promise<Tenant> {
   return tenant;
 }
 
-// ЭТАП 5 заменит тело этой функции на разбор Host:
-//   acme.finora.ru → "acme", finora.ru → null (лендинг)
-function slugFromHost(_host: string | null): string | null {
-  return process.env.DEV_TENANT_SLUG ?? null;
-}
-
 export async function resolveTenant(host: string | null): Promise<Tenant> {
-  const slug = slugFromHost(host);
-  if (!slug) {
-    throw new TenantNotFoundError(
-      "не определена (задайте DEV_TENANT_SLUG в .env.local)"
-    );
+  const parsed = parseHost(host);
+
+  if (parsed.kind === "tenant") return findTenant(parsed.slug);
+
+  // Запасной путь для разработки: на голом localhost:3000 поддомена нет, а
+  // заводить записи в /etc/hosts ради каждой проверки неудобно. В проде
+  // подмена компании переменной окружения недопустима — только по домену.
+  if (process.env.NODE_ENV !== "production" && process.env.DEV_TENANT_SLUG) {
+    return findTenant(process.env.DEV_TENANT_SLUG);
   }
-  return findTenant(slug);
+
+  throw new TenantNotFoundError(
+    parsed.kind === "root" ? "не выбрана" : "не определена по адресу"
+  );
 }
