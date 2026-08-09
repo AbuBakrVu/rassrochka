@@ -4,7 +4,7 @@
 
 create table companies (
   id         bigserial primary key,
-  -- slug становится поддоменом (acme → acme.finora.ru), поэтому формат
+  -- slug становится поддоменом (acme → acme.<базовый домен>), поэтому формат
   -- ограничен требованиями DNS: строчные буквы, цифры, дефис не по краям
   slug       text not null unique
              check (slug ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'

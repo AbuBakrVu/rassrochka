@@ -96,9 +96,10 @@ CRM для учёта рассрочек. Next.js 15 + TypeScript + Tailwind 4, 
 ## Ключевые решения
 
 - **Переезд на сервер идёт, БД уже подключена.** С 2026-08-08 источник
-  правды — Postgres, а не localStorage. Готовы схема, API, фронтенд,
-  авторизация и многотенантность по поддоменам (этапы 1–6 в
-  `MIGRATION.md`). Осталась только инфраструктура: Docker, Caddy, выкат. **Всё, что ниже написано про localStorage как
+  правды — Postgres, а не localStorage. Код готов полностью (этапы 1–6),
+  артефакты развёртывания тоже (`Dockerfile`, `docker-compose.yml`,
+  `Caddyfile`, `scripts/backup.sh`, пошаговая `DEPLOY.md`). Осталось
+  арендовать сервер и выбрать домен — по коду работы больше нет. **Всё, что ниже написано про localStorage как
   хранилище, устарело — читайте `MIGRATION.md`.**
 - `lib/data.ts` — только сид-данные и чистые функции (`dealsOfClient`,
   `assessRisk`, `buildRoute`, `paidCount`, `tokenForDeal`,

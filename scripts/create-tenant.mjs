@@ -4,6 +4,9 @@
 //        --admin-email director@acme.ru [--admin-name "Иван Петров"] \
 //        [--cash-opening 1240000]
 //
+// Адрес компании складывается из slug и APP_DOMAIN, поэтому домен нигде не
+// зашит в коде — его достаточно поменять в одной переменной окружения.
+//
 // Компания получает ПУСТУЮ CRM: сотрудников, клиентов и сделки заводит
 // сама. Затравочные данные остаются только на демо-стенде.
 
@@ -148,7 +151,7 @@ async function main() {
   console.log(`  ✓ администратор ${adminEmail}`);
   console.log(`  ✓ зарегистрирована в реестре\n`);
   console.log("─".repeat(52));
-  console.log(`  Адрес       ${slug}.finora.ru`);
+  console.log(`  Адрес       ${slug}.${process.env.APP_DOMAIN ?? "<APP_DOMAIN не задан>"}`);
   console.log(`  Логин       ${adminEmail}`);
   console.log(`  Пароль      ${password}`);
   console.log("─".repeat(52));

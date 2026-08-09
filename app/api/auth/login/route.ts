@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       path: "/",
       expires: expiresAt,
       // domain НЕ указываем намеренно: кука должна остаться на своём
-      // поддомене, иначе сессия acme.finora.ru утекла бы на beta.finora.ru
+      // поддомене, иначе сессия acme.<домен> утекла бы на beta.<домен>
     });
 
     return NextResponse.json({ user });

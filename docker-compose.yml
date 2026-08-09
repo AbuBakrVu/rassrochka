@@ -1,0 +1,61 @@
+# Вся установка на одном VPS: обратный прокси, приложение и Postgres.
+# Секреты — в файле .env рядом (права 600, в git не попадает).
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?нужен APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?нужен ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Сертификаты. Без тома Let's Encrypt будет перевыпускать их при
+      # каждом рестарте и упрёт в недельный лимит.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      PG_BASE_URL: postgres://finora:${PG_PASSWORD:?нужен PG_PASSWORD}@db:5432
+      CONTROL_DB: finora_control
+      APP_DOMAIN: ${APP_DOMAIN}
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  db:
+    image: postgres:16-alpine   # версия 16 — на ней проверена схема
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: finora
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    # Порт наружу НЕ пробрасываем: база доступна только внутренней сети
+    # compose. Для psql — docker compose exec db psql -U finora
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finora"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pg_data:

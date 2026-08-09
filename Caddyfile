@@ -1,0 +1,40 @@
+{
+	email {$ACME_EMAIL}
+
+	# Сертификаты выпускаются по требованию, отдельно на каждый поддомен.
+	# Так не нужен wildcard-сертификат, а значит не нужен и API-токен
+	# DNS-провайдера — с российскими регистраторами это чаще всего проблема.
+	on_demand_tls {
+		# Приложение отвечает 200 только для существующих компаний.
+		# БЕЗ этой проверки любой, направив свой домен на наш IP, заставил
+		# бы выпускать сертификаты и упёр нас в лимиты Let's Encrypt.
+		ask http://app:3000/api/internal/tls-check
+		interval 2m
+		burst 5
+	}
+}
+
+# Голый HTTP только для редиректа
+http:// {
+	redir https://{host}{uri} permanent
+}
+
+# Ловим любой хост: какие из них законны, решает ask-эндпоинт выше
+https:// {
+	tls {
+		on_demand
+	}
+
+	encode gzip zstd
+
+	reverse_proxy app:3000 {
+		header_up X-Forwarded-Proto https
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

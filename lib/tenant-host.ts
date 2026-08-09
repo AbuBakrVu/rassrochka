@@ -1,12 +1,12 @@
 // Разбор Host → slug компании. Чистая функция без зависимостей: её
 // импортируют и middleware (edge-рантайм), и серверный lib/tenant.ts.
 
-/** Базовый домен установки: finora.ru в проде, localhost при разработке. */
+/** Базовый домен установки: ваш домен в проде, localhost при разработке. */
 export const APP_DOMAIN = (process.env.APP_DOMAIN ?? "localhost").toLowerCase();
 
 export type HostKind =
   | { kind: "tenant"; slug: string }
-  | { kind: "root" } // сам finora.ru — компания не выбрана
+  | { kind: "root" } // сам базовый домен — компания не выбрана
   | { kind: "unknown" }; // домен вообще не наш
 
 // www — не компания, а тот же корень
@@ -23,7 +23,7 @@ export function parseHost(host: string | null): HostKind {
 
   const prefix = clean.slice(0, -(APP_DOMAIN.length + 1));
 
-  // Многоуровневые поддомены (a.b.finora.ru) не поддерживаем: slug — одна метка
+  // Многоуровневые поддомены (a.b.example.ru) не поддерживаем: slug — одна метка
   if (prefix === "" || prefix.includes(".")) return { kind: "unknown" };
   if (ROOT_ALIASES.has(prefix)) return { kind: "root" };
 
