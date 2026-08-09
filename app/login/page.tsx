@@ -57,7 +57,7 @@ function LoginForm() {
           <Zap size={18} aria-hidden />
         </span>
         <div>
-          <p className="font-semibold tracking-tight">Финора</p>
+          <p className="font-semibold tracking-tight">Nasiya</p>
           <p className="text-xs text-mute">Вход в систему</p>
         </div>
       </div>

@@ -110,7 +110,7 @@ export default function ClientPortal({ token }: { token: string }) {
               <Zap size={17} aria-hidden />
             </span>
             <div>
-              <p className="text-sm font-semibold tracking-tight">Финора</p>
+              <p className="text-sm font-semibold tracking-tight">Nasiya</p>
               <p className="text-xs text-mute">Моя рассрочка</p>
             </div>
           </div>

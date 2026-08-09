@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import ClientPortal from "@/components/client-portal";
 
 export const metadata: Metadata = {
-  title: "Моя рассрочка — Финора",
+  title: "Моя рассрочка — Nasiya",
   description: "График платежей и остаток по рассрочке",
 };
 

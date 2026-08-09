@@ -35,7 +35,7 @@ export default function DealPrint({
     <div className="hidden bg-white p-10 text-black print:block">
       <div className="flex items-center justify-between border-b border-black/20 pb-4">
         <div>
-          <p className="text-lg font-semibold">Финора</p>
+          <p className="text-lg font-semibold">Nasiya</p>
           <p className="text-sm text-black/60">Учёт рассрочек</p>
         </div>
         <div className="text-right text-sm text-black/60">
@@ -143,7 +143,7 @@ export default function DealPrint({
       )}
 
       <p className="mt-8 text-xs text-black/40">
-        Сформировано в CRM «Финора» · {new Date().toLocaleDateString("ru-RU")}
+        Сформировано в CRM «Nasiya» · {new Date().toLocaleDateString("ru-RU")}
       </p>
     </div>
   );

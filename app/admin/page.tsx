@@ -4,13 +4,24 @@
 // отключение доступа. Намеренно не использует lib/store.tsx — тот
 // провайдер держит данные одной компании, а здесь речь обо всех сразу.
 
-import { useEffect, useState } from "react";
-import { ShieldCheck, Plus, LogOut, Building2 } from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
+import { ShieldCheck, Plus, LogOut, Building2, ChevronDown, Users } from "lucide-react";
 import { APP_DOMAIN } from "@/lib/tenant-host";
 
 interface Company {
   slug: string;
   name: string;
+  active: boolean;
+  createdAt: string;
+}
+
+interface CompanyEmployee {
+  id: number;
+  name: string;
+  initials: string;
+  email: string;
+  phone: string;
+  role: "admin" | "manager";
   active: boolean;
   createdAt: string;
 }
@@ -24,6 +35,26 @@ export default function AdminPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [issued, setIssued] = useState<{ slug: string; email: string; password: string } | null>(null);
   const [busySlug, setBusySlug] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [employees, setEmployees] = useState<Record<string, CompanyEmployee[] | "loading" | "error">>({});
+
+  const toggleExpand = async (slug: string) => {
+    if (expanded === slug) {
+      setExpanded(null);
+      return;
+    }
+    setExpanded(slug);
+    if (employees[slug]) return; // уже загружены — не дёргаем сервер повторно
+
+    setEmployees((s) => ({ ...s, [slug]: "loading" }));
+    const res = await fetch(`/api/admin/companies/${slug}/employees`);
+    if (!res.ok) {
+      setEmployees((s) => ({ ...s, [slug]: "error" }));
+      return;
+    }
+    const data = (await res.json()) as CompanyEmployee[];
+    setEmployees((s) => ({ ...s, [slug]: data }));
+  };
 
   const load = async () => {
     const res = await fetch("/api/admin/companies");
@@ -111,7 +142,8 @@ export default function AdminPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs text-mute">
-                  <th className="px-5 py-3 font-medium">Компания</th>
+                  <th className="w-8 px-5 py-3" />
+                  <th className="px-3 py-3 font-medium">Компания</th>
                   <th className="px-3 py-3 font-medium">Адрес</th>
                   <th className="px-3 py-3 font-medium">Статус</th>
                   <th className="px-3 py-3 font-medium">Создана</th>
@@ -119,44 +151,113 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {companies.map((c) => (
-                  <tr key={c.slug}>
-                    <td className="px-5 py-3.5 font-medium">{c.name}</td>
-                    <td className="px-3 py-3.5">
-                      <a
-                        href={`https://${c.slug}.${APP_DOMAIN}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-brand hover:text-brand-deep"
+                {companies.map((c) => {
+                  const isOpen = expanded === c.slug;
+                  const list = employees[c.slug];
+                  return (
+                    <Fragment key={c.slug}>
+                      <tr
+                        onClick={() => toggleExpand(c.slug)}
+                        className="cursor-pointer hover:bg-canvas"
                       >
-                        {c.slug}.{APP_DOMAIN}
-                      </a>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                          c.active
-                            ? "bg-good-soft text-good"
-                            : "bg-canvas text-mute"
-                        }`}
-                      >
-                        {c.active ? "Активна" : "Доступ закрыт"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5 text-mute">
-                      {new Date(c.createdAt).toLocaleDateString("ru-RU")}
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      <button
-                        onClick={() => toggle(c.slug, !c.active)}
-                        disabled={busySlug === c.slug}
-                        className="rounded-[8px] border border-line px-3 py-1.5 text-xs text-mute transition-colors hover:border-brand/40 hover:text-ink disabled:opacity-50"
-                      >
-                        {c.active ? "Закрыть доступ" : "Открыть доступ"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                        <td className="px-5 py-3.5">
+                          <ChevronDown
+                            size={15}
+                            className={`text-mute transition-transform ${isOpen ? "rotate-180" : ""}`}
+                            aria-hidden
+                          />
+                        </td>
+                        <td className="px-3 py-3.5 font-medium">{c.name}</td>
+                        <td className="px-3 py-3.5">
+                          <a
+                            href={`https://${c.slug}.${APP_DOMAIN}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-brand hover:text-brand-deep"
+                          >
+                            {c.slug}.{APP_DOMAIN}
+                          </a>
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                              c.active
+                                ? "bg-good-soft text-good"
+                                : "bg-canvas text-mute"
+                            }`}
+                          >
+                            {c.active ? "Активна" : "Доступ закрыт"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3.5 text-mute">
+                          {new Date(c.createdAt).toLocaleDateString("ru-RU")}
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggle(c.slug, !c.active);
+                            }}
+                            disabled={busySlug === c.slug}
+                            className="rounded-[8px] border border-line px-3 py-1.5 text-xs text-mute transition-colors hover:border-brand/40 hover:text-ink disabled:opacity-50"
+                          >
+                            {c.active ? "Закрыть доступ" : "Открыть доступ"}
+                          </button>
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr key={`${c.slug}-employees`}>
+                          <td colSpan={6} className="bg-canvas px-5 py-4">
+                            {list === "loading" || list === undefined ? (
+                              <p className="text-sm text-mute">Загрузка…</p>
+                            ) : list === "error" ? (
+                              <p className="text-sm text-danger">Не удалось загрузить сотрудников</p>
+                            ) : list.length === 0 ? (
+                              <p className="text-sm text-mute">Сотрудников пока нет</p>
+                            ) : (
+                              <div className="flex flex-col gap-2">
+                                <p className="flex items-center gap-1.5 text-xs font-medium text-mute">
+                                  <Users size={13} aria-hidden />
+                                  {list.length} {list.length === 1 ? "сотрудник" : "сотрудников"}
+                                </p>
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                  {list.map((e) => (
+                                    <div
+                                      key={e.id}
+                                      className="flex items-center gap-3 rounded-[10px] border border-line bg-surface px-3.5 py-2.5"
+                                    >
+                                      <span
+                                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                                          e.active ? "bg-brand text-white" : "bg-canvas text-mute"
+                                        }`}
+                                      >
+                                        {e.initials}
+                                      </span>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-medium">
+                                          {e.name}
+                                          {!e.active && (
+                                            <span className="ml-1.5 text-xs font-normal text-mute">
+                                              (доступ закрыт)
+                                            </span>
+                                          )}
+                                        </p>
+                                        <p className="truncate text-xs text-mute">
+                                          {e.email} · {e.role === "admin" ? "администратор" : "менеджер"}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

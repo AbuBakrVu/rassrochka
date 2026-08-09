@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Финора — учёт рассрочек",
+  title: "Nasiya — учёт рассрочек",
   description: "CRM для управления рассрочками: платежи, сделки, клиенты",
 };
 

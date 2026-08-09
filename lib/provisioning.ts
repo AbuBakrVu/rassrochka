@@ -62,6 +62,58 @@ export async function listCompanies(): Promise<CompanyRow[]> {
   }));
 }
 
+export interface CompanyEmployee {
+  id: number;
+  name: string;
+  initials: string;
+  email: string;
+  phone: string;
+  role: "admin" | "manager";
+  active: boolean;
+  createdAt: string;
+}
+
+/**
+ * Сотрудники одной компании — заходим напрямую в её базу по db_name из
+ * реестра. Владелец платформы смотрит чужие компании только для контроля
+ * (кто заведён, сколько сотрудников), но не управляет ими напрямую: роли
+ * и приглашения — дело администратора самой компании в её /employees.
+ */
+export async function getCompanyEmployees(slug: string): Promise<CompanyEmployee[]> {
+  const company = await queryOne<{ db_name: string }>(
+    CONTROL_DB,
+    "select db_name from companies where slug = $1",
+    [slug]
+  );
+  if (!company) throw new ProvisioningError(`Компания «${slug}» не найдена`);
+
+  const rows = await query<{
+    id: number;
+    name: string;
+    initials: string;
+    email: string;
+    phone: string | null;
+    role: "admin" | "manager";
+    active: boolean;
+    created_at: Date;
+  }>(
+    company.db_name,
+    `select id, name, initials, email, phone, role, active, created_at
+     from users order by active desc, name`
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    initials: r.initials,
+    email: r.email,
+    phone: r.phone ?? "—",
+    role: r.role,
+    active: r.active,
+    createdAt: r.created_at.toISOString(),
+  }));
+}
+
 export interface CreateCompanyInput {
   slug: string;
   name: string;

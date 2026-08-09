@@ -93,7 +93,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-white">
               <Zap size={18} aria-hidden />
             </span>
-            <span className="text-lg font-semibold tracking-tight">Финора</span>
+            <span className="text-lg font-semibold tracking-tight">Nasiya</span>
           </div>
           {menu}
         </aside>
@@ -112,7 +112,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                   <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-brand text-white">
                     <Zap size={16} aria-hidden />
                   </span>
-                  <span className="font-semibold">Финора</span>
+                  <span className="font-semibold">Nasiya</span>
                 </div>
                 <button
                   onClick={() => setOpen(false)}
@@ -137,7 +137,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             >
               <Menu size={20} />
             </button>
-            <span className="font-semibold">Финора</span>
+            <span className="font-semibold">Nasiya</span>
           </header>
           <main className="min-w-0 flex-1">{children}</main>
         </div>
