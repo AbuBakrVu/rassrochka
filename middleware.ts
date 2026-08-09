@@ -9,19 +9,21 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth-shared";
 import { parseHost } from "@/lib/tenant-host";
 
+// Инфраструктурные роуты: не привязаны ни к одной компании, работают на
+// голом Host (docker healthcheck и Caddy ask-запрос шлют Host: app:3000 или
+// вообще без него, не под доменом-компанией) — тенант-проверка тут ни к
+// чему и обязана идти раньше неё.
+const INFRA = [/^\/api\/health$/, /^\/api\/internal\//];
+
 // Открыты без входа: страница входа, кабинет заёмщика по ссылке и роуты,
 // которые сами разбираются с доступом
-const PUBLIC = [
-  /^\/login$/,
-  /^\/company$/,
-  /^\/pay\//,
-  /^\/api\/auth\//,
-  /^\/api\/portal\//,
-  /^\/api\/internal\//,
-];
+const PUBLIC = [/^\/login$/, /^\/company$/, /^\/pay\//, /^\/api\/auth\//, /^\/api\/portal\//];
 
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+
+  if (INFRA.some((re) => re.test(pathname))) return NextResponse.next();
+
   const host = parseHost(request.headers.get("host"));
 
   // На корневом домене компания не выбрана: показываем страницу, где её
