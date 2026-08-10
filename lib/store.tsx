@@ -116,6 +116,15 @@ export interface NewClientInput {
   phone: string;
 }
 
+export interface UpdateDealInput {
+  product: string;
+  nextStep: string;
+  managerId: number;
+  amount?: number;
+  months?: number;
+  markupPct?: number;
+}
+
 export interface CashAdjustmentInput {
   amount: number;
   title: string;
@@ -125,6 +134,12 @@ export interface CashAdjustmentInput {
 export interface NewEmployeeInput {
   name: string;
   email: string;
+  phone: string;
+  role: "admin" | "manager";
+}
+
+export interface UpdateEmployeeInput {
+  name: string;
   phone: string;
   role: "admin" | "manager";
 }
@@ -149,7 +164,9 @@ export interface TemplateInput {
 
 interface DataContextValue extends Snapshot {
   addDeal: (input: NewDealInput) => Promise<Deal>;
+  updateDeal: (dealId: string, input: UpdateDealInput) => Promise<Deal>;
   addEmployee: (input: NewEmployeeInput) => Promise<{ password: string }>;
+  updateEmployee: (id: number, input: UpdateEmployeeInput) => Promise<void>;
   setEmployeeActive: (id: number, active: boolean) => Promise<void>;
   logout: () => Promise<void>;
   addClient: (input: NewClientInput) => Promise<Client>;
@@ -269,6 +286,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const updateDeal = useCallback(
+    async (dealId: string, input: UpdateDealInput): Promise<Deal> => {
+      const deal = await api<Deal>(
+        `/api/deals/${encodeURIComponent(dealId)}`,
+        input,
+        "PATCH"
+      );
+      await load();
+      return deal;
+    },
+    [load]
+  );
+
   const addClient = useCallback(
     async (input: NewClientInput): Promise<Client> => {
       const client = await api<Client>("/api/clients", input);
@@ -369,6 +399,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const updateEmployee = useCallback(
+    async (id: number, input: UpdateEmployeeInput) => {
+      await api(`/api/employees/${id}`, input, "PATCH");
+      await load();
+    },
+    [load]
+  );
+
   const setEmployeeActive = useCallback(
     async (id: number, active: boolean) => {
       await api(`/api/employees/${id}`, { active }, "PATCH");
@@ -386,6 +424,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     () => ({
       ...state,
       addDeal,
+      updateDeal,
       addClient,
       acceptPayment,
       addCashAdjustment,
@@ -398,14 +437,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setDefaultTemplate,
       sendReminder,
       addEmployee,
+      updateEmployee,
       setEmployeeActive,
       logout,
       refresh,
     }),
-    [state, addDeal, addClient, acceptPayment, addCashAdjustment,
+    [state, addDeal, updateDeal, addClient, acceptPayment, addCashAdjustment,
      addCoinvestor, setCoinvestorActive, recordCoinvestorPayout,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,
-     addEmployee, setEmployeeActive, logout, refresh]
+     addEmployee, updateEmployee, setEmployeeActive, logout, refresh]
   );
 
   // Пока состояние не загружено, страницы не рендерим: иначе каждая из них

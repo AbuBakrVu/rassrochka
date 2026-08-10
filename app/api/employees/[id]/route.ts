@@ -1,5 +1,5 @@
-import { BadRequestError, handle } from "@/app/api/_lib/handler";
-import { setEmployeeActive } from "@/lib/queries";
+import { BadRequestError, handle, optionalStr, str } from "@/app/api/_lib/handler";
+import { setEmployeeActive, updateEmployee } from "@/lib/queries";
 
 export async function PATCH(
   request: Request,
@@ -14,22 +14,45 @@ export async function PATCH(
       if (!Number.isInteger(userId)) throw new BadRequestError("Неверный идентификатор");
 
       const active = (body as { active?: unknown })?.active;
-      if (typeof active !== "boolean") {
-        throw new BadRequestError("Поле «active» должно быть true или false");
+      if (active !== undefined) {
+        if (typeof active !== "boolean") {
+          throw new BadRequestError("Поле «active» должно быть true или false");
+        }
+        if (userId === user.id && !active) {
+          throw new BadRequestError("Нельзя отключить самого себя");
+        }
+
+        try {
+          await setEmployeeActive(tenant.dbName, userId, active);
+        } catch (err) {
+          if (err instanceof Error && err.message === "LAST_ADMIN") {
+            throw new BadRequestError("Это последний администратор компании");
+          }
+          throw err;
+        }
+        return { ok: true };
       }
-      if (userId === user.id && !active) {
-        throw new BadRequestError("Нельзя отключить самого себя");
+
+      const role = str(body, "role", { max: 10 });
+      if (role !== "admin" && role !== "manager") {
+        throw new BadRequestError("Роль должна быть admin или manager");
+      }
+      if (userId === user.id && role === "manager") {
+        throw new BadRequestError("Нельзя понизить самого себя — попросите другого администратора");
       }
 
       try {
-        await setEmployeeActive(tenant.dbName, userId, active);
+        return await updateEmployee(tenant.dbName, userId, {
+          name: str(body, "name", { max: 120 }),
+          phone: optionalStr(body, "phone"),
+          role,
+        });
       } catch (err) {
         if (err instanceof Error && err.message === "LAST_ADMIN") {
           throw new BadRequestError("Это последний администратор компании");
         }
         throw err;
       }
-      return { ok: true };
     },
     { adminOnly: true }
   );

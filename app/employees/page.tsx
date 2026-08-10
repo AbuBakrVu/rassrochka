@@ -10,10 +10,11 @@ import {
   CalendarClock,
   FileSearch,
   UserPlus2,
+  Pencil,
 } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
 import { money } from "@/lib/schedule";
-import { useData } from "@/lib/store";
+import { useData, type Employee } from "@/lib/store";
 import { computeEmployees } from "@/lib/derive";
 import { ruPlural, type RouteKind } from "@/lib/data";
 
@@ -25,7 +26,7 @@ const kindMeta: Record<RouteKind, { label: string; icon: typeof PhoneCall; text:
 };
 
 export default function EmployeesPage() {
-  const { deals, paidPayments, employees, user, addEmployee, setEmployeeActive } =
+  const { deals, paidPayments, employees, user, addEmployee, updateEmployee, setEmployeeActive } =
     useData();
   const stats = useMemo(
     () => computeEmployees(employees, deals, paidPayments),
@@ -34,6 +35,7 @@ export default function EmployeesPage() {
   const isAdmin = user.role === "admin";
   const [inviteOpen, setInviteOpen] = useState(false);
   const [issued, setIssued] = useState<{ name: string; password: string } | null>(null);
+  const [editing, setEditing] = useState<Employee | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
 
   const toggle = async (id: number, active: boolean) => {
@@ -87,6 +89,15 @@ export default function EmployeesPage() {
                     {!s.employee.active && " · доступ закрыт"}
                   </p>
                 </div>
+                {isAdmin && (
+                  <button
+                    onClick={() => setEditing(s.employee)}
+                    title="Редактировать"
+                    className="shrink-0 rounded-[8px] border border-line p-1.5 text-mute transition-colors hover:border-brand/40 hover:text-ink"
+                  >
+                    <Pencil size={14} aria-hidden />
+                  </button>
+                )}
               </div>
 
               <div className="mt-3 space-y-1 text-sm text-mute">
@@ -207,6 +218,17 @@ export default function EmployeesPage() {
       {issued && (
         <PasswordIssued data={issued} onClose={() => setIssued(null)} />
       )}
+
+      {editing && (
+        <EditEmployeeModal
+          employee={editing}
+          onClose={() => setEditing(null)}
+          onSave={async (input) => {
+            await updateEmployee(editing.id, input);
+            setEditing(null);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -320,6 +342,106 @@ function InviteModal({
             className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Создать
+          </button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function EditEmployeeModal({
+  employee,
+  onClose,
+  onSave,
+}: {
+  employee: Employee;
+  onClose: () => void;
+  onSave: (input: { name: string; phone: string; role: "admin" | "manager" }) => Promise<void>;
+}) {
+  const [name, setName] = useState(employee.name);
+  const [phone, setPhone] = useState(employee.phone === "—" ? "" : employee.phone);
+  const [role, setRole] = useState<"admin" | "manager">(employee.role);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const ready = name.trim() !== "";
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ready || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({ name: name.trim(), phone, role });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось сохранить");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <form
+        onSubmit={submit}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-employee-title"
+        className="relative w-full max-w-md rounded-t-card bg-surface shadow-pop sm:rounded-card"
+      >
+        <div className="border-b border-line px-5 py-4">
+          <h2 id="edit-employee-title" className="font-semibold tracking-tight">
+            Редактировать сотрудника
+          </h2>
+          <p className="text-sm text-mute">{employee.email} · почта не меняется здесь</p>
+        </div>
+
+        <div className="flex flex-col gap-3 px-5 py-4">
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium">Имя и фамилия</span>
+            <input className={field} value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium">
+              Телефон <span className="text-xs text-mute">необязательно</span>
+            </span>
+            <input className={field} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 911 000-00-00" />
+          </label>
+          <div>
+            <span className="mb-1.5 block text-sm font-medium">Роль</span>
+            <div className="flex gap-2">
+              {(["manager", "admin"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRole(r)}
+                  aria-pressed={role === r}
+                  className={`flex-1 rounded-[10px] border px-3 py-2.5 text-sm transition-colors ${
+                    role === r
+                      ? "border-brand bg-brand-soft font-medium text-brand-deep"
+                      : "border-line bg-canvas text-mute hover:border-brand/40"
+                  }`}
+                >
+                  {r === "admin" ? "Администратор" : "Менеджер"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <footer className="flex items-center gap-3 border-t border-line px-5 py-4">
+          <p className="mr-auto text-sm" role="status" aria-live="polite">
+            {error ? <span className="text-danger">{error}</span> : saving ? "Сохраняем…" : ""}
+          </p>
+          <button type="button" onClick={onClose} className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+            Отмена
+          </button>
+          <button
+            type="submit"
+            disabled={!ready || saving}
+            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+          >
+            Сохранить
           </button>
         </footer>
       </form>

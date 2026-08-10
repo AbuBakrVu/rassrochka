@@ -129,6 +129,16 @@ export function num(
   return n;
 }
 
+export function optionalNum(
+  body: unknown,
+  key: string,
+  opts: { min?: number; max?: number; integer?: boolean } = {}
+): number | undefined {
+  const value = asRecord(body)[key];
+  if (value === undefined || value === null || value === "") return undefined;
+  return num(body, key, opts);
+}
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function isoDate(body: unknown, key: string): string {

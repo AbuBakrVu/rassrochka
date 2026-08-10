@@ -408,6 +408,84 @@ export async function createDeal(
   return created;
 }
 
+export interface UpdateDealInput {
+  product: string;
+  nextStep: string;
+  managerId: number;
+  /** Сумму, срок и наценку можно менять, только пока по сделке нет ни одного взноса. */
+  amount?: number;
+  months?: number;
+  markupPct?: number;
+}
+
+/**
+ * Правки карточки сделки. Сумму/срок/наценку разрешаем менять только до
+ * первого платежа: график строится из этих трёх чисел детерминированно
+ * (buildSchedule), и после того как клиент уже что-то заплатил, менять их
+ * задним числом значило бы переписывать историю платежей. Дедлайн подписания
+ * тут не редактируется — в API он приходит отформатированной строкой
+ * («6 августа»), а не ISO-датой, обратно её парсить ненадёжно.
+ */
+export async function updateDeal(
+  dbName: string,
+  dealId: string,
+  input: UpdateDealInput
+): Promise<Deal> {
+  await transaction(dbName, async (client) => {
+    const { rows } = await client.query<{ paid_count: number }>(
+      "select paid_count from deals where id = $1 for update",
+      [dealId]
+    );
+    const deal = rows[0];
+    if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+
+    const changingEconomics =
+      input.amount !== undefined ||
+      input.months !== undefined ||
+      input.markupPct !== undefined;
+    if (changingEconomics && deal.paid_count > 0) {
+      throw new Error("ALREADY_PAID");
+    }
+
+    await client.query(
+      `update deals set product = $2, next_step = $3,
+                        manager_id = (select id from users where id = $4 and active)
+       where id = $1`,
+      [dealId, input.product, input.nextStep || null, input.managerId]
+    );
+
+    if (changingEconomics) {
+      await client.query(
+        "update deals set amount = $2, months = $3, markup_pct = $4 where id = $1",
+        [dealId, input.amount, input.months, input.markupPct]
+      );
+
+      // Закупка в кассе была посчитана от старой суммы/наценки — пересчитываем,
+      // иначе касса разойдётся с фактической стоимостью сделки
+      const purchase =
+        input.amount! - Math.round((input.amount! * input.markupPct!) / 100);
+      await client.query(
+        `update cash_tx set amount = $2, title = $3 where deal_id = $1 and kind = 'purchase'`,
+        [dealId, -purchase, `Закупка товара · ${input.product}`]
+      );
+    } else {
+      await client.query(
+        `update cash_tx set title = $2 where deal_id = $1 and kind = 'purchase'`,
+        [dealId, `Закупка товара · ${input.product}`]
+      );
+    }
+
+    await client.query(
+      "insert into deal_events (deal_id, text) values ($1, 'Данные сделки отредактированы')",
+      [dealId]
+    );
+  });
+
+  const updated = await loadDeal(dbName, dealId);
+  if (!updated) throw new Error(`Сделка ${dealId} не найдена`);
+  return updated;
+}
+
 /**
  * Принимает один ближайший взнос: увеличивает счётчик, приходует деньги в
  * кассу и пишет событие в историю — одной транзакцией.
@@ -804,5 +882,57 @@ export async function setEmployeeActive(
     if (!active) {
       await client.query("delete from sessions where user_id = $1", [userId]);
     }
+  });
+}
+
+export interface UpdateEmployeeInput {
+  name: string;
+  phone: string;
+  role: "admin" | "manager";
+}
+
+/** Правки карточки сотрудника: имя, телефон, роль. Почта — логин, её не меняем отсюда. */
+export async function updateEmployee(
+  dbName: string,
+  userId: number,
+  input: UpdateEmployeeInput
+): Promise<Employee> {
+  const { initialsFrom } = await import("./auth");
+
+  return transaction(dbName, async (client) => {
+    if (input.role === "manager") {
+      const { rows } = await client.query<{ role: string; count: string }>(
+        `select
+           (select role from users where id = $1) as role,
+           (select count(*) from users where role = 'admin' and active and id <> $1) as count`,
+        [userId]
+      );
+      if (rows[0]?.role === "admin" && Number(rows[0].count) === 0) {
+        throw new Error("LAST_ADMIN");
+      }
+    }
+
+    const { rows } = await client.query<{
+      id: number; name: string; initials: string; email: string;
+      phone: string | null; role: "admin" | "manager"; active: boolean; created_at: Date;
+    }>(
+      `update users set name = $2, initials = $3, phone = $4, role = $5
+       where id = $1
+       returning id, name, initials, email, phone, role, active, created_at`,
+      [userId, input.name, initialsFrom(input.name), input.phone || null, input.role]
+    );
+    const row = rows[0];
+    if (!row) throw new Error(`Сотрудник ${userId} не найден`);
+
+    return {
+      id: row.id,
+      name: row.name,
+      initials: row.initials,
+      email: row.email,
+      phone: row.phone ?? "—",
+      role: row.role,
+      since: sinceLabel(row.created_at.toISOString().slice(0, 10)),
+      active: row.active,
+    };
   });
 }

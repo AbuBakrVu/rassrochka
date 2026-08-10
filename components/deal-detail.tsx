@@ -21,8 +21,8 @@ import {
 } from "lucide-react";
 import { Card, Badge, EmptyState } from "@/components/ui";
 import DealActions from "@/components/deal-actions";
-import { useData } from "@/lib/store";
-import { clientById, fmt, stages, paidCount, tokenForDeal } from "@/lib/data";
+import { useData, type Employee } from "@/lib/store";
+import { clientById, fmt, stages, paidCount, tokenForDeal, type Deal } from "@/lib/data";
 import { buildSchedule, money, longDate, type Installment } from "@/lib/schedule";
 import { dealEvents } from "@/lib/events";
 import CopyLinkButton from "@/components/copy-link";
@@ -100,11 +100,14 @@ function BalanceChart({ schedule, amount }: { schedule: Installment[]; amount: n
 }
 
 export default function DealDetail({ id }: { id: string }) {
-  const { deals, clients, paidPayments, events, templates, acceptPayment, sendReminder } =
-    useData();
+  const {
+    deals, clients, paidPayments, events, templates, employees,
+    acceptPayment, sendReminder, updateDeal,
+  } = useData();
   const router = useRouter();
   const deal = deals.find((d) => d.id === id);
   const [printMode, setPrintMode] = useState<PrintMode | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     const reset = () => setPrintMode(null);
@@ -211,9 +214,14 @@ export default function DealDetail({ id }: { id: string }) {
               </p>
             </div>
           </div>
-          <button className="flex items-center gap-1.5 rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
-            <Pencil size={15} aria-hidden /> Редактировать
-          </button>
+          {!finished && (
+            <button
+              onClick={() => setEditOpen(true)}
+              className="flex items-center gap-1.5 rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
+            >
+              <Pencil size={15} aria-hidden /> Редактировать
+            </button>
+          )}
         </div>
 
         {/* Ключевые цифры */}
@@ -366,7 +374,12 @@ export default function DealDetail({ id }: { id: string }) {
                   {deal.months} равных платежей, ежемесячно
                 </p>
               </div>
-              <button className="rounded-[10px] border border-line px-3.5 py-2 text-sm font-medium text-mute hover:text-ink">
+              <button
+                onClick={() => acceptPayment(deal.id)}
+                disabled={paid >= deal.months}
+                title="Принять ближайший платёж по графику"
+                className="rounded-[10px] border border-line px-3.5 py-2 text-sm font-medium text-mute transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+              >
                 + Добавить платёж
               </button>
             </div>
@@ -577,6 +590,181 @@ export default function DealDetail({ id }: { id: string }) {
           />,
           document.body
         )}
+
+      {editOpen && (
+        <EditDealModal
+          deal={deal}
+          paid={paid}
+          employees={employees}
+          onClose={() => setEditOpen(false)}
+          onSubmit={async (input) => {
+            await updateDeal(deal.id, input);
+            setEditOpen(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+const editField =
+  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+
+function EditDealModal({
+  deal,
+  paid,
+  employees,
+  onClose,
+  onSubmit,
+}: {
+  deal: Deal;
+  paid: number;
+  employees: Employee[];
+  onClose: () => void;
+  onSubmit: (input: {
+    product: string;
+    nextStep: string;
+    managerId: number;
+    amount?: number;
+    months?: number;
+    markupPct?: number;
+  }) => Promise<void>;
+}) {
+  const locked = paid > 0;
+  const [product, setProduct] = useState(deal.product);
+  const [nextStep, setNextStep] = useState(deal.nextStep);
+  const [managerId, setManagerId] = useState(deal.managerId ?? employees[0]?.id ?? 0);
+  const [amount, setAmount] = useState(String(deal.amount));
+  const [months, setMonths] = useState(String(deal.months));
+  const [markupPct, setMarkupPct] = useState(String(deal.markupPct));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const ready =
+    product.trim() !== "" &&
+    managerId > 0 &&
+    (locked || (Number(amount) > 0 && Number(months) > 0 && Number(markupPct) >= 0));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ready || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSubmit({
+        product: product.trim(),
+        nextStep: nextStep.trim(),
+        managerId,
+        ...(locked
+          ? {}
+          : {
+              amount: Number(amount),
+              months: Number(months),
+              markupPct: Number(markupPct),
+            }),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось сохранить");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <form
+        onSubmit={submit}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-deal-title"
+        className="relative w-full max-w-md rounded-t-card bg-surface shadow-pop sm:rounded-card"
+      >
+        <div className="border-b border-line px-5 py-4">
+          <h2 id="edit-deal-title" className="font-semibold tracking-tight">
+            Редактировать сделку {deal.id}
+          </h2>
+          {locked && (
+            <p className="mt-1 text-sm text-mute">
+              По сделке уже есть принятые платежи — сумма, срок и наценка
+              заблокированы
+            </p>
+          )}
+        </div>
+
+        <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto px-5 py-4">
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium">Товар</span>
+            <input className={editField} value={product} onChange={(e) => setProduct(e.target.value)} />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium">Ответственный</span>
+            <select
+              className={editField}
+              value={managerId}
+              onChange={(e) => setManagerId(Number(e.target.value))}
+            >
+              {employees.filter((e) => e.active).map((e) => (
+                <option key={e.id} value={e.id}>{e.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium">Следующий шаг</span>
+            <input className={editField} value={nextStep} onChange={(e) => setNextStep(e.target.value)} />
+          </label>
+
+          <div className="grid grid-cols-3 gap-3">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium">Сумма</span>
+              <input
+                inputMode="numeric"
+                disabled={locked}
+                className={`${editField} disabled:opacity-50`}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium">Срок, мес</span>
+              <input
+                inputMode="numeric"
+                disabled={locked}
+                className={`${editField} disabled:opacity-50`}
+                value={months}
+                onChange={(e) => setMonths(e.target.value.replace(/\D/g, ""))}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium">Наценка, %</span>
+              <input
+                inputMode="decimal"
+                disabled={locked}
+                className={`${editField} disabled:opacity-50`}
+                value={markupPct}
+                onChange={(e) => setMarkupPct(e.target.value.replace(/[^\d.]/g, ""))}
+              />
+            </label>
+          </div>
+        </div>
+
+        <footer className="flex items-center gap-3 border-t border-line px-5 py-4">
+          <p className="mr-auto text-sm" role="status" aria-live="polite">
+            {error ? <span className="text-danger">{error}</span> : saving ? "Сохраняем…" : ""}
+          </p>
+          <button type="button" onClick={onClose} className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+            Отмена
+          </button>
+          <button
+            type="submit"
+            disabled={!ready || saving}
+            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+          >
+            Сохранить
+          </button>
+        </footer>
+      </form>
     </div>
   );
 }

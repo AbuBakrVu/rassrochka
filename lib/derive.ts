@@ -12,6 +12,13 @@ import {
 } from "./data";
 import type { Employee } from "./store";
 import { buildSchedule, type Installment } from "./schedule";
+
+// Именительный падеж для заголовка календаря («Август 2026») — monthNames
+// в lib/schedule.ts родительный («6 августа») и сюда не подходит.
+const NOMINATIVE_MONTHS = [
+  "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+];
 import { todayIso } from "./status";
 
 // «Сегодня» — настоящее. До этапа 3 здесь стояла зафиксированная дата
@@ -140,10 +147,19 @@ export function computeDashboard(
 
 // ── Платежи (календарь) ────────────────────────────────────────────────
 
+export interface CalendarDayItem {
+  dealId: string;
+  clientName: string;
+  product: string;
+  amount: number;
+}
+
 export interface CalendarCell {
   day: number;
+  iso: string;
   payments?: { count: number; sum: number };
   event?: { label: string };
+  items: CalendarDayItem[];
 }
 
 export interface AgendaItem {
@@ -158,6 +174,15 @@ export interface CalendarData {
   cells: CalendarCell[];
   todaySum: number;
   agenda: AgendaItem[];
+  /** «Август 2026» — заголовок текущего месяца, вычисленный из настоящей даты. */
+  monthLabel: string;
+  /** Сколько пустых ячеек нужно перед 1-м числом, чтобы неделя начиналась с понедельника. */
+  leadDays: number;
+  /** День месяца, соответствующий today — чем подсвечивать сегодняшнюю ячейку. */
+  todayDay: number;
+  todayIso: string;
+  /** ISO-даты текущей недели (пн…вс) — для режима «Неделя». */
+  weekDayIsos: string[];
 }
 
 const agendaTimes = ["10:00", "11:30", "12:00", "13:30", "15:00", "17:00"];
@@ -169,14 +194,26 @@ export function computeCalendar(
   const today = todayIso();
   const active = computeActive(deals, paidPayments);
   const monthPrefix = today.slice(0, 7);
+  const [year, month] = today.split("-").map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const todayDay = Number(today.slice(8));
 
   const byDay = new Map<number, { count: number; sum: number }>();
+  const itemsByDay = new Map<number, CalendarDayItem[]>();
   for (const c of active) {
     for (const p of c.schedule) {
       if (p.iso.startsWith(monthPrefix)) {
         const day = Number(p.iso.slice(8));
         const cur = byDay.get(day) ?? { count: 0, sum: 0 };
         byDay.set(day, { count: cur.count + 1, sum: cur.sum + p.amount });
+        const list = itemsByDay.get(day) ?? [];
+        list.push({
+          dealId: c.deal.id,
+          clientName: c.deal.client,
+          product: c.deal.product,
+          amount: p.amount,
+        });
+        itemsByDay.set(day, list);
       }
     }
   }
@@ -190,12 +227,17 @@ export function computeCalendar(
     }
   }
 
-  const cells: CalendarCell[] = Array.from({ length: 31 }, (_, i) => {
+  // Понедельник = 0 … воскресенье = 6, тогда как JS Date даёт 0 = воскресенье
+  const firstWeekday = (new Date(year, month - 1, 1).getDay() + 6) % 7;
+
+  const cells: CalendarCell[] = Array.from({ length: daysInMonth }, (_, i) => {
     const day = i + 1;
     return {
       day,
+      iso: `${monthPrefix}-${String(day).padStart(2, "0")}`,
       payments: byDay.get(day),
       event: events.has(day) ? { label: events.get(day)! } : undefined,
+      items: itemsByDay.get(day) ?? [],
     };
   });
 
@@ -239,7 +281,26 @@ export function computeCalendar(
     .filter((c) => c.next?.iso === today)
     .reduce((s, c) => s + (c.next?.amount ?? 0), 0);
 
-  return { cells, todaySum, agenda };
+  const monthLabel = `${NOMINATIVE_MONTHS[month - 1]} ${year}`;
+
+  const todayWeekday = (new Date(year, month - 1, todayDay).getDay() + 6) % 7;
+  const monday = new Date(year, month - 1, todayDay - todayWeekday);
+  const weekDayIsos = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+
+  return {
+    cells,
+    todaySum,
+    agenda,
+    monthLabel,
+    leadDays: firstWeekday,
+    todayDay,
+    todayIso: today,
+    weekDayIsos,
+  };
 }
 
 // ── Лестница просрочки ────────────────────────────────────────────────
