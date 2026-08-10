@@ -16,6 +16,8 @@ interface PortalDeal {
   months: number;
   openedAt: string;
   paid: number;
+  managerName: string;
+  managerPhone: string | null;
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
@@ -225,22 +227,26 @@ export default function ClientPortal({ token }: { token: string }) {
         <section className="rounded-card border border-line bg-surface p-5 shadow-card">
           <p className="text-sm font-medium">Вопрос по рассрочке?</p>
           <p className="mt-0.5 text-sm text-mute">
-            Напишите или позвоните — ответим в рабочее время.
+            {deal.managerPhone
+              ? `Напишите или позвоните ${deal.managerName} — ответит в рабочее время.`
+              : "Обратитесь к вашему менеджеру — контакт уточните у него."}
           </p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <a
-              href="tel:+79210000000"
-              className="flex items-center justify-center gap-2 rounded-[10px] border border-line px-3 py-2.5 text-sm font-medium hover:border-brand hover:text-brand-deep"
-            >
-              <Phone size={15} aria-hidden /> Позвонить
-            </a>
-            <a
-              href="https://wa.me/79210000000"
-              className="flex items-center justify-center gap-2 rounded-[10px] bg-brand px-3 py-2.5 text-sm font-medium text-white hover:bg-brand-deep"
-            >
-              <MessageCircle size={15} aria-hidden /> Написать
-            </a>
-          </div>
+          {deal.managerPhone && (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <a
+                href={`tel:${deal.managerPhone.replace(/\D/g, "")}`}
+                className="flex items-center justify-center gap-2 rounded-[10px] border border-line px-3 py-2.5 text-sm font-medium hover:border-brand hover:text-brand-deep"
+              >
+                <Phone size={15} aria-hidden /> Позвонить
+              </a>
+              <a
+                href={`https://wa.me/${deal.managerPhone.replace(/\D/g, "")}`}
+                className="flex items-center justify-center gap-2 rounded-[10px] bg-brand px-3 py-2.5 text-sm font-medium text-white hover:bg-brand-deep"
+              >
+                <MessageCircle size={15} aria-hidden /> Написать
+              </a>
+            </div>
+          )}
         </section>
 
         <p className="text-center text-xs text-mute">

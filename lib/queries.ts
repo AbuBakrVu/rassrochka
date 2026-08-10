@@ -768,6 +768,8 @@ export interface PortalDeal {
   months: number;
   openedAt: string;
   paid: number;
+  managerName: string;
+  managerPhone: string | null;
 }
 
 /**
@@ -792,11 +794,16 @@ export async function loadPortalDeal(
     opened_at: string;
     paid_count: number;
     stage: DealStage;
+    manager_name: string | null;
+    manager_phone: string | null;
   }>(
     dbName,
     `select d.id, c.name as client_name, d.product, d.amount, d.months,
-            d.opened_at, d.paid_count, d.stage
-     from deals d join clients c on c.id = d.client_id
+            d.opened_at, d.paid_count, d.stage,
+            u.name as manager_name, u.phone as manager_phone
+     from deals d
+     join clients c on c.id = d.client_id
+     left join users u on u.id = d.manager_id
      where d.portal_token = $1`,
     [token]
   );
@@ -812,6 +819,8 @@ export async function loadPortalDeal(
     openedAt: row.opened_at,
     // у закрытой сделки выплачены все взносы — та же логика, что в paidCount
     paid: row.stage === "closed" ? row.months : row.paid_count,
+    managerName: row.manager_name ?? "менеджер",
+    managerPhone: row.manager_phone,
   };
 }
 
