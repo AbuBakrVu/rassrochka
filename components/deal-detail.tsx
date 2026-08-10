@@ -100,7 +100,8 @@ function BalanceChart({ schedule, amount }: { schedule: Installment[]; amount: n
 }
 
 export default function DealDetail({ id }: { id: string }) {
-  const { deals, clients, paidPayments, events, acceptPayment } = useData();
+  const { deals, clients, paidPayments, events, templates, acceptPayment, sendReminder } =
+    useData();
   const router = useRouter();
   const deal = deals.find((d) => d.id === id);
   const [printMode, setPrintMode] = useState<PrintMode | null>(null);
@@ -154,6 +155,26 @@ export default function DealDetail({ id }: { id: string }) {
     date: longDate(new Date(e.date)),
     text: e.text,
   }));
+
+  const remind = () => {
+    const template = templates.find((t) => t.isDefault) ?? templates[0];
+    if (!template || !client) return;
+
+    const firstName = client.name.split(" ")[1] ?? client.name;
+    const text = template.body
+      .replaceAll("{имя}", firstName)
+      .replaceAll("{сумма}", money(nextPayment?.amount ?? monthly))
+      .replaceAll("{товар}", deal.product)
+      .replaceAll("{дата}", nextPayment?.date ?? "—");
+
+    const phone = client.phone.replace(/\D/g, "");
+    window.open(
+      `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+    sendReminder(deal.id).catch(() => {});
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-8">
@@ -424,7 +445,11 @@ export default function DealDetail({ id }: { id: string }) {
             </div>
             {!finished && (
               <>
-                <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep">
+                <button
+                  onClick={remind}
+                  disabled={templates.length === 0 || !client}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+                >
                   <MessageCircle size={16} aria-hidden />
                   Напомнить об оплате
                 </button>

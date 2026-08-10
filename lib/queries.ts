@@ -11,7 +11,7 @@ import { query, queryOne, transaction } from "./db";
 import { buildRoute, type Client, type Deal, type DealStage } from "./data";
 import { buildSchedule, monthNames } from "./schedule";
 import { computeClientStatus, computeDealStatus, todayIso } from "./status";
-import type { CashTx, Coinvestor } from "./store";
+import type { CashTx, Coinvestor, MessageTemplate } from "./store";
 import type { DealEvent } from "./events";
 
 // ── Формы строк БД ─────────────────────────────────────────────────────
@@ -62,6 +62,13 @@ interface CoinvestorRow extends Record<string, unknown> {
   monthly_percent: number;
   started_at: string;
   active: boolean;
+}
+
+interface TemplateRow extends Record<string, unknown> {
+  id: number;
+  name: string;
+  body: string;
+  is_default: boolean;
 }
 
 interface EventRow extends Record<string, unknown> {
@@ -201,6 +208,7 @@ export interface Bootstrap {
   cash: CashTx[];
   events: DealEvent[];
   coinvestors: Coinvestor[];
+  templates: MessageTemplate[];
   settings: { cashOpeningBalance: number };
 }
 
@@ -216,6 +224,15 @@ function toCoinvestor(row: CoinvestorRow): Coinvestor {
   };
 }
 
+function toTemplate(row: TemplateRow): MessageTemplate {
+  return {
+    id: String(row.id),
+    name: row.name,
+    body: row.body,
+    isDefault: row.is_default,
+  };
+}
+
 /**
  * Всё состояние компании одним запросом — прямая замена чтения localStorage.
  * При сотнях сделок это дешевле, чем множить запросы по страницам; когда
@@ -227,7 +244,10 @@ export async function loadBootstrap(
 ): Promise<Bootstrap> {
   const today = todayIso();
 
-  const [dealRows, clientRows, cashRows, eventRows, settingRows, userRows, coinvestorRows] =
+  const [
+    dealRows, clientRows, cashRows, eventRows, settingRows, userRows,
+    coinvestorRows, templateRows,
+  ] =
     await Promise.all([
       query<DealRow>(dbName, DEALS_SQL),
       query<ClientRow>(dbName, "select * from clients order by created_at desc"),
@@ -244,6 +264,7 @@ export async function loadBootstrap(
          from users order by active desc, name`
       ),
       query<CoinvestorRow>(dbName, "select * from coinvestors order by created_at desc"),
+      query<TemplateRow>(dbName, "select * from message_templates order by created_at"),
     ]);
 
   const deals = dealRows.map((r) => toDeal(r, today));
@@ -285,6 +306,7 @@ export async function loadBootstrap(
       text: r.text,
     })),
     coinvestors: coinvestorRows.map(toCoinvestor),
+    templates: templateRows.map(toTemplate),
     settings: { cashOpeningBalance: Number(opening?.value ?? 0) },
   };
 }
@@ -579,6 +601,83 @@ export async function recordCoinvestorPayout(
     title: row.title,
     coinvestorId,
   };
+}
+
+// ── Шаблоны сообщений ──────────────────────────────────────────────────
+// Отправка идёт вручную через WhatsApp (wa.me) — своей интеграции с
+// WhatsApp Business API у компании нет. Шаблон только подставляет текст;
+// сам переход в WhatsApp и логирование факта отправки — на клиенте
+// (см. POST /api/deals/[id]/remind).
+
+export interface TemplateInput {
+  name: string;
+  body: string;
+}
+
+export async function createTemplate(
+  dbName: string,
+  input: TemplateInput
+): Promise<MessageTemplate> {
+  const row = await queryOne<TemplateRow>(
+    dbName,
+    `insert into message_templates (name, body) values ($1, $2) returning *`,
+    [input.name, input.body]
+  );
+  if (!row) throw new Error("Шаблон не создан");
+  return toTemplate(row);
+}
+
+export async function updateTemplate(
+  dbName: string,
+  id: string,
+  input: TemplateInput
+): Promise<MessageTemplate> {
+  const row = await queryOne<TemplateRow>(
+    dbName,
+    `update message_templates set name = $2, body = $3 where id = $1 returning *`,
+    [id, input.name, input.body]
+  );
+  if (!row) throw new Error(`Шаблон ${id} не найден`);
+  return toTemplate(row);
+}
+
+export async function deleteTemplate(dbName: string, id: string): Promise<void> {
+  await transaction(dbName, async (client) => {
+    const { rows } = await client.query<{ is_default: boolean }>(
+      "delete from message_templates where id = $1 returning is_default",
+      [id]
+    );
+    if (!rows[0]) throw new Error(`Шаблон ${id} не найден`);
+
+    // Без шаблона по умолчанию некому будет собрать текст напоминания —
+    // назначаем ближайший оставшийся, если удалили именно основной
+    if (rows[0].is_default) {
+      await client.query(
+        `update message_templates set is_default = true
+         where id = (select id from message_templates order by created_at limit 1)`
+      );
+    }
+  });
+}
+
+export async function setDefaultTemplate(dbName: string, id: string): Promise<void> {
+  await transaction(dbName, async (client) => {
+    const { rows } = await client.query("select id from message_templates where id = $1", [id]);
+    if (!rows[0]) throw new Error(`Шаблон ${id} не найден`);
+    await client.query("update message_templates set is_default = false");
+    await client.query("update message_templates set is_default = true where id = $1", [id]);
+  });
+}
+
+/** Записывает в историю сделки факт отправки напоминания — сам переход в WhatsApp уже произошёл на клиенте. */
+export async function recordReminderSent(dbName: string, dealId: string): Promise<void> {
+  const deal = await queryOne<{ id: string }>(dbName, "select id from deals where id = $1", [dealId]);
+  if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+  await query(
+    dbName,
+    "insert into deal_events (deal_id, text) values ($1, 'Напоминание об оплате отправлено в WhatsApp')",
+    [dealId]
+  );
 }
 
 // ── Кабинет клиента ────────────────────────────────────────────────────

@@ -66,6 +66,13 @@ export interface Coinvestor {
   active: boolean;
 }
 
+export interface MessageTemplate {
+  id: string;
+  name: string;
+  body: string;
+  isDefault: boolean;
+}
+
 interface Snapshot {
   user: CurrentUser;
   employees: Employee[];
@@ -75,6 +82,7 @@ interface Snapshot {
   cash: CashTx[];
   events: DealEvent[];
   coinvestors: Coinvestor[];
+  templates: MessageTemplate[];
   cashOpeningBalance: number;
 }
 
@@ -87,6 +95,7 @@ const EMPTY: Snapshot = {
   cash: [],
   events: [],
   coinvestors: [],
+  templates: [],
   cashOpeningBalance: 0,
 };
 
@@ -133,6 +142,11 @@ export interface CoinvestorPayoutInput {
   date: string;
 }
 
+export interface TemplateInput {
+  name: string;
+  body: string;
+}
+
 interface DataContextValue extends Snapshot {
   addDeal: (input: NewDealInput) => Promise<Deal>;
   addEmployee: (input: NewEmployeeInput) => Promise<{ password: string }>;
@@ -144,6 +158,11 @@ interface DataContextValue extends Snapshot {
   addCoinvestor: (input: NewCoinvestorInput) => Promise<Coinvestor>;
   setCoinvestorActive: (id: string, active: boolean) => Promise<void>;
   recordCoinvestorPayout: (id: string, input: CoinvestorPayoutInput) => Promise<void>;
+  addTemplate: (input: TemplateInput) => Promise<MessageTemplate>;
+  updateTemplate: (id: string, input: TemplateInput) => Promise<void>;
+  deleteTemplate: (id: string) => Promise<void>;
+  setDefaultTemplate: (id: string) => Promise<void>;
+  sendReminder: (dealId: string) => Promise<void>;
   /** Перечитать всё состояние с сервера. */
   refresh: () => Promise<void>;
 }
@@ -203,6 +222,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       cash: data.cash,
       events: data.events,
       coinvestors: data.coinvestors,
+      templates: data.templates,
       cashOpeningBalance: data.settings.cashOpeningBalance,
     });
   }, []);
@@ -299,6 +319,47 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const addTemplate = useCallback(
+    async (input: TemplateInput): Promise<MessageTemplate> => {
+      const template = await api<MessageTemplate>("/api/templates", input);
+      await load();
+      return template;
+    },
+    [load]
+  );
+
+  const updateTemplateFn = useCallback(
+    async (id: string, input: TemplateInput) => {
+      await api(`/api/templates/${encodeURIComponent(id)}`, input, "PATCH");
+      await load();
+    },
+    [load]
+  );
+
+  const deleteTemplateFn = useCallback(
+    async (id: string) => {
+      await api(`/api/templates/${encodeURIComponent(id)}`, undefined, "DELETE");
+      await load();
+    },
+    [load]
+  );
+
+  const setDefaultTemplate = useCallback(
+    async (id: string) => {
+      await api(`/api/templates/${encodeURIComponent(id)}/default`, {});
+      await load();
+    },
+    [load]
+  );
+
+  const sendReminder = useCallback(
+    async (dealId: string) => {
+      await api(`/api/deals/${encodeURIComponent(dealId)}/remind`, {});
+      await load();
+    },
+    [load]
+  );
+
   const addEmployee = useCallback(
     async (input: NewEmployeeInput) => {
       const res = await api<{ id: number; password: string }>("/api/employees", input);
@@ -331,6 +392,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addCoinvestor,
       setCoinvestorActive,
       recordCoinvestorPayout,
+      addTemplate,
+      updateTemplate: updateTemplateFn,
+      deleteTemplate: deleteTemplateFn,
+      setDefaultTemplate,
+      sendReminder,
       addEmployee,
       setEmployeeActive,
       logout,
@@ -338,6 +404,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }),
     [state, addDeal, addClient, acceptPayment, addCashAdjustment,
      addCoinvestor, setCoinvestorActive, recordCoinvestorPayout,
+     addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,
      addEmployee, setEmployeeActive, logout, refresh]
   );
 
