@@ -20,14 +20,14 @@ export const PG_BASE_URL = (
   process.env.PG_BASE_URL ?? "postgres://localhost:5432"
 ).replace(/\/+$/, "");
 
-export const CONTROL_DB = process.env.CONTROL_DB ?? "finora_control";
+export const CONTROL_DB = process.env.CONTROL_DB ?? "nasiya_control";
 
 // Служебная база для CREATE/DROP DATABASE: нельзя создать базу, будучи
 // подключённым к ней самой, нужна любая посторонняя.
 const MAINTENANCE_DB = process.env.PG_MAINTENANCE_DB ?? "postgres";
 
 export function dbNameForSlug(slug) {
-  return `finora_${slug.replace(/-/g, "_")}`;
+  return `nasiya_${slug.replace(/-/g, "_")}`;
 }
 
 // Открывает соединение, выполняет fn, гарантированно закрывает.

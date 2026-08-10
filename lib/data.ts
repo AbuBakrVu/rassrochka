@@ -1,4 +1,4 @@
-// Моковые данные CRM «Финора» — учёт рассрочек. Сегодня 5 августа 2026 г.
+// Моковые данные CRM «Nasiya» — учёт рассрочек. Сегодня 5 августа 2026 г.
 
 export const fmt = (n: number) =>
   new Intl.NumberFormat("ru-RU").format(n) + " ₽";
@@ -370,7 +370,7 @@ export const seedEmployees: Employee[] = [
     name: "Алексей Соколов",
     role: "Старший менеджер",
     phone: "+7 921 500-10-20",
-    email: "a.sokolov@finora.ru",
+    email: "a.sokolov@nasiya.ru",
     since: "января 2025",
   },
   {
@@ -378,7 +378,7 @@ export const seedEmployees: Employee[] = [
     name: "Мария Кузнецова",
     role: "Менеджер по продажам",
     phone: "+7 911 500-20-30",
-    email: "m.kuznetsova@finora.ru",
+    email: "m.kuznetsova@nasiya.ru",
     since: "июня 2025",
   },
   {
@@ -386,7 +386,7 @@ export const seedEmployees: Employee[] = [
     name: "Дмитрий Соловьёв",
     role: "Менеджер по продажам",
     phone: "+7 981 500-30-40",
-    email: "d.solovyov@finora.ru",
+    email: "d.solovyov@nasiya.ru",
     since: "марта 2026",
   },
 ];

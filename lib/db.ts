@@ -28,15 +28,15 @@ const PG_BASE_URL = (
   process.env.PG_BASE_URL ?? "postgres://localhost:5432"
 ).replace(/\/+$/, "");
 
-export const CONTROL_DB = process.env.CONTROL_DB ?? "finora_control";
+export const CONTROL_DB = process.env.CONTROL_DB ?? "nasiya_control";
 
 // В разработке hot-reload пересоздаёт модули, и пулы плодились бы при каждой
 // правке файла, пока не упрутся в лимит соединений. Держим их на globalThis.
 const globalForDb = globalThis as unknown as {
-  __finoraPools?: Map<string, Pool>;
+  __nasiyaPools?: Map<string, Pool>;
 };
-const pools = globalForDb.__finoraPools ?? new Map<string, Pool>();
-if (process.env.NODE_ENV !== "production") globalForDb.__finoraPools = pools;
+const pools = globalForDb.__nasiyaPools ?? new Map<string, Pool>();
+if (process.env.NODE_ENV !== "production") globalForDb.__nasiyaPools = pools;
 
 export function getPool(dbName: string): Pool {
   const existing = pools.get(dbName);

@@ -2,9 +2,9 @@
 // server-only и тянет pg с argon2, а middleware работает на edge-рантайме
 // и импортировать его не может.
 
-export const SESSION_COOKIE = "finora_session";
+export const SESSION_COOKIE = "nasiya_session";
 
 // Отдельная кука для владельца платформы (/admin) — сессии компаний и
 // платформы не должны пересекаться, это разные модели данных в разных
 // таблицах control-базы.
-export const PLATFORM_SESSION_COOKIE = "finora_platform_session";
+export const PLATFORM_SESSION_COOKIE = "nasiya_platform_session";

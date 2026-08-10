@@ -31,7 +31,7 @@ const SLUG_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 export class ProvisioningError extends Error {}
 
 function dbNameForSlug(slug: string): string {
-  return `finora_${slug.replace(/-/g, "_")}`;
+  return `nasiya_${slug.replace(/-/g, "_")}`;
 }
 
 export interface CompanyRow {

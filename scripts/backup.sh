@@ -1,26 +1,27 @@
 #!/bin/sh
 # Резервное копирование всех баз. Запускается по cron на сервере:
-#   0 3 * * * cd /opt/finora && ./scripts/backup.sh >> /var/log/finora-backup.log 2>&1
+#   0 3 * * * cd /opt/nasiya && ./scripts/backup.sh >> /var/log/nasiya-backup.log 2>&1
 #
 # Данных у клиентов нет НИГДЕ, кроме этого сервера, поэтому копия обязана
 # уезжать за его пределы. Копия рядом с базой не переживёт смерть диска.
 
 set -eu
 
-BACKUP_DIR="${BACKUP_DIR:-/opt/finora/backups}"
+BACKUP_DIR="${BACKUP_DIR:-/opt/nasiya/backups}"
 KEEP_DAYS="${KEEP_DAYS:-7}"
 STAMP="$(date +%F)"
+CONTROL_DB="${CONTROL_DB:-nasiya_control}"
 
 mkdir -p "$BACKUP_DIR"
 
 echo "[$(date '+%F %T')] начало"
 
 # Роли и права — их нет в дампах отдельных баз
-docker compose exec -T db pg_dumpall -U finora --globals-only \
+docker compose exec -T db pg_dumpall -U nasiya --globals-only \
   | gzip > "$BACKUP_DIR/globals-$STAMP.sql.gz"
 
 # Реестр компаний и база каждой из них
-DBS="finora_control $(docker compose exec -T db psql -U finora -d finora_control -tAc \
+DBS="$CONTROL_DB $(docker compose exec -T db psql -U nasiya -d "$CONTROL_DB" -tAc \
   'select db_name from companies' | tr -d '\r')"
 
 for db in $DBS; do
@@ -28,7 +29,7 @@ for db in $DBS; do
   out="$BACKUP_DIR/$db-$STAMP.dump"
 
   # Формат -Fc: сжатый, восстанавливается выборочно через pg_restore
-  docker compose exec -T db pg_dump -U finora -Fc "$db" > "$out"
+  docker compose exec -T db pg_dump -U nasiya -Fc "$db" > "$out"
 
   # Шифруем: в дампах паспортные данные клиентов. Ключ получателя задаётся
   # переменной AGE_RECIPIENT (см. DEPLOY.md). Без неё дамп остаётся открытым
