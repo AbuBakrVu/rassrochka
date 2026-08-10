@@ -11,7 +11,7 @@ import { query, queryOne, transaction } from "./db";
 import { buildRoute, type Client, type Deal, type DealStage } from "./data";
 import { buildSchedule, monthNames } from "./schedule";
 import { computeClientStatus, computeDealStatus, todayIso } from "./status";
-import type { CashTx } from "./store";
+import type { CashTx, Coinvestor } from "./store";
 import type { DealEvent } from "./events";
 
 // ── Формы строк БД ─────────────────────────────────────────────────────
@@ -49,8 +49,19 @@ interface CashRow extends Record<string, unknown> {
   amount: number;
   occurred_at: string;
   deal_id: string | null;
+  coinvestor_id: string | null;
   title: string;
   note: string | null;
+}
+
+interface CoinvestorRow extends Record<string, unknown> {
+  id: string;
+  name: string;
+  phone: string;
+  invested_amount: number;
+  monthly_percent: number;
+  started_at: string;
+  active: boolean;
 }
 
 interface EventRow extends Record<string, unknown> {
@@ -189,7 +200,20 @@ export interface Bootstrap {
   paidPayments: Record<string, number>;
   cash: CashTx[];
   events: DealEvent[];
+  coinvestors: Coinvestor[];
   settings: { cashOpeningBalance: number };
+}
+
+function toCoinvestor(row: CoinvestorRow): Coinvestor {
+  return {
+    id: row.id,
+    name: row.name,
+    phone: row.phone,
+    investedAmount: row.invested_amount,
+    monthlyPercent: row.monthly_percent,
+    startedAt: row.started_at,
+    active: row.active,
+  };
 }
 
 /**
@@ -203,7 +227,7 @@ export async function loadBootstrap(
 ): Promise<Bootstrap> {
   const today = todayIso();
 
-  const [dealRows, clientRows, cashRows, eventRows, settingRows, userRows] =
+  const [dealRows, clientRows, cashRows, eventRows, settingRows, userRows, coinvestorRows] =
     await Promise.all([
       query<DealRow>(dbName, DEALS_SQL),
       query<ClientRow>(dbName, "select * from clients order by created_at desc"),
@@ -219,6 +243,7 @@ export async function loadBootstrap(
         `select id, name, initials, email, phone, role, active, created_at
          from users order by active desc, name`
       ),
+      query<CoinvestorRow>(dbName, "select * from coinvestors order by created_at desc"),
     ]);
 
   const deals = dealRows.map((r) => toDeal(r, today));
@@ -250,6 +275,7 @@ export async function loadBootstrap(
       date: r.occurred_at,
       title: r.title,
       ...(r.deal_id ? { dealId: r.deal_id } : {}),
+      ...(r.coinvestor_id ? { coinvestorId: r.coinvestor_id } : {}),
       ...(r.note ? { note: r.note } : {}),
     })),
     events: eventRows.map((r) => ({
@@ -258,6 +284,7 @@ export async function loadBootstrap(
       date: r.occurred_at.toISOString().slice(0, 10),
       text: r.text,
     })),
+    coinvestors: coinvestorRows.map(toCoinvestor),
     settings: { cashOpeningBalance: Number(opening?.value ?? 0) },
   };
 }
@@ -470,6 +497,87 @@ export async function addCashAdjustment(
     amount: row.amount,
     date: row.occurred_at,
     title: row.title,
+  };
+}
+
+// ── Соинвесторы ────────────────────────────────────────────────────────
+
+export interface NewCoinvestorInput {
+  name: string;
+  phone: string;
+  investedAmount: number;
+  monthlyPercent: number;
+  startedAt: string;
+}
+
+export async function createCoinvestor(
+  dbName: string,
+  input: NewCoinvestorInput
+): Promise<Coinvestor> {
+  const row = await queryOne<CoinvestorRow>(
+    dbName,
+    `insert into coinvestors (name, phone, invested_amount, monthly_percent, started_at)
+     values ($1, $2, $3, $4, $5)
+     returning *`,
+    [
+      input.name,
+      input.phone || "—",
+      input.investedAmount,
+      input.monthlyPercent,
+      input.startedAt,
+    ]
+  );
+  if (!row) throw new Error("Соинвестор не создан");
+  return toCoinvestor(row);
+}
+
+export async function setCoinvestorActive(
+  dbName: string,
+  id: string,
+  active: boolean
+): Promise<void> {
+  const row = await queryOne<{ id: string }>(
+    dbName,
+    "update coinvestors set active = $2 where id = $1 returning id",
+    [id, active]
+  );
+  if (!row) throw new Error(`Соинвестор ${id} не найден`);
+}
+
+export interface CoinvestorPayoutInput {
+  amount: number;
+  date: string;
+}
+
+/** Выплата процента соинвестору — расход из кассы, привязанный к нему. */
+export async function recordCoinvestorPayout(
+  dbName: string,
+  coinvestorId: string,
+  input: CoinvestorPayoutInput
+): Promise<CashTx> {
+  const investor = await queryOne<{ name: string }>(
+    dbName,
+    "select name from coinvestors where id = $1",
+    [coinvestorId]
+  );
+  if (!investor) throw new Error(`Соинвестор ${coinvestorId} не найден`);
+
+  const row = await queryOne<CashRow>(
+    dbName,
+    `insert into cash_tx (kind, amount, occurred_at, coinvestor_id, title)
+     values ('payout', $1, $2, $3, $4)
+     returning id, kind, amount, occurred_at, deal_id, coinvestor_id, title, note`,
+    [-Math.abs(input.amount), input.date, coinvestorId, `Выплата процента · ${investor.name}`]
+  );
+  if (!row) throw new Error("Выплата не создана");
+
+  return {
+    id: String(row.id),
+    kind: row.kind,
+    amount: row.amount,
+    date: row.occurred_at,
+    title: row.title,
+    coinvestorId,
   };
 }
 

@@ -9,6 +9,7 @@ import {
   ShoppingCart,
   ArrowDownToLine,
   SlidersHorizontal,
+  Handshake,
   Plus,
   Minus,
   X,
@@ -41,6 +42,12 @@ const kindMeta: Record<
     bg: "bg-brand-soft",
     text: "text-brand",
   },
+  payout: {
+    label: "Выплата соинвестору",
+    icon: Handshake,
+    bg: "bg-danger-soft",
+    text: "text-danger",
+  },
 };
 
 const filters = [
@@ -48,6 +55,7 @@ const filters = [
   { key: "payment", label: "Приход" },
   { key: "purchase", label: "Расход" },
   { key: "adjustment", label: "Корректировки" },
+  { key: "payout", label: "Выплаты соинвесторам" },
 ] as const;
 
 const input =

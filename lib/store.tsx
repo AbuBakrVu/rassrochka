@@ -43,7 +43,7 @@ export interface Employee {
 // одинаковой для всех. Теперь это настройка компании: приезжает в bootstrap
 // как cashOpeningBalance и у каждой компании своя.
 
-export type CashKind = "purchase" | "payment" | "adjustment";
+export type CashKind = "purchase" | "payment" | "adjustment" | "payout";
 
 export interface CashTx {
   id: string;
@@ -51,8 +51,19 @@ export interface CashTx {
   amount: number; // отрицательная — расход, положительная — приход
   date: string; // ISO
   dealId?: string;
+  coinvestorId?: string;
   title: string;
   note?: string;
+}
+
+export interface Coinvestor {
+  id: string;
+  name: string;
+  phone: string;
+  investedAmount: number;
+  monthlyPercent: number;
+  startedAt: string;
+  active: boolean;
 }
 
 interface Snapshot {
@@ -63,6 +74,7 @@ interface Snapshot {
   paidPayments: Record<string, number>;
   cash: CashTx[];
   events: DealEvent[];
+  coinvestors: Coinvestor[];
   cashOpeningBalance: number;
 }
 
@@ -74,6 +86,7 @@ const EMPTY: Snapshot = {
   paidPayments: {},
   cash: [],
   events: [],
+  coinvestors: [],
   cashOpeningBalance: 0,
 };
 
@@ -107,6 +120,19 @@ export interface NewEmployeeInput {
   role: "admin" | "manager";
 }
 
+export interface NewCoinvestorInput {
+  name: string;
+  phone: string;
+  investedAmount: number;
+  monthlyPercent: number;
+  startedAt: string;
+}
+
+export interface CoinvestorPayoutInput {
+  amount: number;
+  date: string;
+}
+
 interface DataContextValue extends Snapshot {
   addDeal: (input: NewDealInput) => Promise<Deal>;
   addEmployee: (input: NewEmployeeInput) => Promise<{ password: string }>;
@@ -115,6 +141,9 @@ interface DataContextValue extends Snapshot {
   addClient: (input: NewClientInput) => Promise<Client>;
   acceptPayment: (dealId: string) => Promise<void>;
   addCashAdjustment: (input: CashAdjustmentInput) => Promise<void>;
+  addCoinvestor: (input: NewCoinvestorInput) => Promise<Coinvestor>;
+  setCoinvestorActive: (id: string, active: boolean) => Promise<void>;
+  recordCoinvestorPayout: (id: string, input: CoinvestorPayoutInput) => Promise<void>;
   /** Перечитать всё состояние с сервера. */
   refresh: () => Promise<void>;
 }
@@ -173,6 +202,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       paidPayments: data.paidPayments,
       cash: data.cash,
       events: data.events,
+      coinvestors: data.coinvestors,
       cashOpeningBalance: data.settings.cashOpeningBalance,
     });
   }, []);
@@ -244,6 +274,31 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const addCoinvestor = useCallback(
+    async (input: NewCoinvestorInput): Promise<Coinvestor> => {
+      const investor = await api<Coinvestor>("/api/coinvestors", input);
+      await load();
+      return investor;
+    },
+    [load]
+  );
+
+  const setCoinvestorActive = useCallback(
+    async (id: string, active: boolean) => {
+      await api(`/api/coinvestors/${encodeURIComponent(id)}`, { active }, "PATCH");
+      await load();
+    },
+    [load]
+  );
+
+  const recordCoinvestorPayout = useCallback(
+    async (id: string, input: CoinvestorPayoutInput) => {
+      await api(`/api/coinvestors/${encodeURIComponent(id)}/payout`, input);
+      await load();
+    },
+    [load]
+  );
+
   const addEmployee = useCallback(
     async (input: NewEmployeeInput) => {
       const res = await api<{ id: number; password: string }>("/api/employees", input);
@@ -273,12 +328,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addClient,
       acceptPayment,
       addCashAdjustment,
+      addCoinvestor,
+      setCoinvestorActive,
+      recordCoinvestorPayout,
       addEmployee,
       setEmployeeActive,
       logout,
       refresh,
     }),
     [state, addDeal, addClient, acceptPayment, addCashAdjustment,
+     addCoinvestor, setCoinvestorActive, recordCoinvestorPayout,
      addEmployee, setEmployeeActive, logout, refresh]
   );
 
