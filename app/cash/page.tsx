@@ -10,6 +10,7 @@ import {
   ArrowDownToLine,
   SlidersHorizontal,
   Handshake,
+  PiggyBank,
   Plus,
   Minus,
   X,
@@ -48,15 +49,32 @@ const kindMeta: Record<
     bg: "bg-danger-soft",
     text: "text-danger",
   },
+  capital_deposit: {
+    label: "Пополнение капитала",
+    icon: PiggyBank,
+    bg: "bg-good-soft",
+    text: "text-good",
+  },
+  capital_withdrawal: {
+    label: "Снятие капитала",
+    icon: PiggyBank,
+    bg: "bg-danger-soft",
+    text: "text-danger",
+  },
 };
 
 const filters = [
-  { key: "all", label: "Все" },
-  { key: "payment", label: "Приход" },
-  { key: "purchase", label: "Расход" },
-  { key: "adjustment", label: "Корректировки" },
-  { key: "payout", label: "Выплаты соинвесторам" },
-] as const;
+  { key: "all", label: "Все", kinds: null },
+  { key: "payment", label: "Приход", kinds: ["payment"] },
+  { key: "purchase", label: "Расход", kinds: ["purchase"] },
+  { key: "adjustment", label: "Корректировки", kinds: ["adjustment"] },
+  { key: "payout", label: "Выплаты соинвесторам", kinds: ["payout"] },
+  {
+    key: "capital",
+    label: "Капитал соинвесторов",
+    kinds: ["capital_deposit", "capital_withdrawal"],
+  },
+] as const satisfies { key: string; label: string; kinds: readonly CashKind[] | null }[];
 
 const input =
   "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
@@ -215,12 +233,13 @@ export default function CashPage() {
     [cash, monthPrefix]
   );
 
+  const activeKinds = filters.find((f) => f.key === filter)?.kinds ?? null;
   const list = useMemo(
     () =>
       [...cash]
-        .filter((t) => filter === "all" || t.kind === filter)
+        .filter((t) => !activeKinds || (activeKinds as readonly string[]).includes(t.kind))
         .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)),
-    [cash, filter]
+    [cash, activeKinds]
   );
 
   const kpis = [

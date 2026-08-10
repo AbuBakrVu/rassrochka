@@ -7,11 +7,18 @@ import "server-only";
 // на этапе 3 меняются только внутренности lib/store.tsx, а страницы,
 // lib/derive.ts и buildRoute продолжают работать без единой правки.
 
+import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
 import { buildRoute, type Client, type Deal, type DealStage } from "./data";
 import { buildSchedule, monthNames } from "./schedule";
 import { computeClientStatus, computeDealStatus, todayIso } from "./status";
-import type { CashTx, Coinvestor, MessageTemplate } from "./store";
+import type {
+  CashTx,
+  Coinvestor,
+  CoinvestorCapitalTx,
+  CoinvestorProfitTx,
+  MessageTemplate,
+} from "./store";
 import type { DealEvent } from "./events";
 
 // ── Формы строк БД ─────────────────────────────────────────────────────
@@ -58,10 +65,28 @@ interface CoinvestorRow extends Record<string, unknown> {
   id: string;
   name: string;
   phone: string;
-  invested_amount: number;
-  monthly_percent: number;
+  profit_share_pct: number;
   started_at: string;
   active: boolean;
+}
+
+interface CoinvestorCapitalRow extends Record<string, unknown> {
+  id: string;
+  coinvestor_id: string;
+  kind: CoinvestorCapitalTx["kind"];
+  amount: number;
+  occurred_at: string;
+  note: string | null;
+}
+
+interface CoinvestorProfitRow extends Record<string, unknown> {
+  id: string;
+  coinvestor_id: string;
+  deal_id: string | null;
+  kind: CoinvestorProfitTx["kind"];
+  amount: number;
+  occurred_at: Date;
+  note: string | null;
 }
 
 interface TemplateRow extends Record<string, unknown> {
@@ -208,19 +233,74 @@ export interface Bootstrap {
   cash: CashTx[];
   events: DealEvent[];
   coinvestors: Coinvestor[];
+  coinvestorCapitalTx: CoinvestorCapitalTx[];
+  coinvestorProfitTx: CoinvestorProfitTx[];
   templates: MessageTemplate[];
   settings: { cashOpeningBalance: number };
 }
 
-function toCoinvestor(row: CoinvestorRow): Coinvestor {
+function toCapitalTx(row: CoinvestorCapitalRow): CoinvestorCapitalTx {
+  return {
+    id: String(row.id),
+    coinvestorId: row.coinvestor_id,
+    kind: row.kind,
+    amount: row.amount,
+    date: row.occurred_at,
+    ...(row.note ? { note: row.note } : {}),
+  };
+}
+
+function toProfitTx(row: CoinvestorProfitRow): CoinvestorProfitTx {
+  return {
+    id: String(row.id),
+    coinvestorId: row.coinvestor_id,
+    kind: row.kind,
+    amount: row.amount,
+    date: row.occurred_at.toISOString(),
+    ...(row.deal_id ? { dealId: row.deal_id } : {}),
+    ...(row.note ? { note: row.note } : {}),
+  };
+}
+
+/**
+ * Капитал, начисления и остаток к выплате — не хранятся отдельно, а
+ * считаются из журналов при каждом чтении. Это меньше данных для
+ * рассинхронизации: правда всегда в проводках, а не в кэширующем счётчике.
+ */
+function toCoinvestor(
+  row: CoinvestorRow,
+  capitalTx: CoinvestorCapitalTx[],
+  profitTx: CoinvestorProfitTx[]
+): Coinvestor {
+  const ownCapital = capitalTx.filter((t) => t.coinvestorId === row.id);
+  const ownProfit = profitTx.filter((t) => t.coinvestorId === row.id);
+
+  const capital =
+    ownCapital
+      .filter((t) => t.kind === "deposit" || t.kind === "reinvest")
+      .reduce((s, t) => s + t.amount, 0) -
+    ownCapital
+      .filter((t) => t.kind === "withdrawal")
+      .reduce((s, t) => s + t.amount, 0);
+
+  const accrued = ownProfit
+    .filter((t) => t.kind === "accrual")
+    .reduce((s, t) => s + t.amount, 0);
+  const settled = ownProfit
+    .filter((t) => t.kind === "payout" || t.kind === "reinvest")
+    .reduce((s, t) => s + t.amount, 0);
+
   return {
     id: row.id,
     name: row.name,
     phone: row.phone,
-    investedAmount: row.invested_amount,
-    monthlyPercent: row.monthly_percent,
+    profitSharePct: row.profit_share_pct,
     startedAt: row.started_at,
     active: row.active,
+    capital,
+    accrued,
+    settled,
+    owed: accrued - settled,
   };
 }
 
@@ -246,7 +326,7 @@ export async function loadBootstrap(
 
   const [
     dealRows, clientRows, cashRows, eventRows, settingRows, userRows,
-    coinvestorRows, templateRows,
+    coinvestorRows, capitalRows, profitRows, templateRows,
   ] =
     await Promise.all([
       query<DealRow>(dbName, DEALS_SQL),
@@ -264,8 +344,19 @@ export async function loadBootstrap(
          from users order by active desc, name`
       ),
       query<CoinvestorRow>(dbName, "select * from coinvestors order by created_at desc"),
+      query<CoinvestorCapitalRow>(
+        dbName,
+        "select * from coinvestor_capital_tx order by occurred_at desc, id desc"
+      ),
+      query<CoinvestorProfitRow>(
+        dbName,
+        "select * from coinvestor_profit_tx order by occurred_at desc, id desc"
+      ),
       query<TemplateRow>(dbName, "select * from message_templates order by created_at"),
     ]);
+
+  const coinvestorCapitalTx = capitalRows.map(toCapitalTx);
+  const coinvestorProfitTx = profitRows.map(toProfitTx);
 
   const deals = dealRows.map((r) => toDeal(r, today));
 
@@ -305,7 +396,11 @@ export async function loadBootstrap(
       date: r.occurred_at.toISOString().slice(0, 10),
       text: r.text,
     })),
-    coinvestors: coinvestorRows.map(toCoinvestor),
+    coinvestors: coinvestorRows.map((r) =>
+      toCoinvestor(r, coinvestorCapitalTx, coinvestorProfitTx)
+    ),
+    coinvestorCapitalTx,
+    coinvestorProfitTx,
     templates: templateRows.map(toTemplate),
     settings: { cashOpeningBalance: Number(opening?.value ?? 0) },
   };
@@ -503,12 +598,13 @@ export async function acceptPayment(
       id: string;
       amount: number;
       months: number;
+      markup_pct: number;
       paid_count: number;
       opened_at: string;
       product: string;
       client_name: string;
     }>(
-      `select d.id, d.amount, d.months, d.paid_count, d.opened_at, d.product,
+      `select d.id, d.amount, d.months, d.markup_pct, d.paid_count, d.opened_at, d.product,
               c.name as client_name
        from deals d join clients c on c.id = d.client_id
        where d.id = $1
@@ -564,6 +660,16 @@ export async function acceptPayment(
       ]
     );
 
+    await accrueCoinvestorProfit(
+      client,
+      dealId,
+      deal.amount,
+      deal.months,
+      deal.markup_pct,
+      deal.product,
+      next
+    );
+
     return false;
   });
 
@@ -601,34 +707,131 @@ export async function addCashAdjustment(
 }
 
 // ── Соинвесторы ────────────────────────────────────────────────────────
+//
+// Модель: доля соинвестора — процент от РЕАЛЬНОЙ прибыли кассы, а не от
+// вложенной суммы. Прибыль начисляется автоматически с каждого принятого
+// платежа (см. вызов accrueCoinvestorProfit внутри acceptPayment), пропорционально
+// марже конкретной сделки. Капитал — отдельный журнал (пополнение / снятие /
+// реинвестирование), а не статичное поле: так видно, откуда взялась каждая сумма.
+
+async function loadCoinvestor(dbName: string, id: string): Promise<Coinvestor> {
+  const row = await queryOne<CoinvestorRow>(
+    dbName,
+    "select * from coinvestors where id = $1",
+    [id]
+  );
+  if (!row) throw new Error(`Соинвестор ${id} не найден`);
+
+  const [capitalRows, profitRows] = await Promise.all([
+    query<CoinvestorCapitalRow>(
+      dbName,
+      "select * from coinvestor_capital_tx where coinvestor_id = $1",
+      [id]
+    ),
+    query<CoinvestorProfitRow>(
+      dbName,
+      "select * from coinvestor_profit_tx where coinvestor_id = $1",
+      [id]
+    ),
+  ]);
+
+  return toCoinvestor(row, capitalRows.map(toCapitalTx), profitRows.map(toProfitTx));
+}
+
+/**
+ * Начисляет долю прибыли всем активным соинвесторам с одного принятого
+ * платежа. Вызывается изнутри транзакции acceptPayment — маржа сделки
+ * (amount - purchase) размазана поровну по всем взносам, поэтому доля с
+ * каждого платежа одинакова независимо от того, какой он по счёту.
+ */
+async function accrueCoinvestorProfit(
+  client: PoolClient,
+  dealId: string,
+  dealAmount: number,
+  months: number,
+  markupPct: number,
+  product: string,
+  installmentNumber: number
+): Promise<void> {
+  const purchase = dealAmount - Math.round((dealAmount * markupPct) / 100);
+  const totalMargin = dealAmount - purchase;
+  const marginPerInstallment = totalMargin / months;
+  if (marginPerInstallment <= 0) return;
+
+  const { rows: investors } = await client.query<{ id: string; name: string; profit_share_pct: number }>(
+    "select id, name, profit_share_pct from coinvestors where active"
+  );
+
+  for (const investor of investors) {
+    const share = (marginPerInstallment * investor.profit_share_pct) / 100;
+    if (share <= 0) continue;
+    await client.query(
+      `insert into coinvestor_profit_tx (coinvestor_id, deal_id, kind, amount, note)
+       values ($1, $2, 'accrual', $3, $4)`,
+      [investor.id, dealId, share, `Доля с платежа ${installmentNumber} из ${months} · ${product}`]
+    );
+  }
+}
 
 export interface NewCoinvestorInput {
   name: string;
   phone: string;
-  investedAmount: number;
-  monthlyPercent: number;
+  profitSharePct: number;
   startedAt: string;
+  /** Необязательный стартовый взнос — если указан, сразу заводит запись в журнале капитала. */
+  openingCapital?: number;
 }
 
 export async function createCoinvestor(
   dbName: string,
   input: NewCoinvestorInput
 ): Promise<Coinvestor> {
-  const row = await queryOne<CoinvestorRow>(
+  const id = await transaction(dbName, async (client) => {
+    const { rows } = await client.query<{ id: string }>(
+      `insert into coinvestors (name, phone, profit_share_pct, started_at)
+       values ($1, $2, $3, $4)
+       returning id`,
+      [input.name, input.phone || "—", input.profitSharePct, input.startedAt]
+    );
+    const coinvestorId = rows[0].id;
+
+    if (input.openingCapital && input.openingCapital > 0) {
+      await client.query(
+        `insert into coinvestor_capital_tx (coinvestor_id, kind, amount, occurred_at, note)
+         values ($1, 'deposit', $2, $3, 'Стартовый капитал')`,
+        [coinvestorId, input.openingCapital, input.startedAt]
+      );
+      await client.query(
+        `insert into cash_tx (kind, amount, occurred_at, coinvestor_id, title)
+         values ('capital_deposit', $1, $2, $3, $4)`,
+        [input.openingCapital, input.startedAt, coinvestorId, `Пополнение капитала · ${input.name}`]
+      );
+    }
+
+    return coinvestorId;
+  });
+
+  return loadCoinvestor(dbName, id);
+}
+
+export interface UpdateCoinvestorInput {
+  name: string;
+  phone: string;
+  profitSharePct: number;
+}
+
+export async function updateCoinvestor(
+  dbName: string,
+  id: string,
+  input: UpdateCoinvestorInput
+): Promise<Coinvestor> {
+  const row = await queryOne<{ id: string }>(
     dbName,
-    `insert into coinvestors (name, phone, invested_amount, monthly_percent, started_at)
-     values ($1, $2, $3, $4, $5)
-     returning *`,
-    [
-      input.name,
-      input.phone || "—",
-      input.investedAmount,
-      input.monthlyPercent,
-      input.startedAt,
-    ]
+    "update coinvestors set name = $2, phone = $3, profit_share_pct = $4 where id = $1 returning id",
+    [id, input.name, input.phone || "—", input.profitSharePct]
   );
-  if (!row) throw new Error("Соинвестор не создан");
-  return toCoinvestor(row);
+  if (!row) throw new Error(`Соинвестор ${id} не найден`);
+  return loadCoinvestor(dbName, id);
 }
 
 export async function setCoinvestorActive(
@@ -644,41 +847,139 @@ export async function setCoinvestorActive(
   if (!row) throw new Error(`Соинвестор ${id} не найден`);
 }
 
+/**
+ * Удаляет соинвестора целиком — только если по нему нет финансовой истории
+ * (капитал уже снят до нуля, начисления выплачены/реинвестированы). Иначе
+ * пропала бы часть бухгалтерии кассы без следа.
+ */
+export async function deleteCoinvestor(dbName: string, id: string): Promise<void> {
+  const investor = await loadCoinvestor(dbName, id);
+  if (investor.capital !== 0 || investor.owed !== 0) {
+    throw new Error("HAS_HISTORY");
+  }
+  await query(dbName, "delete from coinvestors where id = $1", [id]);
+}
+
 export interface CoinvestorPayoutInput {
   amount: number;
   date: string;
 }
 
-/** Выплата процента соинвестору — расход из кассы, привязанный к нему. */
+/** Выплата начисленной прибыли деньгами — реальный расход из кассы. */
 export async function recordCoinvestorPayout(
   dbName: string,
   coinvestorId: string,
   input: CoinvestorPayoutInput
-): Promise<CashTx> {
-  const investor = await queryOne<{ name: string }>(
-    dbName,
-    "select name from coinvestors where id = $1",
-    [coinvestorId]
-  );
-  if (!investor) throw new Error(`Соинвестор ${coinvestorId} не найден`);
+): Promise<Coinvestor> {
+  await transaction(dbName, async (client) => {
+    const { rows } = await client.query<{ name: string }>(
+      "select name from coinvestors where id = $1",
+      [coinvestorId]
+    );
+    const investor = rows[0];
+    if (!investor) throw new Error(`Соинвестор ${coinvestorId} не найден`);
 
-  const row = await queryOne<CashRow>(
-    dbName,
-    `insert into cash_tx (kind, amount, occurred_at, coinvestor_id, title)
-     values ('payout', $1, $2, $3, $4)
-     returning id, kind, amount, occurred_at, deal_id, coinvestor_id, title, note`,
-    [-Math.abs(input.amount), input.date, coinvestorId, `Выплата процента · ${investor.name}`]
-  );
-  if (!row) throw new Error("Выплата не создана");
+    const amount = Math.abs(input.amount);
+    await client.query(
+      `insert into cash_tx (kind, amount, occurred_at, coinvestor_id, title)
+       values ('payout', $1, $2, $3, $4)`,
+      [-amount, input.date, coinvestorId, `Выплата прибыли · ${investor.name}`]
+    );
+    await client.query(
+      `insert into coinvestor_profit_tx (coinvestor_id, kind, amount, occurred_at, note)
+       values ($1, 'payout', $2, $3, 'Выплата деньгами')`,
+      [coinvestorId, amount, input.date]
+    );
+  });
 
-  return {
-    id: String(row.id),
-    kind: row.kind,
-    amount: row.amount,
-    date: row.occurred_at,
-    title: row.title,
-    coinvestorId,
-  };
+  return loadCoinvestor(dbName, coinvestorId);
+}
+
+export interface CoinvestorReinvestInput {
+  amount: number;
+  date: string;
+}
+
+/**
+ * Начисленное превращается в капитал без движения денег в кассе — сумма и
+ * так уже лежит в кассе (пришла с платежами клиентов), просто меняет
+ * назначение с «долг инвестору» на «его вложение».
+ */
+export async function reinvestCoinvestorProfit(
+  dbName: string,
+  coinvestorId: string,
+  input: CoinvestorReinvestInput
+): Promise<Coinvestor> {
+  await transaction(dbName, async (client) => {
+    const { rows } = await client.query("select id from coinvestors where id = $1", [coinvestorId]);
+    if (!rows[0]) throw new Error(`Соинвестор ${coinvestorId} не найден`);
+
+    const amount = Math.abs(input.amount);
+    await client.query(
+      `insert into coinvestor_profit_tx (coinvestor_id, kind, amount, occurred_at, note)
+       values ($1, 'reinvest', $2, $3, 'Реинвестирование прибыли')`,
+      [coinvestorId, amount, input.date]
+    );
+    await client.query(
+      `insert into coinvestor_capital_tx (coinvestor_id, kind, amount, occurred_at, note)
+       values ($1, 'reinvest', $2, $3, 'Из начисленной прибыли')`,
+      [coinvestorId, amount, input.date]
+    );
+  });
+
+  return loadCoinvestor(dbName, coinvestorId);
+}
+
+export interface CoinvestorCapitalInput {
+  direction: "deposit" | "withdrawal";
+  amount: number;
+  date: string;
+  note?: string;
+}
+
+/** Пополнение или снятие капитала — реальное движение денег в кассе компании. */
+export async function adjustCoinvestorCapital(
+  dbName: string,
+  coinvestorId: string,
+  input: CoinvestorCapitalInput
+): Promise<Coinvestor> {
+  await transaction(dbName, async (client) => {
+    const { rows } = await client.query<{ name: string }>(
+      "select name from coinvestors where id = $1",
+      [coinvestorId]
+    );
+    const investor = rows[0];
+    if (!investor) throw new Error(`Соинвестор ${coinvestorId} не найден`);
+
+    if (input.direction === "withdrawal") {
+      const { rows: capRows } = await client.query<{ capital: string }>(
+        `select coalesce(sum(case when kind = 'withdrawal' then -amount else amount end), 0) as capital
+         from coinvestor_capital_tx where coinvestor_id = $1`,
+        [coinvestorId]
+      );
+      if (Number(capRows[0].capital) < input.amount) {
+        throw new Error("NOT_ENOUGH_CAPITAL");
+      }
+    }
+
+    const kind = input.direction === "deposit" ? "deposit" : "withdrawal";
+    const cashKind = input.direction === "deposit" ? "capital_deposit" : "capital_withdrawal";
+    const cashAmount = input.direction === "deposit" ? input.amount : -input.amount;
+    const label = input.direction === "deposit" ? "Пополнение капитала" : "Снятие капитала";
+
+    await client.query(
+      `insert into coinvestor_capital_tx (coinvestor_id, kind, amount, occurred_at, note)
+       values ($1, $2, $3, $4, $5)`,
+      [coinvestorId, kind, input.amount, input.date, input.note ?? null]
+    );
+    await client.query(
+      `insert into cash_tx (kind, amount, occurred_at, coinvestor_id, title, note)
+       values ($1, $2, $3, $4, $5, $6)`,
+      [cashKind, cashAmount, input.date, coinvestorId, `${label} · ${investor.name}`, input.note ?? null]
+    );
+  });
+
+  return loadCoinvestor(dbName, coinvestorId);
 }
 
 // ── Шаблоны сообщений ──────────────────────────────────────────────────

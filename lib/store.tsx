@@ -43,7 +43,13 @@ export interface Employee {
 // одинаковой для всех. Теперь это настройка компании: приезжает в bootstrap
 // как cashOpeningBalance и у каждой компании своя.
 
-export type CashKind = "purchase" | "payment" | "adjustment" | "payout";
+export type CashKind =
+  | "purchase"
+  | "payment"
+  | "adjustment"
+  | "payout"
+  | "capital_deposit"
+  | "capital_withdrawal";
 
 export interface CashTx {
   id: string;
@@ -60,10 +66,36 @@ export interface Coinvestor {
   id: string;
   name: string;
   phone: string;
-  investedAmount: number;
-  monthlyPercent: number;
+  profitSharePct: number;
   startedAt: string;
   active: boolean;
+  /** Текущий вложенный капитал — сумма журнала coinvestorCapitalTx. */
+  capital: number;
+  /** Начислено прибыли за всё время. */
+  accrued: number;
+  /** Выплачено деньгами + реинвестировано. */
+  settled: number;
+  /** К выплате прямо сейчас = accrued - settled. */
+  owed: number;
+}
+
+export interface CoinvestorCapitalTx {
+  id: string;
+  coinvestorId: string;
+  kind: "deposit" | "withdrawal" | "reinvest";
+  amount: number;
+  date: string;
+  note?: string;
+}
+
+export interface CoinvestorProfitTx {
+  id: string;
+  coinvestorId: string;
+  dealId?: string;
+  kind: "accrual" | "payout" | "reinvest";
+  amount: number;
+  date: string;
+  note?: string;
 }
 
 export interface MessageTemplate {
@@ -82,6 +114,8 @@ interface Snapshot {
   cash: CashTx[];
   events: DealEvent[];
   coinvestors: Coinvestor[];
+  coinvestorCapitalTx: CoinvestorCapitalTx[];
+  coinvestorProfitTx: CoinvestorProfitTx[];
   templates: MessageTemplate[];
   cashOpeningBalance: number;
 }
@@ -95,6 +129,8 @@ const EMPTY: Snapshot = {
   cash: [],
   events: [],
   coinvestors: [],
+  coinvestorCapitalTx: [],
+  coinvestorProfitTx: [],
   templates: [],
   cashOpeningBalance: 0,
 };
@@ -147,14 +183,32 @@ export interface UpdateEmployeeInput {
 export interface NewCoinvestorInput {
   name: string;
   phone: string;
-  investedAmount: number;
-  monthlyPercent: number;
+  profitSharePct: number;
   startedAt: string;
+  openingCapital?: number;
+}
+
+export interface UpdateCoinvestorInput {
+  name: string;
+  phone: string;
+  profitSharePct: number;
 }
 
 export interface CoinvestorPayoutInput {
   amount: number;
   date: string;
+}
+
+export interface CoinvestorReinvestInput {
+  amount: number;
+  date: string;
+}
+
+export interface CoinvestorCapitalInput {
+  direction: "deposit" | "withdrawal";
+  amount: number;
+  date: string;
+  note?: string;
 }
 
 export interface TemplateInput {
@@ -173,8 +227,12 @@ interface DataContextValue extends Snapshot {
   acceptPayment: (dealId: string) => Promise<void>;
   addCashAdjustment: (input: CashAdjustmentInput) => Promise<void>;
   addCoinvestor: (input: NewCoinvestorInput) => Promise<Coinvestor>;
+  updateCoinvestor: (id: string, input: UpdateCoinvestorInput) => Promise<void>;
   setCoinvestorActive: (id: string, active: boolean) => Promise<void>;
+  deleteCoinvestor: (id: string) => Promise<void>;
   recordCoinvestorPayout: (id: string, input: CoinvestorPayoutInput) => Promise<void>;
+  reinvestCoinvestorProfit: (id: string, input: CoinvestorReinvestInput) => Promise<void>;
+  adjustCoinvestorCapital: (id: string, input: CoinvestorCapitalInput) => Promise<void>;
   addTemplate: (input: TemplateInput) => Promise<MessageTemplate>;
   updateTemplate: (id: string, input: TemplateInput) => Promise<void>;
   deleteTemplate: (id: string) => Promise<void>;
@@ -239,6 +297,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       cash: data.cash,
       events: data.events,
       coinvestors: data.coinvestors,
+      coinvestorCapitalTx: data.coinvestorCapitalTx,
+      coinvestorProfitTx: data.coinvestorProfitTx,
       templates: data.templates,
       cashOpeningBalance: data.settings.cashOpeningBalance,
     });
@@ -333,6 +393,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const updateCoinvestor = useCallback(
+    async (id: string, input: UpdateCoinvestorInput) => {
+      await api(`/api/coinvestors/${encodeURIComponent(id)}`, input, "PATCH");
+      await load();
+    },
+    [load]
+  );
+
   const setCoinvestorActive = useCallback(
     async (id: string, active: boolean) => {
       await api(`/api/coinvestors/${encodeURIComponent(id)}`, { active }, "PATCH");
@@ -341,9 +409,33 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const deleteCoinvestor = useCallback(
+    async (id: string) => {
+      await api(`/api/coinvestors/${encodeURIComponent(id)}`, undefined, "DELETE");
+      await load();
+    },
+    [load]
+  );
+
   const recordCoinvestorPayout = useCallback(
     async (id: string, input: CoinvestorPayoutInput) => {
       await api(`/api/coinvestors/${encodeURIComponent(id)}/payout`, input);
+      await load();
+    },
+    [load]
+  );
+
+  const reinvestCoinvestorProfit = useCallback(
+    async (id: string, input: CoinvestorReinvestInput) => {
+      await api(`/api/coinvestors/${encodeURIComponent(id)}/reinvest`, input);
+      await load();
+    },
+    [load]
+  );
+
+  const adjustCoinvestorCapital = useCallback(
+    async (id: string, input: CoinvestorCapitalInput) => {
+      await api(`/api/coinvestors/${encodeURIComponent(id)}/capital`, input);
       await load();
     },
     [load]
@@ -429,8 +521,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       acceptPayment,
       addCashAdjustment,
       addCoinvestor,
+      updateCoinvestor,
       setCoinvestorActive,
+      deleteCoinvestor,
       recordCoinvestorPayout,
+      reinvestCoinvestorProfit,
+      adjustCoinvestorCapital,
       addTemplate,
       updateTemplate: updateTemplateFn,
       deleteTemplate: deleteTemplateFn,
@@ -443,7 +539,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       refresh,
     }),
     [state, addDeal, updateDeal, addClient, acceptPayment, addCashAdjustment,
-     addCoinvestor, setCoinvestorActive, recordCoinvestorPayout,
+     addCoinvestor, updateCoinvestor, setCoinvestorActive, deleteCoinvestor,
+     recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,
      addEmployee, updateEmployee, setEmployeeActive, logout, refresh]
   );
