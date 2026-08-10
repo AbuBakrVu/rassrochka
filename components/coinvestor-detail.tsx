@@ -17,6 +17,7 @@ import {
   Trash2,
   SearchX,
   Phone,
+  Percent,
 } from "lucide-react";
 import { Card, Badge, EmptyState } from "@/components/ui";
 import { money, longDate } from "@/lib/schedule";
@@ -127,6 +128,34 @@ export default function CoinvestorDetail({ id }: { id: string }) {
   ].sort((a, b) => b.date.localeCompare(a.date));
 
   const list = rows.filter((r) => filter === "all" || r.group === filter);
+
+  // Кумулятивные ряды для графиков — считаем от начала журнала к текущему моменту
+  const cumulative = (points: { date: string; delta: number }[]) => {
+    let running = 0;
+    return [...points]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((p) => {
+        running += p.delta;
+        return { date: p.date, value: running };
+      });
+  };
+
+  const capitalSeries = cumulative(
+    coinvestorCapitalTx
+      .filter((t) => t.coinvestorId === id)
+      .map((t) => ({ date: t.date, delta: t.kind === "withdrawal" ? -t.amount : t.amount }))
+  );
+  const accruedSeries = cumulative(
+    coinvestorProfitTx
+      .filter((t) => t.coinvestorId === id && t.kind === "accrual")
+      .map((t) => ({ date: t.date, delta: t.amount }))
+  );
+  const settledSeries = cumulative(
+    coinvestorProfitTx
+      .filter((t) => t.coinvestorId === id && (t.kind === "payout" || t.kind === "reinvest"))
+      .map((t) => ({ date: t.date, delta: t.amount }))
+  );
+  const chartsAvailable = capitalSeries.length > 0 || accruedSeries.length > 0;
 
   const toggleActive = async () => {
     setBusy(true);
@@ -252,20 +281,39 @@ export default function CoinvestorDetail({ id }: { id: string }) {
           )}
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-5 sm:grid-cols-4">
-          {[
-            ["Капитал", money(investor.capital), ""],
-            ["Начислено всего", money(investor.accrued), ""],
-            ["Выплачено и реинвестировано", money(investor.settled), ""],
-            ["К выплате", money(investor.owed), investor.owed > 0 ? "text-warn" : ""],
-          ].map(([label, value, cls]) => (
-            <div key={label}>
-              <p className="text-sm text-mute">{label}</p>
-              <p className={`mt-0.5 text-lg font-semibold tracking-tight ${cls}`}>{value}</p>
-            </div>
-          ))}
-        </div>
       </Card>
+
+      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard icon={Wallet} label="Капитал" value={money(investor.capital)} />
+        <StatCard icon={TrendingUp} label="Начислено всего" value={money(investor.accrued)} tone="good" />
+        <StatCard icon={HandCoins} label="Выплачено и реинвестировано" value={money(investor.settled)} />
+        <StatCard
+          icon={Percent}
+          label="К выплате"
+          value={money(investor.owed)}
+          tone={investor.owed > 0 ? "warn" : undefined}
+        />
+      </div>
+
+      {chartsAvailable && (
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card className="p-5">
+            <p className="font-semibold">Капитал во времени</p>
+            <p className="mb-3 text-sm text-mute">Сумма вложений после каждой операции</p>
+            <TrendChart series={[{ label: "Капитал", color: "var(--color-brand)", points: capitalSeries }]} />
+          </Card>
+          <Card className="p-5">
+            <p className="font-semibold">Прибыль во времени</p>
+            <p className="mb-3 text-sm text-mute">Начислено нарастающим итогом и выплачено</p>
+            <TrendChart
+              series={[
+                { label: "Начислено", color: "var(--color-good)", points: accruedSeries },
+                { label: "Выплачено", color: "var(--color-brand)", points: settledSeries },
+              ]}
+            />
+          </Card>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-1.5">
         {(
@@ -372,6 +420,113 @@ export default function CoinvestorDetail({ id }: { id: string }) {
           onClose={() => setModal(null)}
           onSubmit={(input) => updateCoinvestor(investor.id, input)}
         />
+      )}
+    </div>
+  );
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: typeof Wallet;
+  label: string;
+  value: string;
+  tone?: "good" | "warn";
+}) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-start justify-between">
+        <p className="text-xs text-mute">{label}</p>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-brand-soft text-brand">
+          <Icon size={15} aria-hidden />
+        </span>
+      </div>
+      <p
+        className={`mt-2 text-xl font-semibold tracking-tight ${
+          tone === "good" ? "text-good" : tone === "warn" ? "text-warn" : ""
+        }`}
+      >
+        {value}
+      </p>
+    </Card>
+  );
+}
+
+function TrendChart({
+  series,
+}: {
+  series: { label: string; color: string; points: { date: string; value: number }[] }[];
+}) {
+  const w = 520;
+  const h = 160;
+  const pad = 10;
+
+  const active = series.filter((s) => s.points.length > 0);
+  if (active.length === 0) {
+    return <p className="py-10 text-center text-sm text-mute">Пока недостаточно данных</p>;
+  }
+
+  const allValues = active.flatMap((s) => s.points.map((p) => p.value));
+  const maxV = Math.max(...allValues, 0);
+  const minV = Math.min(...allValues, 0);
+  const range = maxV - minV || 1;
+
+  const pathFor = (points: { date: string; value: number }[]) => {
+    if (points.length === 1) {
+      const y = pad + (1 - (points[0].value - minV) / range) * (h - pad * 2);
+      return `M${pad},${y} L${w - pad},${y}`;
+    }
+    return points
+      .map((p, i) => {
+        const x = pad + (i / (points.length - 1)) * (w - pad * 2);
+        const y = pad + (1 - (p.value - minV) / range) * (h - pad * 2);
+        return `${i ? "L" : "M"}${x},${y}`;
+      })
+      .join(" ");
+  };
+
+  const first = active[0].points[0];
+  const last = active[0].points[active[0].points.length - 1];
+
+  return (
+    <div>
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        className="h-36 w-full"
+        preserveAspectRatio="none"
+        role="img"
+        aria-label="График"
+      >
+        {[0.25, 0.5, 0.75].map((t) => (
+          <line
+            key={t}
+            x1={pad}
+            x2={w - pad}
+            y1={pad + t * (h - pad * 2)}
+            y2={pad + t * (h - pad * 2)}
+            stroke="var(--color-line)"
+          />
+        ))}
+        {active.map((s) => (
+          <path key={s.label} d={pathFor(s.points)} fill="none" stroke={s.color} strokeWidth="2.5" strokeLinecap="round" />
+        ))}
+      </svg>
+      <div className="mt-1 flex items-center justify-between text-xs text-mute">
+        <span>{longDate(new Date(first.date))}</span>
+        <span>{longDate(new Date(last.date))}</span>
+      </div>
+      {series.length > 1 && (
+        <div className="mt-2 flex flex-wrap gap-3">
+          {series.map((s) => (
+            <span key={s.label} className="flex items-center gap-1.5 text-xs text-mute">
+              <span className="h-2 w-2 rounded-full" style={{ background: s.color }} aria-hidden />
+              {s.label}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );
