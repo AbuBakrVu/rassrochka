@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Единая точка входа для управления сервером.
+#
+#   ./nasiya install    — первая установка (после git clone)
+#   ./nasiya update      — обновить код из git и накатить миграции
+#   ./nasiya settings    — сменить домен, почту или пароль сотрудника
+#   ./nasiya status       — проверить, что всё работает
+#   ./nasiya backup        — сделать резервную копию прямо сейчас
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+cmd="${1:-}"
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+  install)  exec bash scripts/install.sh "$@" ;;
+  update)   exec bash scripts/update.sh "$@" ;;
+  settings) exec bash scripts/settings.sh "$@" ;;
+  status)   exec bash scripts/status.sh "$@" ;;
+  backup)
+    [ -f .env ] && set -a && . ./.env && set +a
+    exec bash scripts/backup.sh "$@"
+    ;;
+  *)
+    cat <<'EOF'
+Использование: ./nasiya <команда>
+
+  install    первичная установка на чистый сервер
+  update     обновить код из git и применить миграции
+  settings   сменить домен, e-mail для сертификатов, пароль сотрудника
+  status     проверить состояние сервисов и сайта
+  backup     запустить резервное копирование прямо сейчас
+EOF
+    exit 1
+    ;;
+esac

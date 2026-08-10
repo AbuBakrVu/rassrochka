@@ -1,144 +1,174 @@
-# Развёртывание на VPS
+# Развёртывание
 
-Пошаговая инструкция для этапов 7–8 из `MIGRATION.md`. Код готов (этапы
-1–6): Postgres, API, авторизация, многотенантность по поддоменам. Здесь —
-только инфраструктура: Docker, Caddy, бэкапы, первый запуск.
+Модель: **у каждого клиента свой отдельный сервер и своя база данных**.
+Ничего не расшарено между клиентами — сломается что-то у одного, остальных
+не заденет. Формат входа у каждой компании один и тот же:
 
-**Домен не выбран.** Везде ниже `<домен>` — подставьте свой, когда решите.
-В коде домен нигде не зашит — он приходит из `APP_DOMAIN` в одном файле
-`.env` на сервере (`lib/tenant-host.ts` его просто читает).
+```
+company.nasiya.ru
+```
+
+где `company` — поддомен конкретного клиента, а сам сервер, на котором это
+работает, у каждого клиента свой (свой IP, свой Docker, своя Postgres).
+Домен `nasiya.ru` (или свой домен клиента — см. §5) при этом только
+указывает DNS-записью на нужный сервер, сам код о конкретном домене ничего
+не знает — он приходит из `APP_DOMAIN` в `.env`.
+
+Управление сервером — тремя командами обёртки `./nasiya`:
+
+```
+./nasiya install    первая установка на чистый сервер
+./nasiya update      обновить код из git
+./nasiya settings    сменить домен, e-mail сертификата, пароль сотрудника
+./nasiya status       проверить, что всё работает
+./nasiya backup        резервная копия прямо сейчас
+```
+
+Обновления клиенты не получают автоматически и не одновременно — на каждый
+сервер заходите и обновляете отдельно командой `./nasiya update`. Это
+осознанный выбор: авария на одном сервере не должна ронять остальных, и
+для части клиентов дальнейшее обслуживание вообще ведёте не вы (см. §6).
 
 ---
 
 ## 0. Что нужно подготовить заранее
 
-Разово, до первой команды на сервере:
+Разово, на каждого нового клиента:
 
-1. **Домен.** Купить, добавить две DNS-записи A на IP будущего сервера:
-   - `<домен>` → IP
-   - `*.<домен>` → тот же IP (wildcard — иначе поддомены компаний не
-     заработают; сертификаты выпускаются отдельно на каждый, без wildcard,
-     см. §3)
+1. **Поддомен.** Добавить A-запись `company.nasiya.ru` → IP нового сервера
+   (или, если клиент разворачивается под своим доменом — A-запись на его
+   домене). Сертификат выпускается по требованию отдельно на этот один
+   адрес — wildcard не нужен.
 2. **152-ФЗ.** Форма клиента собирает паспортные данные — это персональные
    данные, и по закону базы с ПДн граждан РФ должны быть на территории РФ.
    Не юридическая консультация — но прежде чем арендовать сервер, свериться
    с юристом. Практический вывод: скорее всего нужен российский провайдер
    (Selectel, Timeweb, Beget, VK Cloud, Yandex Cloud), а не Hetzner/Contabo.
-3. **VPS.** 2 vCPU, 4 ГБ RAM, 60 ГБ SSD, Ubuntu 22.04/24.04 LTS — с запасом
-   для заявленного масштаба (до 10 компаний, до 5 сотрудников в каждой).
+3. **VPS.** 2 vCPU, 4 ГБ RAM, 40 ГБ SSD, Ubuntu 22.04/24.04 LTS хватает с
+   запасом на одну компанию до ~5 сотрудников.
 
-## 1. Первоначальная настройка сервера
+## 1. Доступ к репозиторию
 
-Через SSH под пользователем с sudo (не root напрямую):
+Личный ключ от своего аккаунта GitHub на клиентский сервер не класть: если
+сервер скомпрометируют, потеряете доступ ко всем своим репозиториям, а не
+к одному. Один read-only deploy key можно переиспользовать на всех
+серверах клиентов сразу — это просто ключевая пара для аутентификации,
+GitHub не ограничивает, с скольких машин им пользоваться для клонирования.
+
+Один раз (на своей машине или на первом сервере):
 
 ```bash
-apt update && apt upgrade -y
-
-# Docker
-curl -fsSL https://get.docker.com | sh
-usermod -aG docker $USER
-# перелогиниться, чтобы группа применилась
-
-# Файл подкачки — сборка Next.js рядом с Postgres на 4 ГБ RAM может уйти
-# в OOM. 2 ГБ подкачки закрывают пик сборки с запасом.
-fallocate -l 2G /swapfile && chmod 600 /swapfile
-mkswap /swapfile && swapon /swapfile
-echo '/swapfile none swap sw 0 0' >> /etc/fstab
-
-# Базовый firewall: снаружи нужны только 80/443/22
-ufw allow OpenSSH
-ufw allow 80,443/tcp
-ufw enable
+ssh-keygen -t ed25519 -C "deploy@nasiya" -f deploy_key -N ""
+cat deploy_key.pub
 ```
 
-**Доступ к приватному репозиторию.** Личный ключ от вашего аккаунта GitHub
-на сервер не класть: если сервер скомпрометируют, потеряете доступ ко всем
-своим репозиториям, а не к одному.
+Публичный ключ добавить в репозиторий: **Settings → Deploy keys → Add
+deploy key**, право только на чтение (Allow write access выключен).
+Приватный `deploy_key` — сохранить в менеджере паролей, копировать на
+каждый новый сервер клиента через `scp` (не через git, не в открытом
+чате).
+
+## 2. Установка на новый сервер клиента
+
+Через SSH под root (или sudo):
 
 ```bash
-ssh-keygen -t ed25519 -C "deploy@<домен>" -f ~/.ssh/deploy_key -N ""
-cat ~/.ssh/deploy_key.pub
-```
+# Ключ доступа к репозиторию — из шага 1
+scp deploy_key root@<ip-сервера>:~/.ssh/deploy_key
+ssh root@<ip-сервера>
 
-Публичный ключ добавить в репозиторий: **Settings → Deploy keys → Add deploy
-key**, право только на чтение (Allow write access выключен).
-
-```bash
+chmod 600 ~/.ssh/deploy_key
 cat >> ~/.ssh/config <<'EOF'
 Host github.com
   IdentityFile ~/.ssh/deploy_key
 EOF
 
-git clone git@github.com:<владелец>/rassrochka.git /opt/finora
-cd /opt/finora
+git clone git@github.com:<владелец>/rassrochka.git /opt/nasiya
+cd /opt/nasiya
+./nasiya install
 ```
 
-## 2. Настройка окружения
+`./nasiya install` — это и есть та самая «одна команда»: ставит Docker
+(если его ещё нет), включает своп и firewall, спрашивает домен/поддомен/
+данные администратора, генерирует `.env` с паролем Postgres, собирает
+образ, поднимает контейнеры, накатывает миграции и заводит единственную
+компанию этого сервера. В конце печатает адрес входа и временный пароль
+администратора — сохраните и передайте клиенту по защищённому каналу.
+
+Проверка:
 
 ```bash
-cp .env.server.example .env
-nano .env    # заполнить APP_DOMAIN, ACME_EMAIL, PG_PASSWORD
-chmod 600 .env
+./nasiya status
 ```
 
-`PG_PASSWORD` сгенерировать: `openssl rand -base64 24`.
+Если сайт не отвечает — `docker compose logs caddy` (первый запрос после
+установки может занять несколько секунд: Caddy получает сертификат от
+Let's Encrypt) и `docker compose logs app`.
 
-## 3. Первый запуск
+## 3. Настройки после установки
 
 ```bash
-docker compose build app
-docker compose up -d
-docker compose logs -f app    # Ctrl+C когда увидите "Ready"
+./nasiya settings
 ```
 
-Миграции — отдельной командой, не в `CMD` контейнера (иначе при рестарте
-нескольких реплик они пойдут параллельно и подерутся):
+Меню (или сразу командой: `./nasiya settings domain`,
+`./nasiya settings email`, `./nasiya settings password <почта>`):
+
+- **domain** — сменить поддомен и/или базовый домен. Полезно, когда клиент
+  сначала работает на пробном `client.nasiya.ru`, а потом переезжает на
+  свой собственный домен после покупки (см. §5). DNS на новый адрес нужно
+  завести заранее — скрипт только перевыпускает сертификат, DNS не трогает.
+- **email** — почта для уведомлений Let's Encrypt.
+- **password** — сбросить пароль сотрудника, если некому войти и сменить
+  его самостоятельно.
+- **show** — текущие настройки одним экраном.
+
+## 4. Обновление
 
 ```bash
-docker compose exec app node scripts/migrate-all.mjs
+cd /opt/nasiya
+./nasiya update            # последний коммит текущей ветки
+./nasiya update v2026-09-01  # конкретный тег — если помечаете релизы тегами
 ```
 
-Проверка, что всё поднялось:
+Делает `git fetch` + `git merge --ff-only` (или checkout на тег),
+пересобирает образ, перезапускает контейнеры и накатывает миграции. Если
+в рабочей копии есть незакоммиченные правки — остановится и попросит их
+убрать (в норме таких быть не должно, `.env` в git не попадает).
+
+**Помечайте релизы тегами**, если хотите откатываться на конкретную точку,
+а не только на «последний коммит»:
 
 ```bash
-curl -s https://<домен>/api/health
-# {"ok":true}
+git tag v2026-09-01 && git push --tags
 ```
 
-Если не отвечает — `docker compose ps` и `docker compose logs caddy`. Первый
-запрос на новый поддомен занимает несколько секунд: Caddy в этот момент
-получает сертификат от Let's Encrypt.
+Откат — `./nasiya update <предыдущий тег>`.
 
-## 4. Первая компания
+## 5. Клиенты на своём обслуживании
 
-```bash
-docker compose exec app node scripts/create-tenant.mjs \
-  --slug acme --name "ООО Акме" --admin-email director@acme.ru
-```
+Часть клиентов просто покупает сервис и дальше администрирует сервер сама
+— доступ к репозиторию (deploy key) и инструкция из этого файла достаточны,
+чтобы `./nasiya update` и `./nasiya settings` работали у них точно так же,
+без вашего участия. Домен в таком случае можно сразу завести их собственный
+(`./nasiya settings domain` → указать не поддомен `nasiya.ru`, а сразу их
+домен) — в коде и в этой команде домен нигде не зашит.
 
-Скрипт печатает временный пароль **один раз** — сохраните его и передайте
-клиенту по защищённому каналу. При первом входе на `acme.<домен>` система
-потребует пароль сменить.
+## 6. Резервные копии
 
-Остальные компании — той же командой с другим `--slug`. Полный список
-команд: `create-tenant`, `drop-tenant` — в `MIGRATION.md` §9.
-
-## 5. Резервные копии
-
-**Обязательный шаг, не пожелание** — данных у клиентов нет нигде, кроме
-этого сервера.
+**Обязательный шаг, не пожелание** — данных у клиента нет нигде, кроме его
+сервера.
 
 ```bash
 apt install -y age rclone
 rclone config
-# настроить удалённое хранилище (S3-совместимое) под именем finora-backup,
-# первый запуск rclone config интерактивный — следуйте подсказкам
+# настроить удалённое хранилище (S3-совместимое) под именем nasiya-backup
 ```
 
-Ключ шифрования дампов (в них паспортные данные клиентов):
+Ключ шифрования дампов (в них паспортные данные клиентов компании):
 
 ```bash
-age-keygen -o /root/.config/finora/backup.key
+age-keygen -o /root/.config/nasiya/backup.key
 # публичный ключ (age1...) — в AGE_RECIPIENT ниже
 # приватный ключ — СКОПИРОВАТЬ В ДРУГОЕ МЕСТО (менеджер паролей, сейф).
 # Если файл на сервере пропадёт вместе с сервером, расшифровать бэкапы
@@ -153,66 +183,51 @@ crontab -e
 
 ```cron
 AGE_RECIPIENT=age1вашключотсюда
-RCLONE_REMOTE=finora-backup:finora-db
-BACKUP_DIR=/opt/finora/backups
-0 3 * * * cd /opt/finora && ./scripts/backup.sh >> /var/log/finora-backup.log 2>&1
+RCLONE_REMOTE=nasiya-backup:nasiya-db
+BACKUP_DIR=/opt/nasiya/backups
+0 3 * * * cd /opt/nasiya && ./nasiya backup >> /var/log/nasiya-backup.log 2>&1
 ```
 
 **Проверка восстановления — раз в квартал, обязательно.** Непроверенная
 резервная копия равносильна её отсутствию:
 
 ```bash
-age -d -i /root/.config/finora/backup.key backups/finora_acme-2026-08-09.dump.age \
+age -d -i /root/.config/nasiya/backup.key backups/nasiya_<slug>-2026-08-09.dump.age \
   > /tmp/test.dump
-docker compose exec -T db createdb -U finora finora_test_restore
-docker compose exec -T db pg_restore -U finora -d finora_test_restore < /tmp/test.dump
-docker compose exec db psql -U finora -d finora_test_restore -c "select count(*) from deals;"
-docker compose exec db dropdb -U finora finora_test_restore
+docker compose exec -T db createdb -U nasiya nasiya_test_restore
+docker compose exec -T db pg_restore -U nasiya -d nasiya_test_restore < /tmp/test.dump
+docker compose exec db psql -U nasiya -d nasiya_test_restore -c "select count(*) from deals;"
+docker compose exec db dropdb -U nasiya nasiya_test_restore
 ```
 
-## 6. Мониторинг (минимум)
+## 7. Мониторинг (минимум)
 
 - Внешняя проверка: любой сервис вроде UptimeRobot на
-  `https://<домен>/api/health` раз в 1–5 минут
+  `https://company.nasiya.ru/api/health` раз в 1–5 минут
 - Диск: `df -h` заполнение на 80% — самая частая причина падения Postgres
-  на маленьких серверах. Можно повесить на тот же UptimeRobot через
-  простой скрипт-эндпоинт, или проверять руками первое время
-- `docker compose ps` — все три сервиса должны быть `healthy`
+  на маленьких серверах (входит в `./nasiya status`)
+- `docker compose ps` — все три сервиса должны быть `healthy` (тоже входит
+  в `./nasiya status`)
 
-Полноценный Prometheus/Grafana на масштабе в 10 компаний — чистые
-накладные расходы, не нужен.
-
-## 7. Обновление (выкат новой версии)
-
-```bash
-cd /opt/finora
-git fetch --tags
-git checkout v2026-09-01          # конкретный тег, не main
-docker compose build app
-docker compose up -d
-docker compose exec app node scripts/migrate-all.mjs
-```
-
-**Помечайте релизы тегами** (`git tag v2026-09-01 && git push --tags`) —
-иначе откатываться будет некуда, кроме случайного хеша коммита. Откат —
-`git checkout` на предыдущий тег и пересборка тем же способом.
+Полноценный Prometheus/Grafana на масштабе «один клиент — один маленький
+сервер» — чистые накладные расходы, не нужен.
 
 ## 8. Частые проблемы
 
 **Caddy не выдаёт сертификат.** Проверить, что DNS уже разошёлся
-(`dig acme.<домен>`) и что wildcard-запись `*.<домен>` действительно
-существует. Логи: `docker compose logs caddy`.
+(`dig company.nasiya.ru`). Логи: `docker compose logs caddy`.
 
-**`docker compose exec app node scripts/...` падает с ошибкой подключения
-к БД.** Проверить, что сервис `db` в статусе `healthy`
-(`docker compose ps`), и что `PG_PASSWORD` в `.env` совпадает с тем, что
-Postgres запомнил при первом запуске (пароль применяется только при
-создании тома — если меняли `.env` задним числом, тому Postgres об этом
-неизвестно).
+**`./nasiya update` / `./nasiya settings` падает с ошибкой подключения к
+БД.** Проверить, что сервис `db` в статусе `healthy` (`docker compose ps`),
+и что `PG_PASSWORD` в `.env` совпадает с тем, что Postgres запомнил при
+первом запуске (пароль применяется только при создании тома — если меняли
+`.env` задним числом, тому Postgres об этом неизвестно).
 
 **Сборка падает из-за нехватки памяти.** Проверить, что своп подключён:
-`swapon --show`. Если пусто — вернуться к шагу 1.
+`swapon --show`. `./nasiya install` включает его сам при RAM < 8 ГБ, но
+если сервер апгрейднули задним числом или своп отключили руками — включить
+вручную (см. `scripts/install.sh`, блок про `/swapfile`).
 
-**Компания создана, но `acme.<домен>` отвечает «Компания не найдена».**
-Скорее всего DNS ещё не разошёлся, либо опечатка в `--slug` при создании
-компании. Проверить: `docker compose exec db psql -U finora -d finora_control -c "select slug, active from companies;"`
+**Сайт отвечает «Компания не найдена».** Скорее всего DNS ещё не разошёлся,
+либо поддомен и `COMPANY_SLUG` в `.env` разошлись после `./nasiya settings
+domain`. Проверить: `docker compose exec db psql -U nasiya -d nasiya_control -c "select slug, active from companies;"`.
