@@ -27,15 +27,20 @@ echo "────────────────────────�
 
 # ── Параметры (флаг или интерактивный вопрос) ───────────────────────────
 
+# `read` возвращает ненулевой код на EOF (нет терминала — например, при
+# запуске одной командой через `ssh host './nasiya install'` без -t). Под
+# `set -e` это молча убивало бы скрипт прямо на первом вопросе — поэтому
+# `|| true` и явная проверка результата вместо бесконечного while.
 ask() {
   local prompt="$1" default="${2:-}" var
   if [ -n "$default" ]; then
-    read -r -p "$prompt [$default]: " var
+    read -r -p "$prompt [$default]: " var || true
     echo "${var:-$default}"
   else
-    while [ -z "${var:-}" ]; do
-      read -r -p "$prompt: " var
-    done
+    read -r -p "$prompt: " var || true
+    if [ -z "${var:-}" ]; then
+      die "Нужно значение «$prompt» — задайте переменной окружения или запустите в интерактивном терминале (ssh -t)"
+    fi
     echo "$var"
   fi
 }
@@ -60,8 +65,13 @@ echo "  Адрес компании   $SLUG.$DOMAIN"
 echo "  Название         $COMPANY_NAME"
 echo "  Администратор    $ADMIN_NAME <$ADMIN_EMAIL>"
 echo "  DNS: A-запись $SLUG.$DOMAIN → IP этого сервера должна быть добавлена ЗАРАНЕЕ"
-read -r -p "Продолжить? [Y/n]: " CONFIRM
-[ "${CONFIRM:-Y}" = "n" ] || [ "${CONFIRM:-Y}" = "N" ] && { echo "Отменено"; exit 0; }
+if [ -z "${CONFIRM:-}" ]; then
+  read -r -p "Продолжить? [Y/n]: " CONFIRM || true
+fi
+if [ "${CONFIRM:-Y}" = "n" ] || [ "${CONFIRM:-Y}" = "N" ]; then
+  echo "Отменено"
+  exit 0
+fi
 
 # ── Системные зависимости ────────────────────────────────────────────────
 
