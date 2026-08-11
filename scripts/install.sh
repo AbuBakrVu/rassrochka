@@ -99,7 +99,9 @@ fi
 # ── .env ──────────────────────────────────────────────────────────────
 
 echo "→ Пишу .env"
-PG_PASSWORD="$(openssl rand -base64 24)"
+# hex, не base64: base64 может выдать /, + или = — эти символы ломают разбор
+# postgres://user:PASSWORD@db:5432, если попадают в пароль как есть
+PG_PASSWORD="$(openssl rand -hex 24)"
 cat > "$ENV_FILE" <<EOF
 APP_DOMAIN=$DOMAIN
 ACME_EMAIL=$ACME_EMAIL
