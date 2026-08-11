@@ -46,7 +46,6 @@ export default function AcceptPaymentModal({
   const { deals, clients, paidPayments, acceptPayment } = useData();
   const [query, setQuery] = useState("");
   const [deal, setDeal] = useState<Deal | null>(null);
-  const [amount, setAmount] = useState("");
   const [method, setMethod] =
     useState<(typeof methods)[number]["key"]>("cash");
   const [date, setDate] = useState(todayIso());
@@ -100,17 +99,14 @@ export default function AcceptPaymentModal({
       }
     : null;
 
-  const pick = (d: Deal, monthly: number) => {
-    setDeal(d);
-    setAmount(String(monthly));
-  };
+  const pick = (d: Deal) => setDeal(d);
 
-  const ready = Number(amount) > 0 && date !== "";
+  const ready = date !== "";
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!ready || !deal) return;
-    acceptPayment(deal.id);
+    acceptPayment(deal.id, { date, method });
     setSaved(true);
     setTimeout(onClose, 1300);
   };
@@ -201,7 +197,7 @@ export default function AcceptPaymentModal({
                 rows.map(({ deal: d, phone, monthly, remaining }) => (
                   <li key={d.id}>
                     <button
-                      onClick={() => pick(d, monthly)}
+                      onClick={() => pick(d)}
                       className="flex w-full items-center gap-3 px-6 py-3 text-left transition-colors hover:bg-canvas"
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-deep">
@@ -254,32 +250,16 @@ export default function AcceptPaymentModal({
                 </Badge>
               </div>
 
-              <label className="block">
-                <span className="mb-1.5 flex items-baseline justify-between">
-                  <span className="text-sm font-medium">Сумма платежа</span>
-                  <button
-                    type="button"
-                    onClick={() => setAmount(String(selected!.monthly))}
-                    className="text-xs font-medium text-brand hover:text-brand-deep"
-                  >
-                    Ежемесячный — {money(selected!.monthly)}
-                  </button>
-                </span>
-                <div className="relative">
-                  <input
-                    autoFocus
-                    inputMode="numeric"
-                    className={`${input} pr-9 text-lg font-semibold`}
-                    value={amount}
-                    onChange={(e) =>
-                      setAmount(e.target.value.replace(/\D/g, ""))
-                    }
-                  />
-                  <span className="absolute top-1/2 right-3.5 -translate-y-1/2 text-sm text-mute">
-                    ₽
-                  </span>
+              <div>
+                <span className="mb-1.5 block text-sm font-medium">Сумма платежа</span>
+                <div className="rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-lg font-semibold">
+                  {money(selected!.monthly)}
                 </div>
-              </label>
+                <p className="mt-1.5 text-xs text-mute">
+                  Это очередной взнос по графику — сумма зафиксирована при
+                  оформлении сделки и здесь не меняется
+                </p>
+              </div>
 
               <div>
                 <span className="mb-1.5 block text-sm font-medium">
@@ -321,19 +301,17 @@ export default function AcceptPaymentModal({
                 />
               </label>
 
-              {Number(amount) > 0 && (
-                <div className="flex items-center gap-2.5 rounded-[12px] bg-brand-soft px-4 py-3 text-sm">
-                  <CalendarDays
-                    size={16}
-                    className="shrink-0 text-brand"
-                    aria-hidden
-                  />
-                  <p className="text-brand-deep">
-                    После платежа остаток по сделке —{" "}
-                    {money(Math.max(selected!.remaining - Number(amount), 0))}
-                  </p>
-                </div>
-              )}
+              <div className="flex items-center gap-2.5 rounded-[12px] bg-brand-soft px-4 py-3 text-sm">
+                <CalendarDays
+                  size={16}
+                  className="shrink-0 text-brand"
+                  aria-hidden
+                />
+                <p className="text-brand-deep">
+                  После платежа остаток по сделке —{" "}
+                  {money(Math.max(selected!.remaining - selected!.monthly, 0))}
+                </p>
+              </div>
             </div>
 
             <footer className="flex flex-wrap items-center justify-end gap-3 border-t border-line px-6 py-4">
@@ -346,7 +324,7 @@ export default function AcceptPaymentModal({
                   ? "Платёж принят"
                   : ready
                     ? "Можно проводить"
-                    : "Укажите сумму платежа"}
+                    : "Укажите дату платежа"}
               </p>
               <button
                 type="button"

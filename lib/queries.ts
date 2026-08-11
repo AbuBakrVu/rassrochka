@@ -592,10 +592,26 @@ export async function updateDeal(
  * нажавшие «Принять платёж» одновременно, засчитали бы два взноса вместо
  * одного. В версии на localStorage такой защиты не было в принципе.
  */
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  cash: "наличные",
+  card: "карта",
+  transfer: "перевод",
+};
+
+export interface AcceptPaymentOptions {
+  /** Фактическая дата поступления денег — по умолчанию сегодня. */
+  date?: string;
+  method?: "cash" | "card" | "transfer";
+}
+
 export async function acceptPayment(
   dbName: string,
-  dealId: string
+  dealId: string,
+  options: AcceptPaymentOptions = {}
 ): Promise<{ deal: Deal; alreadyPaid: boolean }> {
+  const occurredAt = options.date ?? todayIso();
+  const methodLabel = options.method ? PAYMENT_METHOD_LABEL[options.method] : undefined;
+
   const alreadyPaid = await transaction(dbName, async (client) => {
     const { rows } = await client.query<{
       id: string;
@@ -640,18 +656,20 @@ export async function acceptPayment(
       );
     }
 
-    // Дата операции — сегодняшняя, а НЕ плановая дата взноса из графика.
-    // Клиент может гасить июльский платёж в августе: деньги пришли в
-    // августе, иначе «Приход за месяц» в кассе считался бы неверно.
+    // Дата операции — по умолчанию сегодня, а НЕ плановая дата взноса из
+    // графика: клиент может гасить июльский платёж в августе, деньги
+    // пришли фактически в августе, иначе «Приход за месяц» в кассе считался
+    // бы неверно. Менеджер может явно указать другую дату (options.date),
+    // например если заносит платёж задним числом.
     await client.query(
       `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note)
        values ('payment', $1, $2, $3, $4, $5)`,
       [
         installment.amount,
-        todayIso(),
+        occurredAt,
         dealId,
         `Платёж ${next} из ${deal.months} · ${deal.client_name}`,
-        deal.product,
+        methodLabel ? `${deal.product} · ${methodLabel}` : deal.product,
       ]
     );
 
@@ -659,7 +677,8 @@ export async function acceptPayment(
       "insert into deal_events (deal_id, text) values ($1, $2)",
       [
         dealId,
-        `Платёж ${next} из ${deal.months} принят — ${installment.amount.toLocaleString("ru-RU")} ₽`,
+        `Платёж ${next} из ${deal.months} принят — ${installment.amount.toLocaleString("ru-RU")} ₽` +
+          (methodLabel ? ` · ${methodLabel}` : ""),
       ]
     );
 

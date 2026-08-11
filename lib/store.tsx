@@ -167,6 +167,12 @@ export interface CashAdjustmentInput {
   date: string;
 }
 
+export interface AcceptPaymentOptions {
+  /** Фактическая дата поступления денег — по умолчанию сегодня. */
+  date?: string;
+  method?: "cash" | "card" | "transfer";
+}
+
 export interface NewEmployeeInput {
   name: string;
   email: string;
@@ -224,7 +230,7 @@ interface DataContextValue extends Snapshot {
   setEmployeeActive: (id: number, active: boolean) => Promise<void>;
   logout: () => Promise<void>;
   addClient: (input: NewClientInput) => Promise<Client>;
-  acceptPayment: (dealId: string) => Promise<void>;
+  acceptPayment: (dealId: string, options?: AcceptPaymentOptions) => Promise<void>;
   addCashAdjustment: (input: CashAdjustmentInput) => Promise<void>;
   addCoinvestor: (input: NewCoinvestorInput) => Promise<Coinvestor>;
   updateCoinvestor: (id: string, input: UpdateCoinvestorInput) => Promise<void>;
@@ -369,8 +375,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const acceptPayment = useCallback(
-    async (dealId: string) => {
-      await api(`/api/deals/${encodeURIComponent(dealId)}/payment`, {});
+    async (dealId: string, options?: AcceptPaymentOptions) => {
+      await api(`/api/deals/${encodeURIComponent(dealId)}/payment`, options ?? {});
       await load();
     },
     [load]
