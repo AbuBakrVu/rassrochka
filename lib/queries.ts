@@ -9,7 +9,7 @@ import "server-only";
 
 import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
-import { buildRoute, type Client, type Deal, type DealStage } from "./data";
+import { buildRoute, purchasePrice, type Client, type Deal, type DealStage } from "./data";
 import { buildSchedule, monthNames } from "./schedule";
 import { computeClientStatus, computeDealStatus, todayIso } from "./status";
 import type {
@@ -451,7 +451,7 @@ export async function createDeal(
   dbName: string,
   input: NewDealInput
 ): Promise<Deal> {
-  const purchase = input.amount - Math.round((input.amount * input.markupPct) / 100);
+  const purchase = purchasePrice(input.amount, input.markupPct);
 
   const id = await transaction(dbName, async (client) => {
     const { rows } = await client.query<{ id: string; product: string }>(
@@ -560,8 +560,7 @@ export async function updateDeal(
 
       // Закупка в кассе была посчитана от старой суммы/наценки — пересчитываем,
       // иначе касса разойдётся с фактической стоимостью сделки
-      const purchase =
-        input.amount! - Math.round((input.amount! * input.markupPct!) / 100);
+      const purchase = purchasePrice(input.amount!, input.markupPct!);
       await client.query(
         `update cash_tx set amount = $2, title = $3 where deal_id = $1 and kind = 'purchase'`,
         [dealId, -purchase, `Закупка товара · ${input.product}`]
@@ -775,7 +774,7 @@ async function accrueCoinvestorProfit(
   product: string,
   installmentNumber: number
 ): Promise<void> {
-  const purchase = dealAmount - Math.round((dealAmount * markupPct) / 100);
+  const purchase = purchasePrice(dealAmount, markupPct);
   const totalMargin = dealAmount - purchase;
   const marginPerInstallment = totalMargin / months;
   if (marginPerInstallment <= 0) return;

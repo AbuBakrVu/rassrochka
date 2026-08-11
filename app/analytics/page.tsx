@@ -11,7 +11,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
-import { stages, paidCount, type Deal } from "@/lib/data";
+import { stages, paidCount, dealMargin, type Deal } from "@/lib/data";
 import { buildSchedule, money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
 import { computeAging } from "@/lib/derive";
@@ -91,7 +91,7 @@ export default function AnalyticsPage() {
 
   const profit = deals
     .filter((d) => d.stage === "active" || d.stage === "closed")
-    .reduce((s, d) => s + Math.round((d.amount * d.markupPct) / 100), 0);
+    .reduce((s, d) => s + dealMargin(d.amount, d.markupPct), 0);
 
   const reasons = rejectedDeals.reduce<Record<string, number>>((acc, d) => {
     const reason = d.nextStep.replace(/^Отказ:\s*/, "");

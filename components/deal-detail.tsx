@@ -22,7 +22,7 @@ import {
 import { Card, Badge, EmptyState } from "@/components/ui";
 import DealActions from "@/components/deal-actions";
 import { useData, type Employee } from "@/lib/store";
-import { clientById, fmt, stages, paidCount, type Deal } from "@/lib/data";
+import { clientById, fmt, stages, paidCount, purchasePrice, type Deal } from "@/lib/data";
 import { buildSchedule, money, longDate, type Installment } from "@/lib/schedule";
 import { dealEvents } from "@/lib/events";
 import CopyLinkButton from "@/components/copy-link";
@@ -144,8 +144,8 @@ export default function DealDetail({ id }: { id: string }) {
     .filter((p) => p.status === "paid")
     .reduce((s, p) => s + p.amount, 0);
   const remaining = deal.amount - paidSum;
-  const markup = Math.round((deal.amount * deal.markupPct) / 100);
-  const purchase = deal.amount - markup;
+  const purchase = purchasePrice(deal.amount, deal.markupPct);
+  const markup = deal.amount - purchase;
   const stageTitle =
     stages.find((s) => s.key === deal.stage)?.title ??
     (deal.stage === "closed" ? "Закрыта" : "Отклонена");

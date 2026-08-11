@@ -46,6 +46,18 @@ export const stages: { key: DealStage; title: string }[] = [
 export const paidCount = (d: Deal, paidPayments: Record<string, number>) =>
   d.stage === "closed" ? d.months : (paidPayments[d.id] ?? 0);
 
+// Наценка считается на закупочную цену, а не на сумму сделки: если товар
+// стоит 10 000 и наценка 20%, клиент платит 12 000 (10 000 + 20% от 10 000).
+// amount — это уже готовая сумма с наценкой, поэтому закупочную восстанавливаем
+// делением, а не вычитанием процента из amount. Та же формула — на сервере,
+// в lib/queries.ts::purchasePriceFromAmount (дублируется намеренно: там она
+// нужна и вне контекста Deal, для accrueCoinvestorProfit).
+export const purchasePrice = (amount: number, markupPct: number) =>
+  Math.round(amount / (1 + markupPct / 100));
+
+export const dealMargin = (amount: number, markupPct: number) =>
+  amount - purchasePrice(amount, markupPct);
+
 export const dealState = (d: Deal): DealState =>
   d.stage === "active" || d.stage === "closed" || d.stage === "rejected"
     ? d.stage

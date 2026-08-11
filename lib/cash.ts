@@ -2,63 +2,10 @@
 // Деньги уходят при закупке товара для сделки и возвращаются с каждым
 // платежом клиента — из этого складывается остаток и оборот.
 
-import { paidCount, type Deal } from "./data";
-import { buildSchedule } from "./schedule";
 import type { CashTx } from "./store";
-
-// Закупочная цена — та же формула, что на странице сделки и в аналитике:
-// вычитаем реальную наценку сделки (deal.markupPct) из суммы рассрочки
-export const purchasePrice = (deal: Deal) =>
-  deal.amount - Math.round((deal.amount * deal.markupPct) / 100);
 
 export const cashBalance = (opening: number, txs: CashTx[]) =>
   txs.reduce((sum, t) => sum + t.amount, opening);
-
-// Стартовая лента: восстанавливаем историю по уже существующим сделкам,
-// чтобы касса не выглядела пустой на свежем сторе.
-export function buildSeedCash(
-  deals: Deal[],
-  paidPayments: Record<string, number>
-): CashTx[] {
-  const txs: CashTx[] = [];
-
-  for (const deal of deals) {
-    if (deal.stage === "rejected") continue;
-
-    txs.push({
-      id: `${deal.id}-purchase`,
-      kind: "purchase",
-      amount: -purchasePrice(deal),
-      date: deal.openedAt,
-      dealId: deal.id,
-      title: `Закупка товара · ${deal.product}`,
-      note: deal.client,
-    });
-
-    const paid = paidCount(deal, paidPayments);
-    if (paid === 0) continue;
-
-    const schedule = buildSchedule(
-      deal.amount,
-      deal.months,
-      paid,
-      deal.openedAt
-    );
-    for (const p of schedule.filter((x) => x.status === "paid")) {
-      txs.push({
-        id: `${deal.id}-p${p.n}`,
-        kind: "payment",
-        amount: p.amount,
-        date: p.iso,
-        dealId: deal.id,
-        title: `Платёж ${p.n} из ${deal.months} · ${deal.client}`,
-        note: deal.product,
-      });
-    }
-  }
-
-  return txs.sort((a, b) => a.date.localeCompare(b.date));
-}
 
 export interface CashSummary {
   balance: number;
