@@ -25,7 +25,6 @@ import {
   dealsOfClient,
   dealState,
   paidCount,
-  tokenForDeal,
   assessRisk,
   type Client,
 } from "@/lib/data";
@@ -379,7 +378,7 @@ export default function ClientDetail({ id }: { id: string }) {
                       <p className="mb-1.5 truncate text-sm font-medium">
                         {deal.id} · {deal.product}
                       </p>
-                      <CopyLinkButton path={`/pay/${tokenForDeal(deal.id)}`} />
+                      <CopyLinkButton path={`/pay/${deal.portalToken}`} />
                     </div>
                   ))}
                 </div>

@@ -39,6 +39,7 @@ interface DealRow extends Record<string, unknown> {
   next_step: string | null;
   deadline: string | null;
   reject_reason: string | null;
+  portal_token: string;
 }
 
 interface ClientRow extends Record<string, unknown> {
@@ -162,6 +163,7 @@ function toDeal(row: DealRow, today: string): Deal {
     markupPct: row.markup_pct,
     manager: row.manager_initials ?? "—",
     managerId: row.manager_id,
+    portalToken: row.portal_token,
     ...(row.deadline ? { deadline: shortDate(row.deadline) } : {}),
     ...(urgent ? { urgent: true } : {}),
   };
@@ -204,7 +206,7 @@ function toClient(row: ClientRow, deals: Deal[], today: string): Client {
 const DEALS_SELECT = `
   select d.id, d.client_id, c.name as client_name, d.product, d.amount,
          d.months, d.markup_pct, d.opened_at, d.stage, d.paid_count,
-         d.next_step, d.deadline, d.reject_reason,
+         d.next_step, d.deadline, d.reject_reason, d.portal_token,
          d.manager_id, u.initials as manager_initials
   from deals d
   join clients c on c.id = d.client_id

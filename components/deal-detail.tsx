@@ -22,7 +22,7 @@ import {
 import { Card, Badge, EmptyState } from "@/components/ui";
 import DealActions from "@/components/deal-actions";
 import { useData, type Employee } from "@/lib/store";
-import { clientById, fmt, stages, paidCount, tokenForDeal, type Deal } from "@/lib/data";
+import { clientById, fmt, stages, paidCount, type Deal } from "@/lib/data";
 import { buildSchedule, money, longDate, type Installment } from "@/lib/schedule";
 import { dealEvents } from "@/lib/events";
 import CopyLinkButton from "@/components/copy-link";
@@ -475,7 +475,7 @@ export default function DealDetail({ id }: { id: string }) {
                     Персональная страница с графиком и остатком — отправьте её
                     клиенту
                   </p>
-                  <CopyLinkButton path={`/pay/${tokenForDeal(deal.id)}`} />
+                  <CopyLinkButton path={`/pay/${deal.portalToken}`} />
                 </div>
               </>
             )}
