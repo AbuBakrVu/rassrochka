@@ -329,6 +329,8 @@ export interface Client {
   statusLabel: string;
   nextAction: string;
   nextDate: string;
+  /** Сделка, к которой относится nextAction — по ней открывается кнопка «Выполнить». */
+  nextDealId?: string;
 }
 
 // Затравочные данные — стартовое состояние клиентского стора (см. lib/store.tsx).

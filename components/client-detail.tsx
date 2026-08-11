@@ -170,7 +170,16 @@ export default function ClientDetail({ id }: { id: string }) {
               </div>
             </div>
           </div>
-          <button className="flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep">
+          <button
+            onClick={() =>
+              window.open(
+                `https://wa.me/${client.phone.replace(/\D/g, "")}`,
+                "_blank",
+                "noopener,noreferrer"
+              )
+            }
+            className="flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+          >
             <MessageCircle size={16} aria-hidden />
             Написать клиенту
           </button>
@@ -222,9 +231,14 @@ export default function ClientDetail({ id }: { id: string }) {
             </p>
             <p className="text-sm text-ink">{client.nextAction}</p>
           </div>
-          <button className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep">
-            Выполнить
-          </button>
+          {client.nextDealId && (
+            <button
+              onClick={() => router.push(`/deals/${client.nextDealId}`)}
+              className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+            >
+              Выполнить
+            </button>
+          )}
         </div>
       )}
 

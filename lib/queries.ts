@@ -195,6 +195,7 @@ function toClient(row: ClientRow, deals: Deal[], today: string): Client {
     statusLabel,
     nextAction: top?.text ?? "—",
     nextDate,
+    ...(top?.dealId ? { nextDealId: top.dealId } : {}),
   };
 }
 
