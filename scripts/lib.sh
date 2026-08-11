@@ -47,6 +47,27 @@ env_set() {
   fi
 }
 
+# Ждёт, пока контейнер app вообще способен выполнять команды — НЕ проверяет
+# базу. Нужен между `compose up` и первым `migrate-all.mjs`: до миграций
+# базы CONTROL_DB (nasiya_control) ещё не существует, и wait_for_health()
+# (которая её проверяет через /api/health) навсегда просидела бы в цикле,
+# ожидая условие, которое сама же ещё не наступила — того, что база уже есть.
+wait_for_container() {
+  local tries=0
+  echo "  ждём, пока контейнер поднимется…"
+  while [ "$tries" -lt 20 ]; do
+    if docker compose -f "$REPO_DIR/docker-compose.yml" exec -T app node -e "process.exit(0)" >/dev/null 2>&1; then
+      c_green "  ✓ контейнер отвечает"
+      return 0
+    fi
+    tries=$((tries + 1))
+    sleep 2
+  done
+  die "контейнер app не поднялся за 40 секунд — смотрите: docker compose logs app"
+}
+
+# Полная проверка: приложение отвечает И видит свою базу. Используется
+# после миграций (install.sh) или при обновлении, когда база уже точно есть.
 wait_for_health() {
   local domain="$1" tries=0
   echo "  ждём, пока приложение поднимется…"

@@ -121,10 +121,12 @@ compose build app
 echo "→ Запускаю контейнеры"
 compose up -d
 
-wait_for_health "$DOMAIN"
+wait_for_container
 
 echo "→ Накатываю миграции"
 compose exec -T app node scripts/migrate-all.mjs
+
+wait_for_health "$DOMAIN"
 
 echo "→ Завожу компанию «$COMPANY_NAME»"
 CREATE_OUT="$(compose exec -T app node scripts/create-tenant.mjs \
