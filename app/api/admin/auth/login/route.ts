@@ -8,6 +8,7 @@ import {
   createPlatformSession,
   verifyPlatformCredentials,
 } from "@/lib/platform-auth";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
@@ -20,6 +21,13 @@ export async function POST(request: Request) {
 
   if (!email || !password) {
     return NextResponse.json({ error: "Введите почту и пароль" }, { status: 400 });
+  }
+
+  if (!checkRateLimit(`${clientIp(request)}:admin`)) {
+    return NextResponse.json(
+      { error: "Слишком много попыток входа. Попробуйте позже" },
+      { status: 429 }
+    );
   }
 
   const admin = await verifyPlatformCredentials(email, password);

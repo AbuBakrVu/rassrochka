@@ -15,6 +15,24 @@ const nextConfig: NextConfig = {
   env: {
     APP_DOMAIN: process.env.APP_DOMAIN,
   },
+
+  // HSTS полагается на Caddy (уже отдаёт только https), остальное —
+  // на уровне приложения, чтобы работать и без Caddy (например при
+  // прямом доступе к контейнеру в разработке).
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

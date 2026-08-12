@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { TenantNotFoundError, resolveTenant } from "@/lib/tenant";
 import { SESSION_COOKIE, createSession, verifyCredentials } from "@/lib/auth";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
@@ -19,6 +20,13 @@ export async function POST(request: Request) {
 
     if (!email || !password) {
       return NextResponse.json({ error: "Введите почту и пароль" }, { status: 400 });
+    }
+
+    if (!checkRateLimit(`${clientIp(request)}:${tenant.dbName}`)) {
+      return NextResponse.json(
+        { error: "Слишком много попыток входа. Попробуйте позже" },
+        { status: 429 }
+      );
     }
 
     const user = await verifyCredentials(tenant.dbName, email, password);
