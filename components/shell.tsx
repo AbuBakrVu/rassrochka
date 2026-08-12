@@ -19,6 +19,7 @@ import {
   X,
   Zap,
   LogOut,
+  ShieldAlert,
 } from "lucide-react";
 import CommandPalette from "@/components/command-palette";
 import { DataProvider, useData } from "@/lib/store";
@@ -33,6 +34,7 @@ const nav = [
   { href: "/coinvestors", label: "Соинвесторы", icon: Handshake },
   { href: "/cash", label: "Кассы", icon: Wallet },
   { href: "/registry", label: "Реестр клиентов", icon: BookUser },
+  { href: "/blacklist", label: "Чёрный список", icon: ShieldAlert },
   { href: "/employees", label: "Сотрудники", icon: UserCog },
   { href: "/settings", label: "Настройки", icon: Settings },
 ];

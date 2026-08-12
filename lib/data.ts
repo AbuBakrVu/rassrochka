@@ -331,6 +331,9 @@ export interface Client {
   registrationAddress?: string;
   livingAddress?: string;
   inn?: string;
+  /** Заносится вручную менеджером — клиент долго не платит по рассрочке. */
+  blacklistedAt?: string;
+  blacklistReason?: string;
 }
 
 // Затравочные данные — стартовое состояние клиентского стора (см. lib/store.tsx).

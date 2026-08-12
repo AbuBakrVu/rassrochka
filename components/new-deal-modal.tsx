@@ -27,6 +27,7 @@ import {
   Search,
   UserPlus,
   CalendarDays,
+  ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
 import { type Client } from "@/lib/data";
@@ -716,7 +717,19 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                           Заменить
                         </button>
                       </div>
-                    ) : (
+                    ) : null}
+                    {client?.blacklistedAt && (
+                      <div className="mt-2 flex items-start gap-2.5 rounded-[10px] border border-danger-soft bg-danger-soft px-4 py-3 text-sm text-danger">
+                        <ShieldAlert size={16} className="mt-0.5 shrink-0" aria-hidden />
+                        <div>
+                          <p className="font-medium">Клиент в чёрном списке</p>
+                          {client.blacklistReason && (
+                            <p className="mt-0.5 text-danger/80">{client.blacklistReason}</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {!client && (
                       <>
                         <div className="relative">
                           <Search

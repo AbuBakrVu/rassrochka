@@ -69,6 +69,8 @@ interface ClientRow extends Record<string, unknown> {
   registration_address: string | null;
   living_address: string | null;
   inn: string | null;
+  blacklisted_at: Date | null;
+  blacklist_reason: string | null;
 }
 
 interface CashRow extends Record<string, unknown> {
@@ -252,6 +254,10 @@ function toClient(row: ClientRow, deals: Deal[], today: string): Client {
     ...(row.registration_address ? { registrationAddress: row.registration_address } : {}),
     ...(row.living_address ? { livingAddress: row.living_address } : {}),
     ...(row.inn ? { inn: row.inn } : {}),
+    ...(row.blacklisted_at
+      ? { blacklistedAt: row.blacklisted_at.toISOString() }
+      : {}),
+    ...(row.blacklist_reason ? { blacklistReason: row.blacklist_reason } : {}),
   };
 }
 
@@ -528,6 +534,22 @@ export async function createClient(
   );
   if (!row) throw new Error("Клиент не создан");
   return toClient(row, [], todayIso());
+}
+
+export async function setClientBlacklisted(
+  dbName: string,
+  clientId: string,
+  blacklisted: boolean,
+  reason?: string
+): Promise<void> {
+  const row = await queryOne<{ id: string }>(
+    dbName,
+    blacklisted
+      ? "update clients set blacklisted_at = now(), blacklist_reason = $2 where id = $1 returning id"
+      : "update clients set blacklisted_at = null, blacklist_reason = null where id = $1 returning id",
+    blacklisted ? [clientId, reason || null] : [clientId]
+  );
+  if (!row) throw new Error(`Клиент ${clientId} не найден`);
 }
 
 export interface NewDealInput {

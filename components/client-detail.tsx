@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -12,6 +13,8 @@ import {
   Wallet,
   Link2,
   ShieldCheck,
+  ShieldAlert,
+  ShieldOff,
   Plus,
   Minus,
   SearchX,
@@ -44,9 +47,23 @@ const initials = (name: string) =>
     .join("");
 
 export default function ClientDetail({ id }: { id: string }) {
-  const { clients, deals, paidPayments } = useData();
+  const { clients, deals, paidPayments, setClientBlacklisted } = useData();
   const router = useRouter();
   const client = clientById(clients, id);
+  const [blacklistOpen, setBlacklistOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const removeFromBlacklist = async () => {
+    if (!client || !confirm(`Убрать ${client.name} из чёрного списка?`)) return;
+    setBusy(true);
+    try {
+      await setClientBlacklisted(client.id, false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось убрать из списка");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (!client) {
     return (
@@ -146,7 +163,13 @@ export default function ClientDetail({ id }: { id: string }) {
                 <Badge tone={statusTone[client.status]}>
                   {client.statusLabel}
                 </Badge>
+                {client.blacklistedAt && (
+                  <Badge tone="red">В чёрном списке</Badge>
+                )}
               </div>
+              {client.blacklistedAt && client.blacklistReason && (
+                <p className="mt-1 text-sm text-danger">{client.blacklistReason}</p>
+              )}
               <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-mute">
                 <span className="flex items-center gap-1.5">
                   <Phone size={13} aria-hidden /> {client.phone}
@@ -164,19 +187,39 @@ export default function ClientDetail({ id }: { id: string }) {
               </div>
             </div>
           </div>
-          <button
-            onClick={() =>
-              window.open(
-                `https://wa.me/${client.phone.replace(/\D/g, "")}`,
-                "_blank",
-                "noopener,noreferrer"
-              )
-            }
-            className="flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
-          >
-            <MessageCircle size={16} aria-hidden />
-            Написать клиенту
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {client.blacklistedAt ? (
+              <button
+                onClick={removeFromBlacklist}
+                disabled={busy}
+                className="flex items-center gap-2 rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute transition-colors hover:border-good/40 hover:text-good disabled:opacity-50"
+              >
+                <ShieldOff size={16} aria-hidden />
+                Убрать из ЧС
+              </button>
+            ) : (
+              <button
+                onClick={() => setBlacklistOpen(true)}
+                className="flex items-center gap-2 rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute transition-colors hover:border-danger/40 hover:text-danger"
+              >
+                <ShieldAlert size={16} aria-hidden />
+                В чёрный список
+              </button>
+            )}
+            <button
+              onClick={() =>
+                window.open(
+                  `https://wa.me/${client.phone.replace(/\D/g, "")}`,
+                  "_blank",
+                  "noopener,noreferrer"
+                )
+              }
+              className="flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+            >
+              <MessageCircle size={16} aria-hidden />
+              Написать клиенту
+            </button>
+          </div>
         </div>
 
         {/* Ключевые цифры */}
@@ -414,6 +457,99 @@ export default function ClientDetail({ id }: { id: string }) {
           </Card>
         </div>
       </div>
+
+      {blacklistOpen && (
+        <BlacklistModal
+          clientName={client.name}
+          onClose={() => setBlacklistOpen(false)}
+          onSubmit={async (reason) => {
+            await setClientBlacklisted(client.id, true, reason);
+            setBlacklistOpen(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function BlacklistModal({
+  clientName,
+  onClose,
+  onSubmit,
+}: {
+  clientName: string;
+  onClose: () => void;
+  onSubmit: (reason: string) => Promise<void>;
+}) {
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSubmit(reason.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось сохранить");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <form
+        onSubmit={submit}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="blacklist-title"
+        className="relative w-full max-w-md rounded-t-card bg-surface shadow-pop sm:rounded-card"
+      >
+        <div className="border-b border-line px-5 py-4">
+          <h2 id="blacklist-title" className="font-semibold tracking-tight">
+            Добавить в чёрный список
+          </h2>
+          <p className="text-sm text-mute">{clientName}</p>
+        </div>
+
+        <div className="px-5 py-4">
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium">
+              Причина (необязательно)
+            </span>
+            <textarea
+              className="min-h-24 w-full resize-y rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Например: не платит третий месяц подряд"
+              autoFocus
+            />
+          </label>
+          <p className="mt-2 text-xs text-mute">
+            Клиент останется в системе — просто менеджер увидит предупреждение
+            при создании новой сделки с ним.
+          </p>
+        </div>
+
+        <footer className="flex items-center gap-3 border-t border-line px-5 py-4">
+          <p className="mr-auto text-sm" role="status" aria-live="polite">
+            {error ? <span className="text-danger">{error}</span> : saving ? "Сохраняем…" : ""}
+          </p>
+          <button type="button" onClick={onClose} className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+            Отмена
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-[10px] bg-danger px-4 py-2.5 text-sm font-medium text-white shadow-card hover:opacity-90 disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+          >
+            Добавить в список
+          </button>
+        </footer>
+      </form>
     </div>
   );
 }
