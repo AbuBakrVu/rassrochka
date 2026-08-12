@@ -54,16 +54,6 @@ export async function findTenant(slug: string): Promise<Tenant> {
   return tenant;
 }
 
-/**
- * Сбрасывает кеш компании. Вызывается из lib/provisioning.ts при
- * отключении/включении доступа — без этого «Закрыть доступ» в панели
- * владельца могло молча не подействовать до минуты: вход шёл в обход
- * companies.active по устаревшей записи в кеше.
- */
-export function invalidateTenantCache(slug: string): void {
-  cache.delete(slug);
-}
-
 export async function resolveTenant(host: string | null): Promise<Tenant> {
   const parsed = parseHost(host);
 

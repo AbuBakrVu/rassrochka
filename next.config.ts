@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["pg", "@node-rs/argon2"],
 
   // APP_DOMAIN не публичный секрет (это просто ваш домен), но lib/tenant-host.ts
-  // читает его и в клиентских компонентах (/company, /admin — показать
+  // читает его и в клиентских компонентах (/company — показать
   // адрес поддомена). Без явного проброса через `env` Next заменяет любую
   // process.env.* без префикса NEXT_PUBLIC_ на undefined в браузерном бандле.
   env: {

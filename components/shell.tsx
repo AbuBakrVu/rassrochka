@@ -79,15 +79,14 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   //     тянул бы в браузер все сделки и всех клиентов компании.
   //   /login — на нём сессии ещё нет, и DataProvider ушёл бы в петлю:
   //     bootstrap → 401 → редирект на /login → снова bootstrap.
-  //   /company, /admin — вообще не про компанию: корневой домен и панель
-  //     владельца платформы. Без этой строки сюда всё равно рисовался бы
+  //   /company — вообще не про компанию: корневой домен, где вводят адрес
+  //     своей компании. Без этой строки сюда всё равно рисовался бы
   //     сайдбар CRM компании (баг, найденный вручную в браузере).
   // Слэш в "/pay/" обязателен: без него сюда попадал и раздел /payments.
   if (
     pathname.startsWith("/pay/") ||
     pathname === "/login" ||
-    pathname === "/company" ||
-    pathname.startsWith("/admin")
+    pathname === "/company"
   ) {
     return <>{children}</>;
   }

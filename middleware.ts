@@ -6,7 +6,7 @@
 // не смотрел на скелет загрузки, который всё равно кончится ошибкой 401.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { PLATFORM_SESSION_COOKIE, SESSION_COOKIE } from "@/lib/auth-shared";
+import { SESSION_COOKIE } from "@/lib/auth-shared";
 import { parseHost } from "@/lib/tenant-host";
 
 // Инфраструктурные роуты: не привязаны ни к одной компании, работают на
@@ -14,12 +14,6 @@ import { parseHost } from "@/lib/tenant-host";
 // вообще без него, не под доменом-компанией) — тенант-проверка тут ни к
 // чему и обязана идти раньше неё.
 const INFRA = [/^\/api\/health$/, /^\/api\/internal\//];
-
-// Панель владельца платформы — своя модель доступа, не компания вообще
-// (см. lib/platform-auth.ts). Проверяется отдельно и раньше остальной
-// тенант-логики, иначе общий редирект «нет компании → /company» перехватил
-// бы и эти пути.
-const ADMIN = /^\/admin(\/|$)|^\/api\/admin\//;
 
 // Открыты без входа: страница входа, кабинет заёмщика по ссылке и роуты,
 // которые сами разбираются с доступом
@@ -31,35 +25,6 @@ export function middleware(request: NextRequest) {
   if (INFRA.some((re) => re.test(pathname))) return NextResponse.next();
 
   const host = parseHost(request.headers.get("host"));
-
-  if (ADMIN.test(pathname)) {
-    // На поддомене компании панели владельца не существует — не даём даже
-    // понять, что путь вообще что-то значит
-    if (host.kind === "tenant") {
-      return pathname.startsWith("/api/")
-        ? NextResponse.json({ error: "Не найдено" }, { status: 404 })
-        : new NextResponse("Not Found", { status: 404 });
-    }
-
-    // Страница входа и сам логин-роут не должны требовать уже готовую
-    // сессию — иначе получить её неоткуда (была та же ошибка на стороне
-    // компаний, там её решает PUBLIC-список для /api/auth/)
-    if (pathname === "/admin/login" || pathname.startsWith("/api/admin/auth/")) {
-      return NextResponse.next();
-    }
-
-    if (!request.cookies.has(PLATFORM_SESSION_COOKIE)) {
-      if (pathname.startsWith("/api/")) {
-        return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
-      }
-      const url = request.nextUrl.clone();
-      url.pathname = "/admin/login";
-      url.search = "";
-      return NextResponse.redirect(url);
-    }
-
-    return NextResponse.next();
-  }
 
   // На корневом домене компания не выбрана: показываем страницу, где её
   // адрес можно ввести. Существует ли компания — проверяет уже сервер,

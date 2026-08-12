@@ -3,8 +3,3 @@
 // и импортировать его не может.
 
 export const SESSION_COOKIE = "nasiya_session";
-
-// Отдельная кука для владельца платформы (/admin) — сессии компаний и
-// платформы не должны пересекаться, это разные модели данных в разных
-// таблицах control-базы.
-export const PLATFORM_SESSION_COOKIE = "nasiya_platform_session";
