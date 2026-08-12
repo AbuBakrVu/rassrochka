@@ -212,6 +212,9 @@ export default function DealDetail({ id }: { id: string }) {
                 {deal.product} · {fmt(deal.amount)} на {deal.months} мес ·
                 заключена {openedLabel} г.
               </p>
+              {deal.description && (
+                <p className="mt-1.5 text-sm text-ink">{deal.description}</p>
+              )}
             </div>
           </div>
           {!finished && (
@@ -486,10 +489,27 @@ export default function DealDetail({ id }: { id: string }) {
               <h2 className="font-semibold">Поручители</h2>
               <ShieldCheck size={16} className="text-mute" aria-hidden />
             </div>
-            <p className="text-sm text-mute">
-              По этой сделке поручители не привлекались. Добавить можно при
-              редактировании сделки.
-            </p>
+            {deal.guarantors.length === 0 ? (
+              <p className="text-sm text-mute">
+                По этой сделке поручители не привлекались.
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {deal.guarantors.map((g, i) => (
+                  <li key={g.id}>
+                    <Link
+                      href={`/clients/${g.id}`}
+                      className="flex items-center justify-between rounded-[10px] px-2 py-1.5 text-sm hover:bg-canvas"
+                    >
+                      <span>{g.name}</span>
+                      {i === 0 && (
+                        <span className="text-xs text-mute">основной</span>
+                      )}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
 
           <Card className="p-5">
@@ -501,6 +521,8 @@ export default function DealDetail({ id }: { id: string }) {
                 ["Тип платежей", "Равные"],
                 ["Первый платёж", `${schedule[0].date} г.`],
                 ["Ответственный", deal.manager],
+                ...(deal.category ? [["Категория", deal.category]] : []),
+                ...(deal.city ? [["Город", deal.city]] : []),
               ].map(([k, v]) => (
                 <div key={k} className="flex items-center justify-between py-2.5">
                   <dt className="text-mute">{k}</dt>

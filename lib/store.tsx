@@ -144,6 +144,10 @@ export interface NewDealInput {
   clientName: string;
   managerId: number;
   markupPct: number;
+  description?: string;
+  category?: string;
+  city?: string;
+  guarantorIds?: string[];
 }
 
 export interface NewClientInput {
@@ -345,6 +349,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         openedAt: input.openedAt,
         clientId: input.clientId,
         managerId: input.managerId,
+        description: input.description,
+        category: input.category,
+        city: input.city,
+        guarantorIds: input.guarantorIds,
       });
       await load();
       return deal;

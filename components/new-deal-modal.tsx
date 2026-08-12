@@ -170,7 +170,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
 
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState<Client | null>(null);
-  const [guarantors, setGuarantors] = useState<string[]>([]);
+  const [guarantors, setGuarantors] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -249,6 +249,10 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
         clientName: client.name,
         managerId: manager!,
         markupPct: calc.markupPct,
+        description,
+        category,
+        city,
+        guarantorIds: guarantors.map((g) => g.id),
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось создать сделку");
@@ -767,15 +771,15 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                     <div className="flex flex-wrap gap-2">
                       {guarantors.map((g) => (
                         <span
-                          key={g}
+                          key={g.id}
                           className="flex items-center gap-2 rounded-full border border-line bg-canvas py-1.5 pr-2 pl-3 text-sm"
                         >
-                          {g}
+                          {g.name}
                           <button
                             onClick={() =>
-                              setGuarantors((s) => s.filter((x) => x !== g))
+                              setGuarantors((s) => s.filter((x) => x.id !== g.id))
                             }
-                            aria-label={`Убрать поручителя ${g}`}
+                            aria-label={`Убрать поручителя ${g.name}`}
                             className="text-mute hover:text-danger"
                           >
                             <X size={14} />
@@ -787,20 +791,22 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                       <select
                         className={`${input} mt-2`}
                         value=""
-                        onChange={(e) =>
-                          e.target.value &&
-                          setGuarantors((s) => [...s, e.target.value])
-                        }
+                        onChange={(e) => {
+                          const picked = clients.find((c) => c.id === e.target.value);
+                          if (picked) {
+                            setGuarantors((s) => [...s, { id: picked.id, name: picked.name }]);
+                          }
+                        }}
                       >
                         <option value="">Добавить поручителя</option>
                         {clients
                           .filter(
                             (c) =>
-                              c.name !== client?.name &&
-                              !guarantors.includes(c.name)
+                              c.id !== client?.id &&
+                              !guarantors.some((g) => g.id === c.id)
                           )
                           .map((c) => (
-                            <option key={c.id} value={c.name}>
+                            <option key={c.id} value={c.id}>
                               {c.name} · {c.phone}
                             </option>
                           ))}
@@ -876,7 +882,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                     <p className="text-sm text-mute">{client?.phone}</p>
                     {guarantors.length > 0 && (
                       <p className="mt-2 text-sm text-mute">
-                        Поручители: {guarantors.join(", ")}
+                        Поручители: {guarantors.map((g) => g.name).join(", ")}
                       </p>
                     )}
                     <p className="mt-2 text-sm text-mute">

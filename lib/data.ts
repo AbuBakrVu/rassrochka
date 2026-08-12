@@ -33,6 +33,15 @@ export interface Deal {
   managerId?: number | null; // связь с users.id: инициалы не уникальны
   markupPct: number; // реальная наценка сделки в %, введённая при создании
   portalToken: string; // случайный токен для /pay/<token> — из deals.portal_token
+  description?: string;
+  category?: string;
+  city?: string;
+  guarantors: DealGuarantor[];
+}
+
+export interface DealGuarantor {
+  id: string;
+  name: string;
 }
 
 export const stages: { key: DealStage; title: string }[] = [

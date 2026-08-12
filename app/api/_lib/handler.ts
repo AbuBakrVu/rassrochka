@@ -139,6 +139,27 @@ export function optionalNum(
   return num(body, key, opts);
 }
 
+export function strArray(
+  body: unknown,
+  key: string,
+  { maxItems = 50, maxLen = 100 } = {}
+): string[] {
+  const value = asRecord(body)[key];
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new BadRequestError(`Поле «${key}» должно быть массивом`);
+  }
+  if (value.length > maxItems) {
+    throw new BadRequestError(`Поле «${key}»: не больше ${maxItems} элементов`);
+  }
+  return value.map((v, i) => {
+    if (typeof v !== "string" || v.trim() === "" || v.length > maxLen) {
+      throw new BadRequestError(`Поле «${key}[${i}]» некорректно`);
+    }
+    return v.trim();
+  });
+}
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function isoDate(body: unknown, key: string): string {

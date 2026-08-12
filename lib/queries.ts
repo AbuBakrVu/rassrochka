@@ -40,6 +40,10 @@ interface DealRow extends Record<string, unknown> {
   deadline: string | null;
   reject_reason: string | null;
   portal_token: string;
+  description: string | null;
+  category: string | null;
+  city: string | null;
+  guarantors: { id: string; name: string }[] | null;
 }
 
 interface ClientRow extends Record<string, unknown> {
@@ -164,6 +168,10 @@ function toDeal(row: DealRow, today: string): Deal {
     manager: row.manager_initials ?? "—",
     managerId: row.manager_id,
     portalToken: row.portal_token,
+    guarantors: row.guarantors ?? [],
+    ...(row.description ? { description: row.description } : {}),
+    ...(row.category ? { category: row.category } : {}),
+    ...(row.city ? { city: row.city } : {}),
     ...(row.deadline ? { deadline: shortDate(row.deadline) } : {}),
     ...(urgent ? { urgent: true } : {}),
   };
@@ -207,7 +215,14 @@ const DEALS_SELECT = `
   select d.id, d.client_id, c.name as client_name, d.product, d.amount,
          d.months, d.markup_pct, d.opened_at, d.stage, d.paid_count,
          d.next_step, d.deadline, d.reject_reason, d.portal_token,
-         d.manager_id, u.initials as manager_initials
+         d.description, d.category, d.city,
+         d.manager_id, u.initials as manager_initials,
+         (
+           select coalesce(json_agg(json_build_object('id', g.id, 'name', g.name)), '[]')
+           from deal_guarantors dg
+           join clients g on g.id = dg.client_id
+           where dg.deal_id = d.id
+         ) as guarantors
   from deals d
   join clients c on c.id = d.client_id
   left join users u on u.id = d.manager_id
@@ -445,6 +460,11 @@ export interface NewDealInput {
   clientId: string;
   managerId: number;
   markupPct: number;
+  description?: string;
+  category?: string;
+  city?: string;
+  /** id клиентов-поручителей — до 5, проверяется в API-роуте. */
+  guarantorIds?: string[];
 }
 
 export async function createDeal(
@@ -456,9 +476,9 @@ export async function createDeal(
   const id = await transaction(dbName, async (client) => {
     const { rows } = await client.query<{ id: string; product: string }>(
       `insert into deals (client_id, product, amount, months, markup_pct, opened_at,
-                          manager_id, stage)
+                          manager_id, stage, description, category, city)
        values ($1, $2, $3, $4, $5, $6,
-               (select id from users where id = $7 and active), 'new')
+               (select id from users where id = $7 and active), 'new', $8, $9, $10)
        returning id, product`,
       [
         input.clientId,
@@ -468,9 +488,23 @@ export async function createDeal(
         input.markupPct,
         input.openedAt,
         input.managerId,
+        input.description || null,
+        input.category || null,
+        input.city || null,
       ]
     );
     const deal = rows[0];
+
+    // Поручители — существующие клиенты компании, максимум 5 (проверено в API)
+    if (input.guarantorIds && input.guarantorIds.length > 0) {
+      for (const guarantorId of input.guarantorIds) {
+        await client.query(
+          `insert into deal_guarantors (deal_id, client_id) values ($1, $2)
+           on conflict do nothing`,
+          [deal.id, guarantorId]
+        );
+      }
+    }
 
     const { rows: clientRows } = await client.query<{ name: string }>(
       "select name from clients where id = $1",
