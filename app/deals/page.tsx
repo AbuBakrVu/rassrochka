@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { PageHeader, Badge } from "@/components/ui";
 import { stages, fmt } from "@/lib/data";
@@ -14,7 +15,11 @@ const months = (n: number) => {
 };
 
 export default function DealsPage() {
-  const { deals } = useData();
+  const { deals, employees } = useData();
+  const [managerId, setManagerId] = useState<number | "all">("all");
+  const visibleDeals =
+    managerId === "all" ? deals : deals.filter((d) => d.managerId === managerId);
+
   return (
     <>
       <PageHeader
@@ -34,15 +39,27 @@ export default function DealsPage() {
               шаг.
             </p>
           </div>
-          <button className="rounded-[10px] border border-line bg-surface px-4 py-2 text-sm text-mute hover:text-ink">
-            Все менеджеры ▾
-          </button>
+          <select
+            value={managerId}
+            onChange={(e) =>
+              setManagerId(e.target.value === "all" ? "all" : Number(e.target.value))
+            }
+            aria-label="Фильтр по менеджеру"
+            className="rounded-[10px] border border-line bg-surface px-4 py-2 text-sm text-mute hover:text-ink"
+          >
+            <option value="all">Все менеджеры</option>
+            {employees.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="-mx-4 overflow-x-auto px-4 pb-2 sm:-mx-8 sm:px-8">
           <div className="flex min-w-max gap-4">
             {stages.map((stage) => {
-              const items = deals.filter((d) => d.stage === stage.key);
+              const items = visibleDeals.filter((d) => d.stage === stage.key);
               return (
                 <section
                   key={stage.key}
