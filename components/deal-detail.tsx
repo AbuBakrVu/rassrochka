@@ -101,12 +101,13 @@ function BalanceChart({ schedule, amount }: { schedule: Installment[]; amount: n
 
 export default function DealDetail({ id }: { id: string }) {
   const {
-    deals, clients, paidPayments, events, templates, employees,
-    acceptPayment, sendReminder, updateDeal, restructureDeal,
+    deals, clients, paidPayments, events, templates, employees, user,
+    acceptPayment, undoLastPayment, sendReminder, updateDeal, restructureDeal,
   } = useData();
   const router = useRouter();
   const deal = deals.find((d) => d.id === id);
   const [printMode, setPrintMode] = useState<PrintMode | null>(null);
+  const [undoing, setUndoing] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
@@ -177,6 +178,18 @@ export default function DealDetail({ id }: { id: string }) {
       "noopener,noreferrer"
     );
     sendReminder(deal.id).catch(() => {});
+  };
+
+  const undoPayment = async () => {
+    if (!confirm(`Отменить последний принятый платёж по сделке ${deal.id}?`)) return;
+    setUndoing(true);
+    try {
+      await undoLastPayment(deal.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось отменить платёж");
+    } finally {
+      setUndoing(false);
+    }
   };
 
   return (
@@ -427,6 +440,16 @@ export default function DealDetail({ id }: { id: string }) {
                             className="rounded-[10px] bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep hover:bg-brand hover:text-white"
                           >
                             Отметить оплату
+                          </button>
+                        )}
+                        {user.role === "admin" && p.status === "paid" && p.n === paid && (
+                          <button
+                            onClick={undoPayment}
+                            disabled={undoing}
+                            title="Отменить этот платёж — например, если приняли по ошибке"
+                            className="rounded-[10px] border border-line px-3 py-1.5 text-xs font-medium text-mute hover:border-danger/40 hover:text-danger disabled:opacity-50"
+                          >
+                            Отменить
                           </button>
                         )}
                       </td>

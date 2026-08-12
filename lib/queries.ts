@@ -826,6 +826,77 @@ export async function acceptPayment(
   return { deal, alreadyPaid };
 }
 
+/**
+ * Откатывает последний принятый взнос — менеджер ошибся и нажал «Отметить
+ * оплату» не по той сделке. Отменять можно только самый последний взнос:
+ * график — это «первые paid_count взносов оплачены», отменить произвольный
+ * взнос из середины физически нечем.
+ *
+ * Реальные деньги (cash_tx) не удаляются задним числом — добавляется
+ * компенсирующая запись, чтобы в кассе остался полный аудиторский след.
+ * Начисление соинвесторам за этот взнос удаляется: это ещё не выплаченные
+ * деньги, просто прогноз, отменённому платежу неоткуда взяться.
+ */
+export async function undoLastPayment(dbName: string, dealId: string): Promise<Deal> {
+  await transaction(dbName, async (client) => {
+    const { rows } = await client.query<{
+      months: number;
+      paid_count: number;
+      product: string;
+      client_name: string;
+    }>(
+      `select d.months, d.paid_count, d.product, c.name as client_name
+       from deals d join clients c on c.id = d.client_id
+       where d.id = $1
+       for update of d`,
+      [dealId]
+    );
+    const deal = rows[0];
+    if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+    if (deal.paid_count <= 0) throw new Error("NOTHING_TO_UNDO");
+
+    const n = deal.paid_count;
+
+    const { rows: txRows } = await client.query<{ id: string; amount: number }>(
+      `select id, amount from cash_tx where deal_id = $1 and kind = 'payment' order by id desc limit 1`,
+      [dealId]
+    );
+    const lastTx = txRows[0];
+    if (!lastTx) throw new Error(`У сделки ${dealId} нет записей о платежах в кассе`);
+
+    await client.query(
+      `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note)
+       values ('payment', $1, current_date, $2, $3, $4)`,
+      [
+        -lastTx.amount,
+        dealId,
+        `Отмена платежа ${n} из ${deal.months} · ${deal.client_name}`,
+        deal.product,
+      ]
+    );
+
+    await client.query(
+      `delete from coinvestor_profit_tx where deal_id = $1 and kind = 'accrual' and installment_number = $2`,
+      [dealId, n]
+    );
+
+    await client.query(
+      `update deals set paid_count = $2, stage = case when stage = 'closed' then 'active' else stage end
+       where id = $1`,
+      [dealId, n - 1]
+    );
+
+    await client.query(
+      "insert into deal_events (deal_id, text) values ($1, $2)",
+      [dealId, `Платёж ${n} из ${deal.months} отменён — принят по ошибке`]
+    );
+  });
+
+  const updated = await loadDeal(dbName, dealId);
+  if (!updated) throw new Error(`Сделка ${dealId} не найдена`);
+  return updated;
+}
+
 export interface CashAdjustmentInput {
   amount: number;
   title: string;
@@ -914,9 +985,9 @@ async function accrueCoinvestorProfit(
     const share = (marginPerInstallment * investor.profit_share_pct) / 100;
     if (share <= 0) continue;
     await client.query(
-      `insert into coinvestor_profit_tx (coinvestor_id, deal_id, kind, amount, note)
-       values ($1, $2, 'accrual', $3, $4)`,
-      [investor.id, dealId, share, `Доля с платежа ${installmentNumber} из ${months} · ${product}`]
+      `insert into coinvestor_profit_tx (coinvestor_id, deal_id, kind, amount, note, installment_number)
+       values ($1, $2, 'accrual', $3, $4, $5)`,
+      [investor.id, dealId, share, `Доля с платежа ${installmentNumber} из ${months} · ${product}`, installmentNumber]
     );
   }
 }

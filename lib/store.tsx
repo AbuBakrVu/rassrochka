@@ -243,6 +243,7 @@ interface DataContextValue extends Snapshot {
   logout: () => Promise<void>;
   addClient: (input: NewClientInput) => Promise<Client>;
   acceptPayment: (dealId: string, options?: AcceptPaymentOptions) => Promise<void>;
+  undoLastPayment: (dealId: string) => Promise<void>;
   addCashAdjustment: (input: CashAdjustmentInput) => Promise<void>;
   addCoinvestor: (input: NewCoinvestorInput) => Promise<Coinvestor>;
   updateCoinvestor: (id: string, input: UpdateCoinvestorInput) => Promise<void>;
@@ -410,6 +411,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const undoLastPayment = useCallback(
+    async (dealId: string) => {
+      await api(`/api/deals/${encodeURIComponent(dealId)}/undo-payment`, {});
+      await load();
+    },
+    [load]
+  );
+
   const addCashAdjustment = useCallback(
     async (input: CashAdjustmentInput) => {
       await api("/api/cash", input);
@@ -554,6 +563,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       restructureDeal,
       addClient,
       acceptPayment,
+      undoLastPayment,
       addCashAdjustment,
       addCoinvestor,
       updateCoinvestor,
@@ -573,7 +583,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       logout,
       refresh,
     }),
-    [state, addDeal, updateDeal, restructureDeal, addClient, acceptPayment, addCashAdjustment,
+    [state, addDeal, updateDeal, restructureDeal, addClient, acceptPayment, undoLastPayment, addCashAdjustment,
      addCoinvestor, updateCoinvestor, setCoinvestorActive, deleteCoinvestor,
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,
