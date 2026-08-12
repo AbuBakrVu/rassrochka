@@ -1,5 +1,7 @@
-import { handle, str } from "@/app/api/_lib/handler";
+import { handle, str, optionalStr, BadRequestError } from "@/app/api/_lib/handler";
 import { deleteTemplate, updateTemplate } from "@/lib/queries";
+
+const STAGES = ["before", "due", "overdue_soft", "overdue_hard"];
 
 export async function PATCH(
   request: Request,
@@ -9,11 +11,17 @@ export async function PATCH(
 
   return handle(
     request,
-    ({ tenant, body }) =>
-      updateTemplate(tenant.dbName, id, {
+    ({ tenant, body }) => {
+      const stage = optionalStr(body, "stage");
+      if (stage && !STAGES.includes(stage)) {
+        throw new BadRequestError("Неизвестная стадия напоминания");
+      }
+      return updateTemplate(tenant.dbName, id, {
         name: str(body, "name", { max: 120 }),
         body: str(body, "body", { max: 2000 }),
-      }),
+        stage: stage || null,
+      });
+    },
     { adminOnly: true }
   );
 }

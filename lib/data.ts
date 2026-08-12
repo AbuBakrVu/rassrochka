@@ -15,6 +15,17 @@ export type DealStage =
 // Состояние для карточки клиента
 export type DealState = "active" | "closed" | "rejected" | "pending";
 
+// Этап автоматической лесенки напоминаний — считается от даты ближайшего
+// неоплаченного взноса, не хранится отдельно на сделке.
+export type ReminderStage = "before" | "due" | "overdue_soft" | "overdue_hard";
+
+export const REMINDER_STAGE_LABEL: Record<ReminderStage, string> = {
+  before: "Заранее",
+  due: "Сегодня платёж",
+  overdue_soft: "Просрочка 1–3 дня",
+  overdue_hard: "Просрочка от 4 дней",
+};
+
 export interface Deal {
   id: string;
   clientId: string;
@@ -44,6 +55,9 @@ export interface Deal {
   downPayment?: number;
   /** Свой шаблон напоминания на эту сделку — если не задан, используется общий по умолчанию. */
   reminderTemplateId?: string;
+  /** Последняя стадия лесенки напоминаний, отправленная по текущему взносу — вместе с датой взноса не даёт слать её повторно. */
+  lastReminderStage?: ReminderStage;
+  lastReminderDueDate?: string;
 }
 
 export interface DealGuarantor {

@@ -25,6 +25,8 @@ import { useData, type Employee } from "@/lib/store";
 import { clientById, fmt, stages, paidCount, purchasePrice, type Deal } from "@/lib/data";
 import { scheduleForDeal, money, longDate, type Installment } from "@/lib/schedule";
 import { dealEvents } from "@/lib/events";
+import { reminderStageFor, pickReminderTemplate, buildReminderText } from "@/lib/reminders";
+import { todayIso } from "@/lib/status";
 import CopyLinkButton from "@/components/copy-link";
 import DealPrint, { type PrintMode } from "@/components/deal-print";
 
@@ -164,18 +166,32 @@ export default function DealDetail({ id }: { id: string }) {
   }));
 
   const remind = () => {
-    const template =
-      (deal.reminderTemplateId && templates.find((t) => t.id === deal.reminderTemplateId)) ||
-      templates.find((t) => t.isDefault) ||
-      templates[0];
-    if (!template || !client) return;
+    if (!client) return;
 
-    const firstName = client.name.split(" ")[1] ?? client.name;
-    const text = template.body
-      .replaceAll("{имя}", firstName)
-      .replaceAll("{сумма}", money(nextPayment?.amount ?? monthly))
-      .replaceAll("{товар}", deal.product)
-      .replaceAll("{дата}", nextPayment?.date ?? "—");
+    // Стадия лесенки — только чтобы не показать эту же сделку повторно
+    // в очереди на /mailings; при ручной отправке шаблон под стадию
+    // подбирается, если он настроен, иначе — как раньше.
+    const daysUntil = nextPayment
+      ? Math.round(
+          (Date.parse(`${nextPayment.iso}T00:00:00Z`) - Date.parse(`${todayIso()}T00:00:00Z`)) /
+            86_400_000
+        )
+      : null;
+    const stage = daysUntil !== null ? reminderStageFor(daysUntil) : null;
+
+    const template = stage
+      ? pickReminderTemplate(templates, stage, deal)
+      : (deal.reminderTemplateId && templates.find((t) => t.id === deal.reminderTemplateId)) ||
+        templates.find((t) => t.isDefault) ||
+        templates[0];
+    if (!template) return;
+
+    const text = buildReminderText(template, {
+      client,
+      product: deal.product,
+      amount: nextPayment?.amount ?? monthly,
+      date: nextPayment?.date ?? "—",
+    });
 
     const phone = client.phone.replace(/\D/g, "");
     window.open(
@@ -183,7 +199,10 @@ export default function DealDetail({ id }: { id: string }) {
       "_blank",
       "noopener,noreferrer"
     );
-    sendReminder(deal.id).catch(() => {});
+    sendReminder(
+      deal.id,
+      stage && nextPayment ? { stage, dueDate: nextPayment.iso } : undefined
+    ).catch(() => {});
   };
 
   const undoPayment = async () => {

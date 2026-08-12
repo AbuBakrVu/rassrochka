@@ -49,6 +49,8 @@ interface DealRow extends Record<string, unknown> {
   restructured_from: string | null;
   down_payment: number | null;
   reminder_template_id: number | null;
+  last_reminder_stage: string | null;
+  last_reminder_due_date: string | null;
 }
 
 interface ClientRow extends Record<string, unknown> {
@@ -113,6 +115,7 @@ interface TemplateRow extends Record<string, unknown> {
   name: string;
   body: string;
   is_default: boolean;
+  stage: string | null;
 }
 
 interface EventRow extends Record<string, unknown> {
@@ -202,6 +205,10 @@ function toDeal(row: DealRow, today: string): Deal {
     ...(row.city ? { city: row.city } : {}),
     ...(row.down_payment ? { downPayment: row.down_payment } : {}),
     ...(row.reminder_template_id ? { reminderTemplateId: String(row.reminder_template_id) } : {}),
+    ...(row.last_reminder_stage
+      ? { lastReminderStage: row.last_reminder_stage as Deal["lastReminderStage"] }
+      : {}),
+    ...(row.last_reminder_due_date ? { lastReminderDueDate: row.last_reminder_due_date } : {}),
     ...(row.deadline ? { deadline: shortDate(row.deadline) } : {}),
     ...(urgent ? { urgent: true } : {}),
   };
@@ -257,6 +264,7 @@ const DEALS_SELECT = `
          d.description, d.category, d.city,
          d.original_months, d.restructured_months, d.restructured_from,
          d.down_payment, d.reminder_template_id,
+         d.last_reminder_stage, d.last_reminder_due_date,
          d.manager_id, u.initials as manager_initials,
          (
            select coalesce(json_agg(json_build_object('id', g.id, 'name', g.name)), '[]')
@@ -370,6 +378,7 @@ function toTemplate(row: TemplateRow): MessageTemplate {
     name: row.name,
     body: row.body,
     isDefault: row.is_default,
+    ...(row.stage ? { stage: row.stage as MessageTemplate["stage"] } : {}),
   };
 }
 
@@ -1409,19 +1418,27 @@ export async function adjustCoinvestorCapital(
 export interface TemplateInput {
   name: string;
   body: string;
+  stage?: string | null;
 }
 
 export async function createTemplate(
   dbName: string,
   input: TemplateInput
 ): Promise<MessageTemplate> {
-  const row = await queryOne<TemplateRow>(
-    dbName,
-    `insert into message_templates (name, body) values ($1, $2) returning *`,
-    [input.name, input.body]
-  );
-  if (!row) throw new Error("Шаблон не создан");
-  return toTemplate(row);
+  return transaction(dbName, async (client) => {
+    // Стадия — одна на шаблон: снимаем её с прежнего владельца, если был
+    if (input.stage) {
+      await client.query("update message_templates set stage = null where stage = $1", [
+        input.stage,
+      ]);
+    }
+    const { rows } = await client.query<TemplateRow>(
+      `insert into message_templates (name, body, stage) values ($1, $2, $3) returning *`,
+      [input.name, input.body, input.stage ?? null]
+    );
+    if (!rows[0]) throw new Error("Шаблон не создан");
+    return toTemplate(rows[0]);
+  });
 }
 
 export async function updateTemplate(
@@ -1429,13 +1446,20 @@ export async function updateTemplate(
   id: string,
   input: TemplateInput
 ): Promise<MessageTemplate> {
-  const row = await queryOne<TemplateRow>(
-    dbName,
-    `update message_templates set name = $2, body = $3 where id = $1 returning *`,
-    [id, input.name, input.body]
-  );
-  if (!row) throw new Error(`Шаблон ${id} не найден`);
-  return toTemplate(row);
+  return transaction(dbName, async (client) => {
+    if (input.stage) {
+      await client.query(
+        "update message_templates set stage = null where stage = $1 and id != $2",
+        [input.stage, id]
+      );
+    }
+    const { rows } = await client.query<TemplateRow>(
+      `update message_templates set name = $2, body = $3, stage = $4 where id = $1 returning *`,
+      [id, input.name, input.body, input.stage ?? null]
+    );
+    if (!rows[0]) throw new Error(`Шаблон ${id} не найден`);
+    return toTemplate(rows[0]);
+  });
 }
 
 export async function deleteTemplate(dbName: string, id: string): Promise<void> {
@@ -1467,7 +1491,11 @@ export async function setDefaultTemplate(dbName: string, id: string): Promise<vo
 }
 
 /** Записывает в историю сделки факт отправки напоминания — сам переход в WhatsApp уже произошёл на клиенте. */
-export async function recordReminderSent(dbName: string, dealId: string): Promise<void> {
+export async function recordReminderSent(
+  dbName: string,
+  dealId: string,
+  stageInfo?: { stage: string; dueDate: string }
+): Promise<void> {
   const deal = await queryOne<{ id: string }>(dbName, "select id from deals where id = $1", [dealId]);
   if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
   await query(
@@ -1475,6 +1503,13 @@ export async function recordReminderSent(dbName: string, dealId: string): Promis
     "insert into deal_events (deal_id, text) values ($1, 'Напоминание об оплате отправлено в WhatsApp')",
     [dealId]
   );
+  if (stageInfo) {
+    await query(
+      dbName,
+      "update deals set last_reminder_stage = $2, last_reminder_due_date = $3 where id = $1",
+      [dealId, stageInfo.stage, stageInfo.dueDate]
+    );
+  }
 }
 
 // ── Кабинет клиента ────────────────────────────────────────────────────

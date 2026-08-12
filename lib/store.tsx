@@ -17,7 +17,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { Deal, Client } from "./data";
+import type { Deal, Client, ReminderStage } from "./data";
 import type { DealEvent } from "./events";
 
 export interface CurrentUser {
@@ -103,6 +103,8 @@ export interface MessageTemplate {
   name: string;
   body: string;
   isDefault: boolean;
+  /** Стадия лесенки напоминаний, за которую этот шаблон отвечает — необязательна. */
+  stage?: ReminderStage | null;
 }
 
 interface Snapshot {
@@ -242,6 +244,7 @@ export interface CoinvestorCapitalInput {
 export interface TemplateInput {
   name: string;
   body: string;
+  stage?: ReminderStage | null;
 }
 
 interface DataContextValue extends Snapshot {
@@ -270,7 +273,10 @@ interface DataContextValue extends Snapshot {
   updateTemplate: (id: string, input: TemplateInput) => Promise<void>;
   deleteTemplate: (id: string) => Promise<void>;
   setDefaultTemplate: (id: string) => Promise<void>;
-  sendReminder: (dealId: string) => Promise<void>;
+  sendReminder: (
+    dealId: string,
+    stageInfo?: { stage: ReminderStage; dueDate: string }
+  ) => Promise<void>;
   /** Перечитать всё состояние с сервера. */
   refresh: () => Promise<void>;
 }
@@ -562,8 +568,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const sendReminder = useCallback(
-    async (dealId: string) => {
-      await api(`/api/deals/${encodeURIComponent(dealId)}/remind`, {});
+    async (dealId: string, stageInfo?: { stage: ReminderStage; dueDate: string }) => {
+      await api(`/api/deals/${encodeURIComponent(dealId)}/remind`, stageInfo ?? {});
       await load();
     },
     [load]

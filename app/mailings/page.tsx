@@ -1,14 +1,92 @@
 "use client";
 
 import { useState } from "react";
-import { Send, Star, Pencil, Trash2 } from "lucide-react";
+import { Send, Star, Pencil, Trash2, Bell } from "lucide-react";
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui";
 import { useData, type MessageTemplate } from "@/lib/store";
+import { REMINDER_STAGE_LABEL, type ReminderStage } from "@/lib/data";
+import { computeReminderQueue, type ReminderQueueItem } from "@/lib/reminders";
+import { todayIso } from "@/lib/status";
 
 const field =
   "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 const PLACEHOLDERS = ["{имя}", "{сумма}", "{товар}", "{дата}"];
+
+const STAGE_TONE: Record<ReminderStage, "blue" | "yellow" | "red"> = {
+  before: "blue",
+  due: "yellow",
+  overdue_soft: "yellow",
+  overdue_hard: "red",
+};
+
+function ReminderQueue() {
+  const { deals, clients, paidPayments, templates, sendReminder } = useData();
+  const [sendingKey, setSendingKey] = useState<string | null>(null);
+
+  const queue = computeReminderQueue(deals, clients, paidPayments, templates, todayIso());
+  if (queue.length === 0) return null;
+
+  const send = async (item: ReminderQueueItem) => {
+    const key = item.dealId + item.stage;
+    setSendingKey(key);
+    const phone = item.phone.replace(/\D/g, "");
+    window.open(
+      `https://wa.me/${phone}?text=${encodeURIComponent(item.text)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+    try {
+      await sendReminder(item.dealId, { stage: item.stage, dueDate: item.dueIso });
+    } catch {
+      // окно WhatsApp уже открылось — тут только не даём кнопке зависнуть
+    } finally {
+      setSendingKey(null);
+    }
+  };
+
+  return (
+    <Card className="mb-4 p-5">
+      <div className="mb-1 flex items-center gap-2">
+        <Bell size={16} className="text-brand" aria-hidden />
+        <h2 className="font-semibold tracking-tight">Очередь напоминаний на сегодня</h2>
+        <span className="rounded-full bg-canvas px-2 py-0.5 text-xs font-medium text-mute">
+          {queue.length}
+        </span>
+      </div>
+      <p className="mb-3 text-sm text-mute">
+        Лесенка сама решает, кому пора напомнить и каким тоном — вам остаётся
+        только нажать «Отправить».
+      </p>
+      <div className="flex flex-col divide-y divide-line">
+        {queue.map((item) => (
+          <div
+            key={item.dealId + item.stage}
+            className="flex flex-wrap items-center justify-between gap-3 py-3"
+          >
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <Badge tone={STAGE_TONE[item.stage]}>{REMINDER_STAGE_LABEL[item.stage]}</Badge>
+                <p className="truncate font-medium">{item.clientName}</p>
+              </div>
+              <p className="mt-1 truncate text-sm text-mute">
+                {item.product} · {item.dueLabel} · {item.dealId}
+              </p>
+            </div>
+            <button
+              onClick={() => send(item)}
+              disabled={sendingKey === item.dealId + item.stage}
+              className="flex shrink-0 items-center gap-1.5 rounded-[10px] bg-brand px-3.5 py-2 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:opacity-50"
+            >
+              <Send size={14} aria-hidden />
+              Отправить
+            </button>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 export default function MailingsPage() {
   const {
@@ -59,10 +137,12 @@ export default function MailingsPage() {
       <div className="mx-auto max-w-3xl px-4 py-6 sm:px-8">
         <p className="mb-4 text-sm text-mute">
           У компании нет отдельного договора с WhatsApp Business API, поэтому
-          рассылка не автоматическая: менеджер жмёт «Напомнить об оплате» на
-          карточке сделки, текст собирается по шаблону ниже, и WhatsApp
-          открывается с готовым сообщением клиенту.
+          рассылка не автоматическая: лесенка ниже сама собирает, кому сегодня
+          пора напомнить, а менеджер жмёт «Отправить» — WhatsApp открывается с
+          готовым сообщением клиенту.
         </p>
+
+        <ReminderQueue />
 
         {isAdmin && (
           <div className="mb-4 flex justify-end">
@@ -94,6 +174,9 @@ export default function MailingsPage() {
                   <div className="flex items-center gap-2">
                     <h2 className="font-semibold tracking-tight">{t.name}</h2>
                     {t.isDefault && <Badge tone="green">Основной</Badge>}
+                    {t.stage && (
+                      <Badge tone={STAGE_TONE[t.stage]}>{REMINDER_STAGE_LABEL[t.stage]}</Badge>
+                    )}
                   </div>
                   {isAdmin && (
                     <div className="flex shrink-0 gap-2">
@@ -141,6 +224,7 @@ export default function MailingsPage() {
         <TemplateModal
           initial={modal === "new" ? null : modal}
           onClose={() => setModal(null)}
+          usedStages={templates.filter((t) => t !== modal).map((t) => t.stage).filter(Boolean) as ReminderStage[]}
           onSubmit={async (input) => {
             if (modal === "new") await addTemplate(input);
             else await updateTemplate(modal.id, input);
@@ -154,15 +238,18 @@ export default function MailingsPage() {
 
 function TemplateModal({
   initial,
+  usedStages,
   onClose,
   onSubmit,
 }: {
   initial: MessageTemplate | null;
+  usedStages: ReminderStage[];
   onClose: () => void;
-  onSubmit: (input: { name: string; body: string }) => Promise<void>;
+  onSubmit: (input: { name: string; body: string; stage: ReminderStage | null }) => Promise<void>;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [body, setBody] = useState(initial?.body ?? "");
+  const [stage, setStage] = useState<ReminderStage | "">(initial?.stage ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -174,7 +261,7 @@ function TemplateModal({
     setSaving(true);
     setError(null);
     try {
-      await onSubmit({ name: name.trim(), body: body.trim() });
+      await onSubmit({ name: name.trim(), body: body.trim(), stage: stage || null });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить");
       setSaving(false);
@@ -213,6 +300,22 @@ function TemplateModal({
               onChange={(e) => setBody(e.target.value)}
               placeholder="Здравствуйте, {имя}! Напоминаем про платёж {сумма}…"
             />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium">Стадия в лесенке напоминаний</span>
+            <select
+              className={field}
+              value={stage}
+              onChange={(e) => setStage(e.target.value as ReminderStage | "")}
+            >
+              <option value="">Не в лесенке — только вручную</option>
+              {(Object.keys(REMINDER_STAGE_LABEL) as ReminderStage[]).map((s) => (
+                <option key={s} value={s}>
+                  {REMINDER_STAGE_LABEL[s]}
+                  {usedStages.includes(s) ? " (заменит текущий)" : ""}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
 
