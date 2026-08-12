@@ -103,11 +103,14 @@ export default function DealDetail({ id }: { id: string }) {
   const {
     deals, clients, paidPayments, events, templates, employees, user,
     acceptPayment, undoLastPayment, sendReminder, updateDeal, restructureDeal,
+    closeDeal, reassignDeal, deleteDeal,
   } = useData();
   const router = useRouter();
   const deal = deals.find((d) => d.id === id);
   const [printMode, setPrintMode] = useState<PrintMode | null>(null);
   const [undoing, setUndoing] = useState(false);
+  const [reassigning, setReassigning] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
@@ -161,7 +164,10 @@ export default function DealDetail({ id }: { id: string }) {
   }));
 
   const remind = () => {
-    const template = templates.find((t) => t.isDefault) ?? templates[0];
+    const template =
+      (deal.reminderTemplateId && templates.find((t) => t.id === deal.reminderTemplateId)) ||
+      templates.find((t) => t.isDefault) ||
+      templates[0];
     if (!template || !client) return;
 
     const firstName = client.name.split(" ")[1] ?? client.name;
@@ -189,6 +195,18 @@ export default function DealDetail({ id }: { id: string }) {
       alert(err instanceof Error ? err.message : "Не удалось отменить платёж");
     } finally {
       setUndoing(false);
+    }
+  };
+
+  const removeDeal = async () => {
+    if (!confirm(`Удалить сделку ${deal.id}? Действие необратимо.`)) return;
+    setDeleting(true);
+    try {
+      await deleteDeal(deal.id);
+      router.push("/deals");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось удалить сделку");
+      setDeleting(false);
     }
   };
 
@@ -321,6 +339,7 @@ export default function DealDetail({ id }: { id: string }) {
             onRestructure={async (input) => {
               await restructureDeal(deal.id, input);
             }}
+            onCloseEarly={active ? async () => { await closeDeal(deal.id); } : undefined}
           />
         </div>
       )}
@@ -498,6 +517,29 @@ export default function DealDetail({ id }: { id: string }) {
                 <p className="mt-2 text-center text-xs text-mute">
                   Сообщение уйдёт в WhatsApp по шаблону из «Рассылок»
                 </p>
+                {templates.length > 1 && (
+                  <label className="mt-2 block">
+                    <span className="mb-1 block text-xs text-mute">Шаблон для этой сделки</span>
+                    <select
+                      value={deal.reminderTemplateId ?? ""}
+                      onChange={async (e) => {
+                        const value = e.target.value || null;
+                        await updateDeal(deal.id, {
+                          product: deal.product,
+                          nextStep: deal.nextStep,
+                          managerId: deal.managerId!,
+                          reminderTemplateId: value,
+                        });
+                      }}
+                      className="w-full rounded-[8px] border border-line bg-canvas px-2.5 py-1.5 text-xs outline-none focus:border-brand"
+                    >
+                      <option value="">Общий по умолчанию</option>
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <div className="mt-4 border-t border-line pt-4">
                   <p className="text-sm font-medium">Кабинет клиента</p>
                   <p className="mt-0.5 mb-3 text-xs text-mute">
@@ -546,7 +588,7 @@ export default function DealDetail({ id }: { id: string }) {
                 ["Интервал", "Ежемесячно"],
                 ["Тип платежей", "Равные"],
                 ["Первый платёж", `${schedule[0].date} г.`],
-                ["Ответственный", deal.manager],
+                ["Первоначальный взнос", deal.downPayment ? money(deal.downPayment) : "Без взноса"],
                 ...(deal.category ? [["Категория", deal.category]] : []),
                 ...(deal.city ? [["Город", deal.city]] : []),
               ].map(([k, v]) => (
@@ -555,6 +597,36 @@ export default function DealDetail({ id }: { id: string }) {
                   <dd className="font-medium">{v}</dd>
                 </div>
               ))}
+              <div className="flex items-center justify-between py-2.5">
+                <dt className="text-mute">Ответственный</dt>
+                <dd className="font-medium">
+                  {user.role === "admin" ? (
+                    <select
+                      value={deal.managerId ?? ""}
+                      disabled={reassigning}
+                      onChange={async (e) => {
+                        const id = Number(e.target.value);
+                        if (!id) return;
+                        setReassigning(true);
+                        try {
+                          await reassignDeal(deal.id, id);
+                        } catch (err) {
+                          alert(err instanceof Error ? err.message : "Не удалось сменить ответственного");
+                        } finally {
+                          setReassigning(false);
+                        }
+                      }}
+                      className="rounded-[8px] border border-line bg-canvas px-2 py-1 text-sm outline-none focus:border-brand"
+                    >
+                      {employees.filter((e) => e.active).map((e) => (
+                        <option key={e.id} value={e.id}>{e.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    deal.manager
+                  )}
+                </dd>
+              </div>
             </dl>
           </Card>
 
@@ -623,6 +695,25 @@ export default function DealDetail({ id }: { id: string }) {
           </Card>
         </div>
       </div>
+
+      {user.role === "admin" && paid === 0 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-danger-soft bg-danger-soft/30 px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-danger">Удалить сделку</p>
+            <p className="text-sm text-mute">
+              Можно удалить, пока по сделке нет ни одного платежа — например,
+              если завели по ошибке. Действие необратимо.
+            </p>
+          </div>
+          <button
+            onClick={removeDeal}
+            disabled={deleting}
+            className="rounded-[10px] border border-danger/40 px-4 py-2.5 text-sm font-medium text-danger hover:bg-danger hover:text-white disabled:opacity-50"
+          >
+            Удалить сделку
+          </button>
+        </div>
+      )}
 
       {printMode &&
         createPortal(

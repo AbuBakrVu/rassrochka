@@ -47,6 +47,8 @@ interface DealRow extends Record<string, unknown> {
   original_months: number | null;
   restructured_months: number | null;
   restructured_from: string | null;
+  down_payment: number | null;
+  reminder_template_id: number | null;
 }
 
 interface ClientRow extends Record<string, unknown> {
@@ -189,6 +191,8 @@ function toDeal(row: DealRow, today: string): Deal {
     ...(row.description ? { description: row.description } : {}),
     ...(row.category ? { category: row.category } : {}),
     ...(row.city ? { city: row.city } : {}),
+    ...(row.down_payment ? { downPayment: row.down_payment } : {}),
+    ...(row.reminder_template_id ? { reminderTemplateId: String(row.reminder_template_id) } : {}),
     ...(row.deadline ? { deadline: shortDate(row.deadline) } : {}),
     ...(urgent ? { urgent: true } : {}),
   };
@@ -234,6 +238,7 @@ const DEALS_SELECT = `
          d.next_step, d.deadline, d.reject_reason, d.portal_token,
          d.description, d.category, d.city,
          d.original_months, d.restructured_months, d.restructured_from,
+         d.down_payment, d.reminder_template_id,
          d.manager_id, u.initials as manager_initials,
          (
            select coalesce(json_agg(json_build_object('id', g.id, 'name', g.name)), '[]')
@@ -244,10 +249,11 @@ const DEALS_SELECT = `
   from deals d
   join clients c on c.id = d.client_id
   left join users u on u.id = d.manager_id
+  where d.deleted_at is null
 `;
 
 const DEALS_SQL = `${DEALS_SELECT} order by d.created_at desc`;
-const DEAL_BY_ID_SQL = `${DEALS_SELECT} where d.id = $1`;
+const DEAL_BY_ID_SQL = `${DEALS_SELECT} and d.id = $1`;
 
 export interface Employee {
   id: number;
@@ -483,6 +489,7 @@ export interface NewDealInput {
   city?: string;
   /** id клиентов-поручителей — до 5, проверяется в API-роуте. */
   guarantorIds?: string[];
+  downPayment?: number;
 }
 
 export async function createDeal(
@@ -494,9 +501,9 @@ export async function createDeal(
   const id = await transaction(dbName, async (client) => {
     const { rows } = await client.query<{ id: string; product: string }>(
       `insert into deals (client_id, product, amount, months, markup_pct, opened_at,
-                          manager_id, stage, description, category, city)
+                          manager_id, stage, description, category, city, down_payment)
        values ($1, $2, $3, $4, $5, $6,
-               (select id from users where id = $7 and active), 'new', $8, $9, $10)
+               (select id from users where id = $7 and active), 'new', $8, $9, $10, $11)
        returning id, product`,
       [
         input.clientId,
@@ -509,6 +516,7 @@ export async function createDeal(
         input.description || null,
         input.category || null,
         input.city || null,
+        input.downPayment || null,
       ]
     );
     const deal = rows[0];
@@ -566,6 +574,8 @@ export interface UpdateDealInput {
   amount?: number;
   months?: number;
   markupPct?: number;
+  /** undefined — не трогать, null — сбросить на общий шаблон компании. */
+  reminderTemplateId?: string | null;
 }
 
 /**
@@ -604,6 +614,13 @@ export async function updateDeal(
       [dealId, input.product, input.nextStep || null, input.managerId]
     );
 
+    if (input.reminderTemplateId !== undefined) {
+      await client.query(
+        "update deals set reminder_template_id = $2 where id = $1",
+        [dealId, input.reminderTemplateId]
+      );
+    }
+
     if (changingEconomics) {
       await client.query(
         "update deals set amount = $2, months = $3, markup_pct = $4 where id = $1",
@@ -633,6 +650,143 @@ export async function updateDeal(
   const updated = await loadDeal(dbName, dealId);
   if (!updated) throw new Error(`Сделка ${dealId} не найдена`);
   return updated;
+}
+
+/** Смена ответственного одним действием — без похода в полное редактирование сделки. */
+export async function reassignDeal(
+  dbName: string,
+  dealId: string,
+  managerId: number
+): Promise<Deal> {
+  await transaction(dbName, async (client) => {
+    const { rows } = await client.query<{ name: string }>(
+      "select name from users where id = $1 and active",
+      [managerId]
+    );
+    const manager = rows[0];
+    if (!manager) throw new Error("MANAGER_NOT_FOUND");
+
+    const updated = await client.query(
+      "update deals set manager_id = $2 where id = $1 returning id",
+      [dealId, managerId]
+    );
+    if (updated.rows.length === 0) throw new Error(`Сделка ${dealId} не найдена`);
+
+    await client.query(
+      "insert into deal_events (deal_id, text) values ($1, $2)",
+      [dealId, `Ответственный изменён на ${manager.name}`]
+    );
+  });
+
+  const deal = await loadDeal(dbName, dealId);
+  if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+  return deal;
+}
+
+/**
+ * Досрочное закрытие: клиент разом гасит остаток (не через график по
+ * взносам), сделка сразу закрывается. Остаток проводится в кассу одной
+ * суммой и с него тоже начисляется доля соинвесторам — иначе на последнем
+ * куске маржи никто бы ничего не получил.
+ */
+export async function closeDealEarly(
+  dbName: string,
+  dealId: string
+): Promise<Deal> {
+  await transaction(dbName, async (client) => {
+    const { rows } = await client.query<{
+      amount: number;
+      months: number;
+      markup_pct: number;
+      paid_count: number;
+      stage: DealStage;
+      product: string;
+      client_name: string;
+    }>(
+      `select d.amount, d.months, d.markup_pct, d.paid_count, d.stage, d.product,
+              c.name as client_name
+       from deals d join clients c on c.id = d.client_id
+       where d.id = $1
+       for update of d`,
+      [dealId]
+    );
+    const deal = rows[0];
+    if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+    if (deal.stage !== "active") throw new Error("NOT_ACTIVE");
+
+    const paidSum = Math.round((deal.amount / deal.months) * deal.paid_count);
+    const remaining = deal.amount - paidSum;
+
+    if (remaining > 0) {
+      await client.query(
+        `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note)
+         values ('payment', $1, current_date, $2, $3, $4)`,
+        [
+          remaining,
+          dealId,
+          `Досрочное погашение остатка · ${deal.client_name}`,
+          deal.product,
+        ]
+      );
+
+      const purchase = purchasePrice(deal.amount, deal.markup_pct);
+      const totalMargin = deal.amount - purchase;
+      const remainingMargin = Math.round((totalMargin * (deal.months - deal.paid_count)) / deal.months);
+      if (remainingMargin > 0) {
+        const { rows: investors } = await client.query<{ id: string; profit_share_pct: number }>(
+          "select id, profit_share_pct from coinvestors where active"
+        );
+        for (const investor of investors) {
+          const share = (remainingMargin * investor.profit_share_pct) / 100;
+          if (share <= 0) continue;
+          await client.query(
+            `insert into coinvestor_profit_tx (coinvestor_id, deal_id, kind, amount, note)
+             values ($1, $2, 'accrual', $3, $4)`,
+            [investor.id, dealId, share, `Доля с досрочного погашения · ${deal.product}`]
+          );
+        }
+      }
+    }
+
+    await client.query(
+      "update deals set paid_count = $2, stage = 'closed' where id = $1",
+      [dealId, deal.months]
+    );
+
+    await client.query(
+      "insert into deal_events (deal_id, text) values ($1, $2)",
+      [
+        dealId,
+        remaining > 0
+          ? `Сделка закрыта досрочно — остаток ${remaining.toLocaleString("ru-RU")} ₽ погашен одним платежом`
+          : "Сделка закрыта досрочно",
+      ]
+    );
+  });
+
+  const deal = await loadDeal(dbName, dealId);
+  if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+  return deal;
+}
+
+/**
+ * Мягкое удаление: только для ошибочно созданных сделок без единого
+ * платежа. Закупка в кассе для такой сделки тоже не должна была
+ * происходить — удаляем её вместе со сделкой, а не оставляем висеть.
+ */
+export async function deleteDeal(dbName: string, dealId: string): Promise<void> {
+  await transaction(dbName, async (client) => {
+    const { rows } = await client.query<{ paid_count: number }>(
+      "select paid_count from deals where id = $1 and deleted_at is null for update",
+      [dealId]
+    );
+    const deal = rows[0];
+    if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+    if (deal.paid_count > 0) throw new Error("HAS_PAYMENTS");
+
+    await client.query("delete from cash_tx where deal_id = $1 and kind = 'purchase'", [dealId]);
+    await client.query("update deals set deleted_at = now() where id = $1", [dealId]);
+  });
 }
 
 export interface RestructureDealInput {

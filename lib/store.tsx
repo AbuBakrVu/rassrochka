@@ -148,6 +148,7 @@ export interface NewDealInput {
   category?: string;
   city?: string;
   guarantorIds?: string[];
+  downPayment?: number;
 }
 
 export interface NewClientInput {
@@ -163,6 +164,7 @@ export interface UpdateDealInput {
   amount?: number;
   months?: number;
   markupPct?: number;
+  reminderTemplateId?: string | null;
 }
 
 export interface RestructureDealInput {
@@ -237,6 +239,9 @@ interface DataContextValue extends Snapshot {
   addDeal: (input: NewDealInput) => Promise<Deal>;
   updateDeal: (dealId: string, input: UpdateDealInput) => Promise<Deal>;
   restructureDeal: (dealId: string, input: RestructureDealInput) => Promise<Deal>;
+  reassignDeal: (dealId: string, managerId: number) => Promise<Deal>;
+  closeDeal: (dealId: string) => Promise<Deal>;
+  deleteDeal: (dealId: string) => Promise<void>;
   addEmployee: (input: NewEmployeeInput) => Promise<{ password: string }>;
   updateEmployee: (id: number, input: UpdateEmployeeInput) => Promise<void>;
   setEmployeeActive: (id: number, active: boolean) => Promise<void>;
@@ -362,6 +367,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         category: input.category,
         city: input.city,
         guarantorIds: input.guarantorIds,
+        downPayment: input.downPayment,
       });
       await load();
       return deal;
@@ -390,6 +396,35 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       );
       await load();
       return deal;
+    },
+    [load]
+  );
+
+  const reassignDeal = useCallback(
+    async (dealId: string, managerId: number): Promise<Deal> => {
+      const deal = await api<Deal>(
+        `/api/deals/${encodeURIComponent(dealId)}/manager`,
+        { managerId }
+      );
+      await load();
+      return deal;
+    },
+    [load]
+  );
+
+  const closeDeal = useCallback(
+    async (dealId: string): Promise<Deal> => {
+      const deal = await api<Deal>(`/api/deals/${encodeURIComponent(dealId)}/close`, {});
+      await load();
+      return deal;
+    },
+    [load]
+  );
+
+  const deleteDeal = useCallback(
+    async (dealId: string) => {
+      await api(`/api/deals/${encodeURIComponent(dealId)}`, undefined, "DELETE");
+      await load();
     },
     [load]
   );
@@ -561,6 +596,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addDeal,
       updateDeal,
       restructureDeal,
+      reassignDeal,
+      closeDeal,
+      deleteDeal,
       addClient,
       acceptPayment,
       undoLastPayment,
@@ -583,7 +621,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       logout,
       refresh,
     }),
-    [state, addDeal, updateDeal, restructureDeal, addClient, acceptPayment, undoLastPayment, addCashAdjustment,
+    [state, addDeal, updateDeal, restructureDeal, reassignDeal, closeDeal, deleteDeal, addClient, acceptPayment, undoLastPayment, addCashAdjustment,
      addCoinvestor, updateCoinvestor, setCoinvestorActive, deleteCoinvestor,
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,

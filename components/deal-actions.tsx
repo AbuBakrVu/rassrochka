@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, RefreshCw } from "lucide-react";
+import { ArrowRight, RefreshCw, CheckCheck } from "lucide-react";
 import RestructureModal, { type RestructureSubmit } from "@/components/restructure-modal";
+import { money } from "@/lib/schedule";
 
 export default function DealActions({
   dealId,
@@ -13,6 +14,7 @@ export default function DealActions({
   canRestructure,
   onPrimary,
   onRestructure,
+  onCloseEarly,
 }: {
   dealId: string;
   clientName: string;
@@ -22,11 +24,26 @@ export default function DealActions({
   canRestructure: boolean;
   onPrimary?: () => void;
   onRestructure: RestructureSubmit;
+  onCloseEarly?: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
+
+  const closeEarly = async () => {
+    if (!onCloseEarly) return;
+    if (!confirm(`Закрыть сделку ${dealId} досрочно? Остаток ${money(remaining)} спишется одним платежом.`)) return;
+    setClosing(true);
+    try {
+      await onCloseEarly();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось закрыть сделку");
+    } finally {
+      setClosing(false);
+    }
+  };
 
   return (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex shrink-0 flex-wrap items-center gap-2">
       {canRestructure && (
         <button
           type="button"
@@ -35,6 +52,17 @@ export default function DealActions({
         >
           <RefreshCw size={15} aria-hidden />
           <span className="hidden sm:inline">Изменить график</span>
+        </button>
+      )}
+      {onCloseEarly && (
+        <button
+          type="button"
+          onClick={closeEarly}
+          disabled={closing}
+          className="flex items-center gap-1.5 rounded-[10px] border border-line bg-surface px-4 py-2.5 text-sm font-medium text-mute hover:border-brand hover:text-brand-deep disabled:opacity-50"
+        >
+          <CheckCheck size={15} aria-hidden />
+          <span className="hidden sm:inline">Завершить сделку</span>
         </button>
       )}
       <button

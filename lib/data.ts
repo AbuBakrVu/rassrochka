@@ -41,6 +41,9 @@ export interface Deal {
   originalMonths?: number;
   restructuredMonths?: number;
   restructuredFrom?: string;
+  downPayment?: number;
+  /** Свой шаблон напоминания на эту сделку — если не задан, используется общий по умолчанию. */
+  reminderTemplateId?: string;
 }
 
 export interface DealGuarantor {

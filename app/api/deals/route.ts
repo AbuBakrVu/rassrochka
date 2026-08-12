@@ -1,4 +1,4 @@
-import { BadRequestError, handle, isoDate, num, optionalStr, str, strArray } from "@/app/api/_lib/handler";
+import { BadRequestError, handle, isoDate, num, optionalNum, optionalStr, str, strArray } from "@/app/api/_lib/handler";
 import { createDeal } from "@/lib/queries";
 
 export async function POST(request: Request) {
@@ -20,6 +20,7 @@ export async function POST(request: Request) {
       category: optionalStr(body, "category", ""),
       city: optionalStr(body, "city", ""),
       guarantorIds,
+      downPayment: optionalNum(body, "downPayment", { min: 0, max: 1e9 }),
     });
   });
 }

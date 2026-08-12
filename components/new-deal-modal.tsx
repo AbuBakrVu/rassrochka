@@ -253,6 +253,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
         category,
         city,
         guarantorIds: guarantors.map((g) => g.id),
+        downPayment: calc.downSum > 0 ? Math.round(calc.downSum) : undefined,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось создать сделку");
