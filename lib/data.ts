@@ -308,6 +308,15 @@ export interface Client {
   nextDate: string;
   /** Сделка, к которой относится nextAction — по ней открывается кнопка «Выполнить». */
   nextDealId?: string;
+  middleName?: string;
+  birthDate?: string;
+  passportSeries?: string;
+  passportNumber?: string;
+  passportIssuedBy?: string;
+  passportIssuedAt?: string;
+  registrationAddress?: string;
+  livingAddress?: string;
+  inn?: string;
 }
 
 // Затравочные данные — стартовое состояние клиентского стора (см. lib/store.tsx).

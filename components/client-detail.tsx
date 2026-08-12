@@ -390,6 +390,17 @@ export default function ClientDetail({ id }: { id: string }) {
                 ["Почта", client.email],
                 ["Город", client.city],
                 ["Клиент с", client.since],
+                ...(client.birthDate ? [["Дата рождения", client.birthDate]] : []),
+                ...(client.passportSeries || client.passportNumber
+                  ? [["Паспорт", `${client.passportSeries ?? ""} ${client.passportNumber ?? ""}`.trim()]]
+                  : []),
+                ...(client.passportIssuedBy ? [["Кем выдан", client.passportIssuedBy]] : []),
+                ...(client.passportIssuedAt ? [["Когда выдан", client.passportIssuedAt]] : []),
+                ...(client.registrationAddress
+                  ? [["Адрес прописки", client.registrationAddress]]
+                  : []),
+                ...(client.livingAddress ? [["Адрес проживания", client.livingAddress]] : []),
+                ...(client.inn ? [["ИНН", client.inn]] : []),
               ].map(([k, v]) => (
                 <div
                   key={k}

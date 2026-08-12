@@ -58,6 +58,15 @@ interface ClientRow extends Record<string, unknown> {
   email: string;
   city: string;
   since: string;
+  middle_name: string | null;
+  birth_date: string | null;
+  passport_series: string | null;
+  passport_number: string | null;
+  passport_issued_by: string | null;
+  passport_issued_at: string | null;
+  registration_address: string | null;
+  living_address: string | null;
+  inn: string | null;
 }
 
 interface CashRow extends Record<string, unknown> {
@@ -227,6 +236,15 @@ function toClient(row: ClientRow, deals: Deal[], today: string): Client {
     nextAction: top?.text ?? "—",
     nextDate,
     ...(top?.dealId ? { nextDealId: top.dealId } : {}),
+    ...(row.middle_name ? { middleName: row.middle_name } : {}),
+    ...(row.birth_date ? { birthDate: row.birth_date } : {}),
+    ...(row.passport_series ? { passportSeries: row.passport_series } : {}),
+    ...(row.passport_number ? { passportNumber: row.passport_number } : {}),
+    ...(row.passport_issued_by ? { passportIssuedBy: row.passport_issued_by } : {}),
+    ...(row.passport_issued_at ? { passportIssuedAt: row.passport_issued_at } : {}),
+    ...(row.registration_address ? { registrationAddress: row.registration_address } : {}),
+    ...(row.living_address ? { livingAddress: row.living_address } : {}),
+    ...(row.inn ? { inn: row.inn } : {}),
   };
 }
 
@@ -458,19 +476,46 @@ async function loadDeal(dbName: string, id: string): Promise<Deal | undefined> {
 export interface NewClientInput {
   lastName: string;
   firstName: string;
+  middleName?: string;
   phone: string;
+  birthDate?: string;
+  passportSeries?: string;
+  passportNumber?: string;
+  passportIssuedBy?: string;
+  passportIssuedAt?: string;
+  registrationAddress?: string;
+  livingAddress?: string;
+  inn?: string;
 }
 
 export async function createClient(
   dbName: string,
   input: NewClientInput
 ): Promise<Client> {
-  const name = `${input.lastName} ${input.firstName}`.trim();
+  const name = [input.lastName, input.firstName, input.middleName]
+    .filter(Boolean)
+    .join(" ");
   const row = await queryOne<ClientRow>(
     dbName,
-    `insert into clients (name, phone) values ($1, $2)
-     returning id, name, phone, email, city, since`,
-    [name, input.phone || "—"]
+    `insert into clients (
+       name, phone, middle_name, birth_date, passport_series, passport_number,
+       passport_issued_by, passport_issued_at, registration_address,
+       living_address, inn
+     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     returning *`,
+    [
+      name,
+      input.phone || "—",
+      input.middleName || null,
+      input.birthDate || null,
+      input.passportSeries || null,
+      input.passportNumber || null,
+      input.passportIssuedBy || null,
+      input.passportIssuedAt || null,
+      input.registrationAddress || null,
+      input.livingAddress || null,
+      input.inn || null,
+    ]
   );
   if (!row) throw new Error("Клиент не создан");
   return toClient(row, [], todayIso());

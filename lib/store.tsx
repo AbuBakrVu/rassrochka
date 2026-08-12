@@ -154,7 +154,16 @@ export interface NewDealInput {
 export interface NewClientInput {
   lastName: string;
   firstName: string;
+  middleName?: string;
   phone: string;
+  birthDate?: string;
+  passportSeries?: string;
+  passportNumber?: string;
+  issuedBy?: string;
+  issuedAt?: string;
+  registrationAddress?: string;
+  livingAddress?: string;
+  inn?: string;
 }
 
 export interface UpdateDealInput {

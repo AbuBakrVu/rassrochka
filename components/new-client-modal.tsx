@@ -127,7 +127,16 @@ export default function NewClientModal({
       created = await addClient({
         lastName: form.lastName.trim(),
         firstName: form.firstName.trim(),
+        middleName: form.middleName.trim() || undefined,
         phone: form.phone,
+        birthDate: form.birthDate || undefined,
+        passportSeries: form.passportSeries.trim() || undefined,
+        passportNumber: form.passportNumber.trim() || undefined,
+        issuedBy: form.issuedBy.trim() || undefined,
+        issuedAt: form.issuedAt || undefined,
+        registrationAddress: form.registrationAddress.trim() || undefined,
+        livingAddress: form.livingAddress.trim() || undefined,
+        inn: form.inn.trim() || undefined,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить");
