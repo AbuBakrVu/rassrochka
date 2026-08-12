@@ -18,9 +18,10 @@ import {
   Menu,
   X,
   Zap,
+  LogOut,
 } from "lucide-react";
 import CommandPalette from "@/components/command-palette";
-import { DataProvider } from "@/lib/store";
+import { DataProvider, useData } from "@/lib/store";
 
 const nav = [
   { href: "/", label: "Главная", icon: LayoutGrid },
@@ -35,6 +36,38 @@ const nav = [
   { href: "/employees", label: "Сотрудники", icon: UserCog },
   { href: "/settings", label: "Настройки", icon: Settings },
 ];
+
+function UserFooter() {
+  const { user, logout } = useData();
+  const [busy, setBusy] = useState(false);
+
+  const signOut = async () => {
+    if (busy) return;
+    setBusy(true);
+    await logout();
+  };
+
+  return (
+    <div className="mt-auto flex items-center gap-2.5 border-t border-line px-4 py-3">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-deep">
+        {user.initials}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{user.name}</p>
+        <p className="truncate text-xs text-mute">{user.email}</p>
+      </div>
+      <button
+        onClick={signOut}
+        disabled={busy}
+        title="Выйти"
+        aria-label="Выйти из аккаунта"
+        className="shrink-0 rounded-[10px] p-2 text-mute transition-colors hover:bg-canvas hover:text-danger disabled:opacity-50"
+      >
+        <LogOut size={17} aria-hidden />
+      </button>
+    </div>
+  );
+}
 
 export default function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -96,6 +129,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             <span className="text-lg font-semibold tracking-tight">Nasiya</span>
           </div>
           {menu}
+          <UserFooter />
         </aside>
 
         {/* Мобильная шторка */}
@@ -123,6 +157,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 </button>
               </div>
               {menu}
+              <UserFooter />
             </aside>
           </div>
         )}
