@@ -6,7 +6,7 @@
 // (см. PROGRESS_PRO.md §5). Теперь это одна функция на всё приложение.
 
 import { ruPlural, type Client, type Deal, type DealStage } from "./data";
-import { buildSchedule } from "./schedule";
+import { buildSchedule, type RestructureInfo } from "./schedule";
 
 const DAY_MS = 86_400_000;
 
@@ -20,6 +20,7 @@ export function daysOverdue(
     months: number;
     paid: number;
     openedAt: string;
+    restructure?: RestructureInfo;
   },
   today = todayIso()
 ): number {
@@ -29,7 +30,8 @@ export function daysOverdue(
     input.amount,
     input.months,
     input.paid,
-    input.openedAt
+    input.openedAt,
+    input.restructure
   );
   const next = schedule.find((p) => p.status === "due");
   if (!next) return 0;
@@ -64,6 +66,7 @@ export function computeDealStatus(
     paid: number;
     openedAt: string;
     deadline?: string | null;
+    restructure?: RestructureInfo;
   },
   today = todayIso()
 ): DealStatus {

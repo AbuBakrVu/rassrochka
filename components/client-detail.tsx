@@ -28,7 +28,7 @@ import {
   assessRisk,
   type Client,
 } from "@/lib/data";
-import { buildSchedule, money, longDate } from "@/lib/schedule";
+import { scheduleForDeal, money, longDate } from "@/lib/schedule";
 
 const statusTone: Record<Client["status"], "green" | "red" | "gray" | "blue"> = {
   active: "green",
@@ -70,12 +70,7 @@ export default function ClientDetail({ id }: { id: string }) {
   // Считаем графики один раз и используем для карточек, сводки и истории
   const computed = clientDeals.map((deal) => {
     const paid = paidCount(deal, paidPayments);
-    const schedule = buildSchedule(
-      deal.amount,
-      deal.months,
-      paid,
-      deal.openedAt
-    );
+    const schedule = scheduleForDeal(deal, paid);
     const paidSum = schedule
       .filter((p) => p.status === "paid")
       .reduce((s, p) => s + p.amount, 0);

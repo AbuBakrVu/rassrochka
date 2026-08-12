@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { X, Check, TrendingDown, TrendingUp, Minus } from "lucide-react";
 import { money } from "@/lib/schedule";
+import { todayIso } from "@/lib/derive";
 
 const terms = [3, 6, 9, 12, 18, 24];
 
@@ -16,24 +17,35 @@ const reasons = [
 const input =
   "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
+export type RestructureSubmit = (input: {
+  months: number;
+  from: string;
+  reason: string;
+  comment?: string;
+}) => Promise<void>;
+
 export default function RestructureModal({
   dealId,
   clientName,
   remaining,
   currentMonthly,
   onClose,
+  onSubmit,
 }: {
   dealId: string;
   clientName: string;
   remaining: number;
   currentMonthly: number;
   onClose: () => void;
+  onSubmit: RestructureSubmit;
 }) {
   const [months, setMonths] = useState<number | null>(null);
-  const [date, setDate] = useState("2026-09-05");
+  const [date, setDate] = useState(todayIso());
   const [reason, setReason] = useState("");
   const [comment, setComment] = useState("");
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -51,9 +63,18 @@ export default function RestructureModal({
   const diff = newMonthly !== null ? newMonthly - currentMonthly : 0;
   const ready = months !== null && reason !== "" && date !== "";
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ready) return;
+    if (!ready || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSubmit({ months: months!, from: date, reason, comment: comment.trim() || undefined });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось сохранить график");
+      setSaving(false);
+      return;
+    }
     setSaved(true);
     setTimeout(onClose, 1300);
   };
@@ -228,15 +249,21 @@ export default function RestructureModal({
 
         <footer className="flex flex-wrap items-center justify-end gap-3 border-t border-line px-6 py-4">
           <p
-            className="mr-auto text-sm text-mute"
+            className="mr-auto text-sm"
             role="status"
             aria-live="polite"
           >
-            {saved
-              ? "График обновлён"
-              : ready
-                ? "Можно сохранять"
-                : "Выберите срок, дату и причину"}
+            {error ? (
+              <span className="text-danger">{error}</span>
+            ) : saved ? (
+              "График обновлён"
+            ) : saving ? (
+              "Сохраняем…"
+            ) : ready ? (
+              <span className="text-mute">Можно сохранять</span>
+            ) : (
+              <span className="text-mute">Выберите срок, дату и причину</span>
+            )}
           </p>
           <button
             type="button"
@@ -247,7 +274,7 @@ export default function RestructureModal({
           </button>
           <button
             type="submit"
-            disabled={!ready || saved}
+            disabled={!ready || saving || saved}
             className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             <Check size={15} aria-hidden />

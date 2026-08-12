@@ -165,6 +165,13 @@ export interface UpdateDealInput {
   markupPct?: number;
 }
 
+export interface RestructureDealInput {
+  months: number;
+  from: string;
+  reason: string;
+  comment?: string;
+}
+
 export interface CashAdjustmentInput {
   amount: number;
   title: string;
@@ -229,6 +236,7 @@ export interface TemplateInput {
 interface DataContextValue extends Snapshot {
   addDeal: (input: NewDealInput) => Promise<Deal>;
   updateDeal: (dealId: string, input: UpdateDealInput) => Promise<Deal>;
+  restructureDeal: (dealId: string, input: RestructureDealInput) => Promise<Deal>;
   addEmployee: (input: NewEmployeeInput) => Promise<{ password: string }>;
   updateEmployee: (id: number, input: UpdateEmployeeInput) => Promise<void>;
   setEmployeeActive: (id: number, active: boolean) => Promise<void>;
@@ -366,6 +374,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         `/api/deals/${encodeURIComponent(dealId)}`,
         input,
         "PATCH"
+      );
+      await load();
+      return deal;
+    },
+    [load]
+  );
+
+  const restructureDeal = useCallback(
+    async (dealId: string, input: RestructureDealInput): Promise<Deal> => {
+      const deal = await api<Deal>(
+        `/api/deals/${encodeURIComponent(dealId)}/restructure`,
+        input
       );
       await load();
       return deal;
@@ -531,6 +551,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       ...state,
       addDeal,
       updateDeal,
+      restructureDeal,
       addClient,
       acceptPayment,
       addCashAdjustment,
@@ -552,7 +573,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       logout,
       refresh,
     }),
-    [state, addDeal, updateDeal, addClient, acceptPayment, addCashAdjustment,
+    [state, addDeal, updateDeal, restructureDeal, addClient, acceptPayment, addCashAdjustment,
      addCoinvestor, updateCoinvestor, setCoinvestorActive, deleteCoinvestor,
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,

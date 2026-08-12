@@ -37,6 +37,10 @@ export interface Deal {
   category?: string;
   city?: string;
   guarantors: DealGuarantor[];
+  /** Реструктуризация — months уже равен paid + restructuredMonths, если она была. */
+  originalMonths?: number;
+  restructuredMonths?: number;
+  restructuredFrom?: string;
 }
 
 export interface DealGuarantor {

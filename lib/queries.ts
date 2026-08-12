@@ -10,7 +10,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
 import { buildRoute, purchasePrice, type Client, type Deal, type DealStage } from "./data";
-import { buildSchedule, monthNames } from "./schedule";
+import { buildSchedule, monthNames, restructureOf } from "./schedule";
 import { computeClientStatus, computeDealStatus, todayIso } from "./status";
 import type {
   CashTx,
@@ -44,6 +44,9 @@ interface DealRow extends Record<string, unknown> {
   category: string | null;
   city: string | null;
   guarantors: { id: string; name: string }[] | null;
+  original_months: number | null;
+  restructured_months: number | null;
+  restructured_from: string | null;
 }
 
 interface ClientRow extends Record<string, unknown> {
@@ -135,6 +138,12 @@ const DEFAULT_NEXT_STEP: Record<DealStage, string> = {
 // ── Сериализация ───────────────────────────────────────────────────────
 
 function toDeal(row: DealRow, today: string): Deal {
+  const restructure = restructureOf({
+    originalMonths: row.original_months,
+    restructuredMonths: row.restructured_months,
+    restructuredFrom: row.restructured_from,
+  });
+
   const { status, statusTone, urgent } = computeDealStatus(
     {
       stage: row.stage,
@@ -143,6 +152,7 @@ function toDeal(row: DealRow, today: string): Deal {
       paid: row.paid_count,
       openedAt: row.opened_at,
       deadline: row.deadline,
+      restructure,
     },
     today
   );
@@ -169,6 +179,13 @@ function toDeal(row: DealRow, today: string): Deal {
     managerId: row.manager_id,
     portalToken: row.portal_token,
     guarantors: row.guarantors ?? [],
+    ...(restructure
+      ? {
+          originalMonths: restructure.originalMonths,
+          restructuredMonths: restructure.restructuredMonths,
+          restructuredFrom: restructure.from,
+        }
+      : {}),
     ...(row.description ? { description: row.description } : {}),
     ...(row.category ? { category: row.category } : {}),
     ...(row.city ? { city: row.city } : {}),
@@ -216,6 +233,7 @@ const DEALS_SELECT = `
          d.months, d.markup_pct, d.opened_at, d.stage, d.paid_count,
          d.next_step, d.deadline, d.reject_reason, d.portal_token,
          d.description, d.category, d.city,
+         d.original_months, d.restructured_months, d.restructured_from,
          d.manager_id, u.initials as manager_initials,
          (
            select coalesce(json_agg(json_build_object('id', g.id, 'name', g.name)), '[]')
@@ -617,6 +635,63 @@ export async function updateDeal(
   return updated;
 }
 
+export interface RestructureDealInput {
+  /** На сколько месяцев растянуть остаток долга. */
+  months: number;
+  /** Дата первого взноса по новому графику. */
+  from: string;
+  reason: string;
+  comment?: string;
+}
+
+/**
+ * Реструктуризация: остаток долга на сегодня размазывается по новому
+ * графику из input.months месяцев начиная с input.from. Уже оплаченные
+ * взносы не трогаются — deals.months становится paid_count + input.months,
+ * а original_months хранит прежнее значение, чтобы buildSchedule мог
+ * корректно восстановить суммы взносов, оплаченных ещё по старому графику.
+ */
+export async function restructureDeal(
+  dbName: string,
+  dealId: string,
+  input: RestructureDealInput
+): Promise<Deal> {
+  await transaction(dbName, async (client) => {
+    const { rows } = await client.query<{
+      months: number;
+      paid_count: number;
+      stage: DealStage;
+    }>(
+      "select months, paid_count, stage from deals where id = $1 for update",
+      [dealId]
+    );
+    const deal = rows[0];
+    if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+    if (deal.stage !== "active") throw new Error("NOT_ACTIVE");
+
+    const newTotalMonths = deal.paid_count + input.months;
+    await client.query(
+      `update deals
+       set months = $2, original_months = $3, restructured_months = $4, restructured_from = $5
+       where id = $1`,
+      [dealId, newTotalMonths, deal.months, input.months, input.from]
+    );
+
+    await client.query(
+      "insert into deal_events (deal_id, text) values ($1, $2)",
+      [
+        dealId,
+        `График изменён: остаток на ${input.months} мес. с ${input.from} · ${input.reason}` +
+          (input.comment ? ` — ${input.comment}` : ""),
+      ]
+    );
+  });
+
+  const updated = await loadDeal(dbName, dealId);
+  if (!updated) throw new Error(`Сделка ${dealId} не найдена`);
+  return updated;
+}
+
 /**
  * Принимает один ближайший взнос: увеличивает счётчик, приходует деньги в
  * кассу и пишет событие в историю — одной транзакцией.
@@ -655,9 +730,12 @@ export async function acceptPayment(
       opened_at: string;
       product: string;
       client_name: string;
+      original_months: number | null;
+      restructured_months: number | null;
+      restructured_from: string | null;
     }>(
       `select d.id, d.amount, d.months, d.markup_pct, d.paid_count, d.opened_at, d.product,
-              c.name as client_name
+              c.name as client_name, d.original_months, d.restructured_months, d.restructured_from
        from deals d join clients c on c.id = d.client_id
        where d.id = $1
        for update of d`,
@@ -668,17 +746,32 @@ export async function acceptPayment(
     if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
     if (deal.paid_count >= deal.months) return true;
 
+    const restructure = restructureOf({
+      originalMonths: deal.original_months,
+      restructuredMonths: deal.restructured_months,
+      restructuredFrom: deal.restructured_from,
+    });
+
     const next = deal.paid_count + 1;
     const installment = buildSchedule(
       deal.amount,
       deal.months,
       next,
-      deal.opened_at
+      deal.opened_at,
+      restructure
     )[next - 1];
 
     await client.query(
       "update deals set paid_count = $2 where id = $1",
       [dealId, next]
+    );
+
+    // Первый принятый платёж переводит сделку в «Активна» — до этого стадию
+    // двигать было физически нечем: ни одного места в коде, кроме этого,
+    // не переводит сделку в active, а «закрытие» ниже само требует active.
+    await client.query(
+      "update deals set stage = 'active' where id = $1 and stage in ('new', 'check', 'signing')",
+      [dealId]
     );
 
     // Последняя оплата закрывает сделку
@@ -1126,6 +1219,9 @@ export interface PortalDeal {
   paid: number;
   managerName: string;
   managerPhone: string | null;
+  originalMonths?: number;
+  restructuredMonths?: number;
+  restructuredFrom?: string;
 }
 
 /**
@@ -1152,11 +1248,15 @@ export async function loadPortalDeal(
     stage: DealStage;
     manager_name: string | null;
     manager_phone: string | null;
+    original_months: number | null;
+    restructured_months: number | null;
+    restructured_from: string | null;
   }>(
     dbName,
     `select d.id, c.name as client_name, d.product, d.amount, d.months,
             d.opened_at, d.paid_count, d.stage,
-            u.name as manager_name, u.phone as manager_phone
+            u.name as manager_name, u.phone as manager_phone,
+            d.original_months, d.restructured_months, d.restructured_from
      from deals d
      join clients c on c.id = d.client_id
      left join users u on u.id = d.manager_id
@@ -1165,6 +1265,12 @@ export async function loadPortalDeal(
   );
 
   if (!row) return undefined;
+
+  const restructure = restructureOf({
+    originalMonths: row.original_months,
+    restructuredMonths: row.restructured_months,
+    restructuredFrom: row.restructured_from,
+  });
 
   return {
     id: row.id,
@@ -1177,6 +1283,13 @@ export async function loadPortalDeal(
     paid: row.stage === "closed" ? row.months : row.paid_count,
     managerName: row.manager_name ?? "менеджер",
     managerPhone: row.manager_phone,
+    ...(restructure
+      ? {
+          originalMonths: restructure.originalMonths,
+          restructuredMonths: restructure.restructuredMonths,
+          restructuredFrom: restructure.from,
+        }
+      : {}),
   };
 }
 

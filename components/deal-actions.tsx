@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ArrowRight, RefreshCw } from "lucide-react";
-import RestructureModal from "@/components/restructure-modal";
+import RestructureModal, { type RestructureSubmit } from "@/components/restructure-modal";
 
 export default function DealActions({
   dealId,
@@ -12,6 +12,7 @@ export default function DealActions({
   primaryLabel,
   canRestructure,
   onPrimary,
+  onRestructure,
 }: {
   dealId: string;
   clientName: string;
@@ -20,6 +21,7 @@ export default function DealActions({
   primaryLabel: string;
   canRestructure: boolean;
   onPrimary?: () => void;
+  onRestructure: RestructureSubmit;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -50,6 +52,7 @@ export default function DealActions({
           remaining={remaining}
           currentMonthly={monthly}
           onClose={() => setOpen(false)}
+          onSubmit={onRestructure}
         />
       )}
     </div>

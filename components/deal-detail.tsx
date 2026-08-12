@@ -23,7 +23,7 @@ import { Card, Badge, EmptyState } from "@/components/ui";
 import DealActions from "@/components/deal-actions";
 import { useData, type Employee } from "@/lib/store";
 import { clientById, fmt, stages, paidCount, purchasePrice, type Deal } from "@/lib/data";
-import { buildSchedule, money, longDate, type Installment } from "@/lib/schedule";
+import { scheduleForDeal, money, longDate, type Installment } from "@/lib/schedule";
 import { dealEvents } from "@/lib/events";
 import CopyLinkButton from "@/components/copy-link";
 import DealPrint, { type PrintMode } from "@/components/deal-print";
@@ -102,7 +102,7 @@ function BalanceChart({ schedule, amount }: { schedule: Installment[]; amount: n
 export default function DealDetail({ id }: { id: string }) {
   const {
     deals, clients, paidPayments, events, templates, employees,
-    acceptPayment, sendReminder, updateDeal,
+    acceptPayment, sendReminder, updateDeal, restructureDeal,
   } = useData();
   const router = useRouter();
   const deal = deals.find((d) => d.id === id);
@@ -138,7 +138,7 @@ export default function DealDetail({ id }: { id: string }) {
 
   const client = clientById(clients, deal.clientId);
   const paid = paidCount(deal, paidPayments);
-  const schedule = buildSchedule(deal.amount, deal.months, paid, deal.openedAt);
+  const schedule = scheduleForDeal(deal, paid);
   const monthly = Math.round(deal.amount / deal.months);
   const paidSum = schedule
     .filter((p) => p.status === "paid")
@@ -305,6 +305,9 @@ export default function DealDetail({ id }: { id: string }) {
             canRestructure={active}
             primaryLabel={active ? "Принять платёж" : "Продолжить работу"}
             onPrimary={active ? () => acceptPayment(deal.id) : undefined}
+            onRestructure={async (input) => {
+              await restructureDeal(deal.id, input);
+            }}
           />
         </div>
       )}

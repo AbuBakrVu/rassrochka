@@ -3,7 +3,7 @@
 // реальных действиях (создание сделки, приём платежа).
 
 import type { Deal } from "./data";
-import { buildSchedule, money } from "./schedule";
+import { scheduleForDeal, money } from "./schedule";
 
 export interface DealEvent {
   id: string;
@@ -52,7 +52,7 @@ export function buildSeedEvents(
 
     const paid = d.stage === "closed" ? d.months : (paidPayments[d.id] ?? 0);
     if (paid > 0) {
-      const schedule = buildSchedule(d.amount, d.months, paid, d.openedAt);
+      const schedule = scheduleForDeal(d, paid);
       for (const p of schedule.slice(0, paid)) {
         events.push({
           id: `${d.id}-p${p.n}`,

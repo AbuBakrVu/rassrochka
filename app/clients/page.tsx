@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Search, SearchX } from "lucide-react";
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui";
 import { dealsOfClient, dealState, paidCount, type Client } from "@/lib/data";
-import { buildSchedule, money } from "@/lib/schedule";
+import { scheduleForDeal, money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
 
 const statusTone: Record<Client["status"], "green" | "red" | "gray" | "blue"> = {
@@ -38,12 +38,7 @@ export default function ClientsPage() {
         const portfolio = list
           .filter((d) => dealState(d) === "active")
           .reduce((sum, d) => {
-            const schedule = buildSchedule(
-              d.amount,
-              d.months,
-              paidCount(d, paidPayments),
-              d.openedAt
-            );
+            const schedule = scheduleForDeal(d, paidCount(d, paidPayments));
             const paidSum = schedule
               .filter((p) => p.status === "paid")
               .reduce((s, p) => s + p.amount, 0);

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Zap, Check, Phone, MessageCircle, CalendarDays, SearchX } from "lucide-react";
 import { fmt } from "@/lib/data";
-import { buildSchedule, longDate, money } from "@/lib/schedule";
+import { scheduleForDeal, longDate, money } from "@/lib/schedule";
 
 // Кабинет намеренно НЕ пользуется общим стором: заёмщик открывает страницу
 // по ссылке без авторизации, и useData() отдал бы ему в браузер все сделки
@@ -95,7 +95,7 @@ export default function ClientPortal({ token }: { token: string }) {
 
   const firstName = deal.clientFirstName;
   const paid = deal.paid;
-  const schedule = buildSchedule(deal.amount, deal.months, paid, deal.openedAt);
+  const schedule = scheduleForDeal(deal, paid);
   const paidSum = schedule
     .filter((p) => p.status === "paid")
     .reduce((s, p) => s + p.amount, 0);

@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
 import { stages, paidCount, dealMargin, type Deal } from "@/lib/data";
-import { buildSchedule, money } from "@/lib/schedule";
+import { scheduleForDeal, money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
 import { computeAging } from "@/lib/derive";
 
@@ -22,12 +22,7 @@ function activeRemaining(deals: Deal[], paidPayments: Record<string, number>) {
   return deals
     .filter((d) => d.stage === "active")
     .reduce((sum, d) => {
-      const schedule = buildSchedule(
-        d.amount,
-        d.months,
-        paidCount(d, paidPayments),
-        d.openedAt
-      );
+      const schedule = scheduleForDeal(d, paidCount(d, paidPayments));
       const paidSum = schedule
         .filter((p) => p.status === "paid")
         .reduce((s, p) => s + p.amount, 0);
