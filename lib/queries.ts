@@ -71,6 +71,7 @@ interface ClientRow extends Record<string, unknown> {
   inn: string | null;
   blacklisted_at: Date | null;
   blacklist_reason: string | null;
+  portal_token: string;
 }
 
 interface CashRow extends Record<string, unknown> {
@@ -258,6 +259,7 @@ function toClient(row: ClientRow, deals: Deal[], today: string): Client {
       ? { blacklistedAt: row.blacklisted_at.toISOString() }
       : {}),
     ...(row.blacklist_reason ? { blacklistReason: row.blacklist_reason } : {}),
+    portalToken: row.portal_token,
   };
 }
 
@@ -1617,6 +1619,101 @@ export async function loadPortalDeal(
           restructuredFrom: restructure.from,
         }
       : {}),
+  };
+}
+
+export interface PortalClientDeal {
+  id: string;
+  product: string;
+  amount: number;
+  months: number;
+  openedAt: string;
+  paid: number;
+  stage: DealStage;
+  originalMonths?: number;
+  restructuredMonths?: number;
+  restructuredFrom?: string;
+}
+
+export interface PortalClient {
+  clientFirstName: string;
+  managerName: string;
+  managerPhone: string | null;
+  deals: PortalClientDeal[];
+}
+
+/**
+ * Данные для страницы /pay/<token>, когда токен — клиентский (одна ссылка
+ * на все сделки клиента, см. clients.portal_token). Активные и закрытые
+ * сделки — чтобы клиент видел и текущий график, и историю; новые/на
+ * проверке/отклонённые ему смотреть незачем, это внутренняя кухня.
+ */
+export async function loadPortalClient(
+  dbName: string,
+  token: string
+): Promise<PortalClient | undefined> {
+  const client = await queryOne<{ id: string; name: string }>(
+    dbName,
+    "select id, name from clients where portal_token = $1",
+    [token]
+  );
+  if (!client) return undefined;
+
+  const rows = await query<{
+    id: string;
+    product: string;
+    amount: number;
+    months: number;
+    opened_at: string;
+    paid_count: number;
+    stage: DealStage;
+    manager_name: string | null;
+    manager_phone: string | null;
+    original_months: number | null;
+    restructured_months: number | null;
+    restructured_from: string | null;
+  }>(
+    dbName,
+    `select d.id, d.product, d.amount, d.months, d.opened_at, d.paid_count,
+            d.stage, u.name as manager_name, u.phone as manager_phone,
+            d.original_months, d.restructured_months, d.restructured_from
+     from deals d
+     left join users u on u.id = d.manager_id
+     where d.client_id = $1 and d.deleted_at is null
+       and d.stage in ('active', 'closed')
+     order by d.created_at desc`,
+    [client.id]
+  );
+
+  if (rows.length === 0) return undefined;
+
+  return {
+    clientFirstName: client.name.split(" ")[1] ?? client.name,
+    managerName: rows[0].manager_name ?? "менеджер",
+    managerPhone: rows[0].manager_phone,
+    deals: rows.map((row) => {
+      const restructure = restructureOf({
+        originalMonths: row.original_months,
+        restructuredMonths: row.restructured_months,
+        restructuredFrom: row.restructured_from,
+      });
+      return {
+        id: row.id,
+        product: row.product,
+        amount: row.amount,
+        months: row.months,
+        openedAt: row.opened_at,
+        paid: row.stage === "closed" ? row.months : row.paid_count,
+        stage: row.stage,
+        ...(restructure
+          ? {
+              originalMonths: restructure.originalMonths,
+              restructuredMonths: restructure.restructuredMonths,
+              restructuredFrom: restructure.from,
+            }
+          : {}),
+      };
+    }),
   };
 }
 

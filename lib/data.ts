@@ -334,26 +334,9 @@ export interface Client {
   /** Заносится вручную менеджером — клиент долго не платит по рассрочке. */
   blacklistedAt?: string;
   blacklistReason?: string;
+  /** Случайный токен для /pay/<token> — один на клиента, покрывает все его сделки. */
+  portalToken: string;
 }
-
-// Затравочные данные — стартовое состояние клиентского стора (см. lib/store.tsx).
-export const seedClients: Client[] = [
-  { id: "C-101", name: "Марина Котова", phone: "+7 921 402-18-55", email: "m.kotova@mail.ru", city: "Санкт-Петербург", since: "сентября 2025", status: "active", statusLabel: "В графике", nextAction: "Платёж 8 000 ₽", nextDate: "Сегодня" },
-  { id: "C-102", name: "Никита Абрамов", phone: "+7 911 733-02-14", email: "n.abramov@gmail.com", city: "Санкт-Петербург", since: "июня 2025", status: "active", statusLabel: "В графике", nextAction: "Платёж 10 143 ₽", nextDate: "9 августа" },
-  { id: "C-103", name: "Татьяна Горина", phone: "+7 981 220-47-90", email: "gorina.t@yandex.ru", city: "Москва", since: "февраля 2026", status: "overdue", statusLabel: "Просрочка 2 дня", nextAction: "Звонок о новом графике", nextDate: "Сегодня" },
-  { id: "C-104", name: "Дмитрий Савельев", phone: "+7 921 118-64-32", email: "savelev.d@mail.ru", city: "Казань", since: "марта 2026", status: "active", statusLabel: "В графике", nextAction: "Напомнить об оплате", nextDate: "Сегодня" },
-  { id: "C-105", name: "Виктор Данилов", phone: "+7 911 604-77-21", email: "v.danilov@gmail.com", city: "Екатеринбург", since: "апреля 2026", status: "lead", statusLabel: "Проверка", nextAction: "Дослать паспорт", nextDate: "6 августа" },
-  { id: "C-106", name: "Анна Полякова", phone: "+7 981 355-90-08", email: "a.polyakova@mail.ru", city: "Москва", since: "августа 2026", status: "lead", statusLabel: "Новая заявка", nextAction: "Первичный звонок", nextDate: "Сегодня" },
-  { id: "C-107", name: "Сергей Миронов", phone: "+7 921 909-33-46", email: "s.mironov@yandex.ru", city: "Новосибирск", since: "июля 2026", status: "lead", statusLabel: "Подписание", nextAction: "Подписание договора", nextDate: "6 августа" },
-  { id: "C-108", name: "Елена Крылова", phone: "+7 911 287-15-73", email: "e.krylova@gmail.com", city: "Краснодар", since: "июля 2026", status: "lead", statusLabel: "Скоринг", nextAction: "Решение по скорингу", nextDate: "Сегодня" },
-  { id: "C-109", name: "Ирина Волкова", phone: "+7 981 512-38-27", email: "i.volkova@mail.ru", city: "Москва", since: "марта 2025", status: "closed", statusLabel: "Закрыта", nextAction: "—", nextDate: "—" },
-  { id: "C-110", name: "Олег Чернов", phone: "+7 921 774-51-19", email: "o.chernov@yandex.ru", city: "Казань", since: "апреля 2025", status: "closed", statusLabel: "Закрыта", nextAction: "—", nextDate: "—" },
-  { id: "C-111", name: "Роман Ветров", phone: "+7 911 845-20-63", email: "r.vetrov@gmail.com", city: "Санкт-Петербург", since: "августа 2026", status: "lead", statusLabel: "Новая заявка", nextAction: "Первичный звонок", nextDate: "Сегодня" },
-  { id: "C-112", name: "Ольга Смирнова", phone: "+7 981 067-92-14", email: "o.smirnova@mail.ru", city: "Москва", since: "августа 2026", status: "lead", statusLabel: "Новая заявка", nextAction: "Уточнить сумму", nextDate: "6 августа" },
-  { id: "C-113", name: "Игорь Лапин", phone: "+7 921 330-58-47", email: "i.lapin@yandex.ru", city: "Екатеринбург", since: "августа 2026", status: "lead", statusLabel: "Новая заявка", nextAction: "Перезвонить", nextDate: "6 августа" },
-  { id: "C-114", name: "Павел Козлов", phone: "+7 911 452-77-08", email: "p.kozlov@gmail.com", city: "Новосибирск", since: "июля 2026", status: "lead", statusLabel: "Проверка", nextAction: "Проверить ИНН", nextDate: "7 августа" },
-  { id: "C-115", name: "Дарья Ильина", phone: "+7 981 619-04-25", email: "d.ilina@mail.ru", city: "Краснодар", since: "июля 2026", status: "lead", statusLabel: "Подписание", nextAction: "Созвон в 15:00", nextDate: "Сегодня" },
-];
 
 export const clientById = (clients: Client[], id: string) =>
   clients.find((c) => c.id === id);

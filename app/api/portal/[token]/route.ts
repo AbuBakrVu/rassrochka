@@ -1,9 +1,13 @@
 // Публичный эндпоинт кабинета заёмщика: без авторизации, по случайному
-// токену. Отдаёт одну сделку — см. loadPortalDeal.
+// токену. Токен может быть клиентским (одна ссылка на все его сделки,
+// см. loadPortalClient) или, для старых уже разосланных ссылок,
+// токеном конкретной сделки (loadPortalDeal) — пробуем оба, порядок
+// значения не имеет, так как токены генерируются независимо и не
+// пересекаются.
 
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { loadPortalDeal } from "@/lib/queries";
+import { loadPortalClient, loadPortalDeal } from "@/lib/queries";
 
 export async function GET(
   request: Request,
@@ -13,14 +17,20 @@ export async function GET(
 
   try {
     const tenant = await resolveTenant(request.headers.get("host"));
+
+    const client = await loadPortalClient(tenant.dbName, token);
+    if (client) {
+      return NextResponse.json({ kind: "client", ...client });
+    }
+
     const deal = await loadPortalDeal(tenant.dbName, token);
+    if (deal) {
+      return NextResponse.json({ kind: "deal", ...deal });
+    }
 
     // Неизвестный токен и несуществующая компания отвечают одинаково:
     // по ответу нельзя перебором понять, какие токены существуют
-    if (!deal) {
-      return NextResponse.json({ error: "Ссылка недействительна" }, { status: 404 });
-    }
-    return NextResponse.json(deal);
+    return NextResponse.json({ error: "Ссылка недействительна" }, { status: 404 });
   } catch {
     return NextResponse.json({ error: "Ссылка недействительна" }, { status: 404 });
   }

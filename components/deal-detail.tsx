@@ -23,83 +23,12 @@ import { Card, Badge, EmptyState } from "@/components/ui";
 import DealActions from "@/components/deal-actions";
 import { useData, type Employee } from "@/lib/store";
 import { clientById, fmt, stages, paidCount, purchasePrice, type Deal } from "@/lib/data";
-import { scheduleForDeal, money, longDate, type Installment } from "@/lib/schedule";
+import { scheduleForDeal, money, longDate } from "@/lib/schedule";
 import { dealEvents } from "@/lib/events";
 import { reminderStageFor, pickReminderTemplate, buildReminderText } from "@/lib/reminders";
 import { todayIso } from "@/lib/status";
 import CopyLinkButton from "@/components/copy-link";
 import DealPrint, { type PrintMode } from "@/components/deal-print";
-
-function BalanceChart({ schedule, amount }: { schedule: Installment[]; amount: number }) {
-  const w = 640;
-  const h = 180;
-  const pad = 8;
-  const pts = [
-    { x: pad, y: pad, paid: true, v: amount },
-    ...schedule.map((p, i) => ({
-      x: pad + ((i + 1) / schedule.length) * (w - pad * 2),
-      y: pad + (1 - p.remaining / amount) * (h - pad * 2),
-      paid: p.status === "paid",
-      v: p.remaining,
-    })),
-  ];
-  const lastPaid = schedule.filter((p) => p.status === "paid").length;
-  const solid = pts.slice(0, lastPaid + 1);
-  const dashed = pts.slice(Math.max(lastPaid, 0));
-  const path = (arr: typeof pts) =>
-    arr.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ");
-  return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      className="h-44 w-full"
-      preserveAspectRatio="none"
-      role="img"
-      aria-label="Динамика остатка по сделке"
-    >
-      {[0.25, 0.5, 0.75].map((t) => (
-        <line
-          key={t}
-          x1={pad}
-          x2={w - pad}
-          y1={pad + t * (h - pad * 2)}
-          y2={pad + t * (h - pad * 2)}
-          stroke="var(--color-line)"
-        />
-      ))}
-      {solid.length > 1 && (
-        <path
-          d={path(solid)}
-          fill="none"
-          stroke="var(--color-brand)"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-        />
-      )}
-      {dashed.length > 1 && (
-        <path
-          d={path(dashed)}
-          fill="none"
-          stroke="var(--color-brand)"
-          strokeWidth="2"
-          strokeDasharray="2 6"
-          strokeLinecap="round"
-          opacity="0.7"
-        />
-      )}
-      {pts.slice(1).map((p, i) => (
-        <circle
-          key={i}
-          cx={p.x}
-          cy={p.y}
-          r="4"
-          fill={p.paid ? "var(--color-brand)" : "var(--color-surface)"}
-          stroke="var(--color-brand)"
-          strokeWidth="2"
-        />
-      ))}
-    </svg>
-  );
-}
 
 export default function DealDetail({ id }: { id: string }) {
   const {
@@ -391,34 +320,6 @@ export default function DealDetail({ id }: { id: string }) {
             <div className="mt-2 rounded-[10px] bg-canvas px-3.5 py-2.5 text-sm text-mute">
               Получено уже {money(Math.round((markup * paid) / deal.months))} —{" "}
               {Math.round((paid / deal.months) * 100)}% от потенциальной прибыли
-            </div>
-          </Card>
-
-          {/* Динамика остатка */}
-          <Card className="p-5 sm:p-6">
-            <div className="mb-1 flex items-center justify-between">
-              <h2 className="font-semibold">Динамика остатка</h2>
-              <div className="flex items-center gap-4 text-xs text-mute">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-brand" aria-hidden />
-                  Оплачено
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span
-                    className="h-2 w-2 rounded-full border-2 border-brand bg-surface"
-                    aria-hidden
-                  />
-                  Ожидается
-                </span>
-              </div>
-            </div>
-            <p className="mb-3 text-sm text-mute">
-              Как остаток уменьшается с каждым платежом
-            </p>
-            <BalanceChart schedule={schedule} amount={deal.amount} />
-            <div className="mt-1 flex justify-between text-xs text-mute">
-              <span>{schedule[0].date.replace(" г.", "")}</span>
-              <span>{schedule[schedule.length - 1].date}</span>
             </div>
           </Card>
 

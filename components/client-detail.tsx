@@ -400,26 +400,17 @@ export default function ClientDetail({ id }: { id: string }) {
               <Link2 size={16} className="text-brand" aria-hidden />
               <h2 className="font-semibold">Кабинет клиента</h2>
             </div>
-            {activeDeals.length === 0 ? (
+            {activeDeals.length === 0 && closedCount === 0 ? (
               <p className="mt-2 text-sm text-mute">
-                Ссылка появится, когда у клиента будет активная рассрочка.
+                Ссылка появится, когда у клиента будет хотя бы одна сделка.
               </p>
             ) : (
               <>
                 <p className="mb-3 text-sm text-mute">
-                  Персональная страница с графиком и остатком — по одной на
-                  каждую активную сделку.
+                  Одна персональная ссылка на все сделки клиента — новую заводить
+                  не нужно, она сама покажет актуальный список.
                 </p>
-                <div className="flex flex-col gap-3">
-                  {activeDeals.map(({ deal }) => (
-                    <div key={deal.id}>
-                      <p className="mb-1.5 truncate text-sm font-medium">
-                        {deal.id} · {deal.product}
-                      </p>
-                      <CopyLinkButton path={`/pay/${deal.portalToken}`} />
-                    </div>
-                  ))}
-                </div>
+                <CopyLinkButton path={`/pay/${client.portalToken}`} />
               </>
             )}
           </Card>
