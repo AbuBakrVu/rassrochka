@@ -14,12 +14,14 @@ import {
   Plus,
   Minus,
   X,
+  Download,
 } from "lucide-react";
 import { PageHeader, Card, EmptyState } from "@/components/ui";
 import { money, longDate } from "@/lib/schedule";
 import { useData, type CashKind } from "@/lib/store";
 import { cashSummary } from "@/lib/cash";
 import { todayIso } from "@/lib/derive";
+import { downloadCsv } from "@/lib/csv";
 
 const kindMeta: Record<
   CashKind,
@@ -242,6 +244,21 @@ export default function CashPage() {
     [cash, activeKinds]
   );
 
+  const exportCsv = () => {
+    downloadCsv(
+      `касса-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Дата", "Тип", "Основание", "Сумма", "Сделка", "Примечание"],
+      list.map((t) => [
+        t.date,
+        kindMeta[t.kind].label,
+        t.title,
+        t.amount,
+        t.dealId ?? "",
+        t.note ?? "",
+      ])
+    );
+  };
+
   const kpis = [
     {
       label: "Остаток в кассе",
@@ -320,12 +337,23 @@ export default function CashPage() {
               </button>
             ))}
           </div>
-          <button
-            onClick={() => setModal(true)}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
-          >
-            + Движение по кассе
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={exportCsv}
+              disabled={list.length === 0}
+              title="Выгрузить видимый список в CSV"
+              className="flex items-center gap-1.5 rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-sm text-mute transition-colors hover:border-brand/40 hover:text-ink disabled:opacity-50"
+            >
+              <Download size={15} aria-hidden />
+              Экспорт
+            </button>
+            <button
+              onClick={() => setModal(true)}
+              className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+            >
+              + Движение по кассе
+            </button>
+          </div>
         </div>
 
         <Card className="mt-4 overflow-hidden">

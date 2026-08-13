@@ -3,11 +3,12 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, SearchX } from "lucide-react";
+import { Search, SearchX, Download } from "lucide-react";
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui";
 import { dealsOfClient, dealState, paidCount, type Client } from "@/lib/data";
 import { scheduleForDeal, money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
+import { downloadCsv } from "@/lib/csv";
 
 const statusTone: Record<Client["status"], "green" | "red" | "gray" | "blue"> = {
   active: "green",
@@ -62,6 +63,23 @@ export default function ClientsPage() {
     );
   }, [rows, query, filter]);
 
+  const exportCsv = () => {
+    downloadCsv(
+      `клиенты-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["ID", "Имя", "Телефон", "Статус", "Сделок", "Остаток", "Ближайшее действие", "Срок"],
+      list.map(({ client: c, deals, portfolio }) => [
+        c.id,
+        c.name,
+        c.phone,
+        c.statusLabel,
+        deals,
+        portfolio,
+        c.nextAction,
+        c.nextDate,
+      ])
+    );
+  };
+
   return (
     <>
       <PageHeader
@@ -105,6 +123,15 @@ export default function ClientsPage() {
               </button>
             ))}
           </div>
+          <button
+            onClick={exportCsv}
+            disabled={list.length === 0}
+            title="Выгрузить видимый список в CSV"
+            className="flex items-center gap-1.5 rounded-[10px] border border-line bg-surface px-3.5 py-2 text-sm text-mute transition-colors hover:border-brand/40 hover:text-ink disabled:opacity-50"
+          >
+            <Download size={15} aria-hidden />
+            Экспорт
+          </button>
         </div>
 
         <Card className="overflow-hidden">
