@@ -199,6 +199,8 @@ export interface AcceptPaymentOptions {
   /** Фактическая дата поступления денег — по умолчанию сегодня. */
   date?: string;
   method?: "cash" | "card" | "transfer";
+  /** Фактически внесённая сумма — по умолчанию очередной взнос по графику. */
+  amount?: number;
 }
 
 export interface NewEmployeeInput {

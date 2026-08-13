@@ -12,7 +12,8 @@ import {
   Landmark,
   CalendarDays,
 } from "lucide-react";
-import { clientById, paidCount, dealState, type Deal } from "@/lib/data";
+import { clientById, paidCount, dealState, ruPlural, type Deal } from "@/lib/data";
+import { scheduleForDeal } from "@/lib/schedule";
 import { todayIso } from "@/lib/derive";
 import { useData } from "@/lib/store";
 import { Badge } from "@/components/ui";
@@ -46,10 +47,12 @@ export default function AcceptPaymentModal({
   const { deals, clients, paidPayments, acceptPayment } = useData();
   const [query, setQuery] = useState("");
   const [deal, setDeal] = useState<Deal | null>(null);
+  const [amountInput, setAmountInput] = useState("");
   const [method, setMethod] =
     useState<(typeof methods)[number]["key"]>("cash");
   const [date, setDate] = useState(todayIso());
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -73,12 +76,19 @@ export default function AcceptPaymentModal({
       .map((d) => {
         const client = clientById(clients, d.clientId);
         const paid = paidCount(d, paidPayments);
-        const monthly = Math.round(d.amount / d.months);
+        // Реальный график, а не amount/months «в лоб» — после
+        // реструктуризации взносы могут отличаться от простого деления
+        const schedule = scheduleForDeal(d, paid);
+        const next = schedule.find((p) => p.status === "due");
+        const paidSum = schedule
+          .filter((p) => p.status === "paid")
+          .reduce((s, p) => s + p.amount, 0);
         return {
           deal: d,
           phone: client?.phone ?? "",
-          monthly,
-          remaining: d.amount - monthly * paid,
+          schedule,
+          nextAmount: next?.amount ?? 0,
+          remaining: d.amount - paidSum,
         };
       })
       .filter(
@@ -90,25 +100,56 @@ export default function AcceptPaymentModal({
       );
   }, [query, deals, clients, paidPayments]);
 
+  // Запасной объект: после последнего взноса сделка закрывается и пропадает
+  // из rows (dealState больше не active/pending), а модалка ещё 1.3с
+  // показывает «Платёж принят» — без этого JSX упал бы на null
   const selected = deal
-    ? rows.find((r) => r.deal.id === deal.id) ?? {
+    ? (rows.find((r) => r.deal.id === deal.id) ?? {
         deal,
         phone: "",
-        monthly: Math.round(deal.amount / deal.months),
+        schedule: [],
+        nextAmount: Math.round(deal.amount / deal.months),
         remaining: deal.amount,
-      }
+      })
     : null;
 
-  const pick = (d: Deal) => setDeal(d);
+  const pick = (d: Deal) => {
+    setDeal(d);
+    const row = rows.find((r) => r.deal.id === d.id);
+    setAmountInput(row ? String(Math.round(row.nextAmount)) : "");
+  };
 
-  const ready = date !== "";
+  const amount = Number(amountInput.replace(/\s/g, ""));
+  const amountValid =
+    selected !== null && Number.isFinite(amount) && amount >= selected.nextAmount - 0.5;
 
-  const submit = (e: React.FormEvent) => {
+  // Сколько взносов подряд закроет введённая сумма — та же логика, что на
+  // сервере (lib/queries.ts, acceptPayment), только для подсказки в интерфейсе
+  const coveredCount = (() => {
+    if (!selected || !amountValid) return 1;
+    let cash = amount;
+    let n = 0;
+    const due = selected.schedule.filter((p) => p.status === "due");
+    while (n < due.length && cash >= due[n].amount - 0.5) {
+      cash -= due[n].amount;
+      n++;
+    }
+    return Math.max(n, 1);
+  })();
+
+  const ready = date !== "" && amountValid;
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ready || !deal) return;
-    acceptPayment(deal.id, { date, method });
-    setSaved(true);
-    setTimeout(onClose, 1300);
+    setError(null);
+    try {
+      await acceptPayment(deal.id, { date, method, amount });
+      setSaved(true);
+      setTimeout(onClose, 1300);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось принять платёж");
+    }
   };
 
   return (
@@ -194,7 +235,7 @@ export default function AcceptPaymentModal({
                   </p>
                 </li>
               ) : (
-                rows.map(({ deal: d, phone, monthly, remaining }) => (
+                rows.map(({ deal: d, phone, nextAmount, remaining }) => (
                   <li key={d.id}>
                     <button
                       onClick={() => pick(d)}
@@ -217,7 +258,7 @@ export default function AcceptPaymentModal({
                       </span>
                       <span className="text-right">
                         <span className="block text-sm font-semibold whitespace-nowrap">
-                          {money(monthly)}
+                          {money(nextAmount)}
                         </span>
                         <span className="block text-xs whitespace-nowrap text-mute">
                           остаток {money(remaining)}
@@ -252,13 +293,37 @@ export default function AcceptPaymentModal({
 
               <div>
                 <span className="mb-1.5 block text-sm font-medium">Сумма платежа</span>
-                <div className="rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-lg font-semibold">
-                  {money(selected!.monthly)}
+                <div className="relative">
+                  <input
+                    inputMode="numeric"
+                    className={`${input} pr-9 text-lg font-semibold ${
+                      !amountValid ? "border-danger focus:border-danger" : ""
+                    }`}
+                    value={amountInput}
+                    onChange={(e) => setAmountInput(e.target.value.replace(/[^\d]/g, ""))}
+                  />
+                  <span className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-sm text-mute">
+                    ₽
+                  </span>
                 </div>
-                <p className="mt-1.5 text-xs text-mute">
-                  Это очередной взнос по графику — сумма зафиксирована при
-                  оформлении сделки и здесь не меняется
-                </p>
+                {!amountValid ? (
+                  <p className="mt-1.5 text-xs text-danger">
+                    Меньше очередного взноса ({money(selected!.nextAmount)}) внести
+                    нельзя
+                  </p>
+                ) : coveredCount > 1 ? (
+                  <p className="mt-1.5 text-xs text-mute">
+                    Этой суммы хватит на {coveredCount}{" "}
+                    {ruPlural(coveredCount, "взнос", "взноса", "взносов")} вперёд
+                    — график сам продвинется на {coveredCount}.
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-xs text-mute">
+                    По умолчанию — очередной взнос по графику. Если клиент
+                    заплатил больше, впишите фактическую сумму — лишнее закроет
+                    следующие взносы.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -309,22 +374,26 @@ export default function AcceptPaymentModal({
                 />
                 <p className="text-brand-deep">
                   После платежа остаток по сделке —{" "}
-                  {money(Math.max(selected!.remaining - selected!.monthly, 0))}
+                  {money(Math.max(selected!.remaining - (amountValid ? amount : 0), 0))}
                 </p>
               </div>
             </div>
 
             <footer className="flex flex-wrap items-center justify-end gap-3 border-t border-line px-6 py-4">
               <p
-                className="mr-auto text-sm text-mute"
+                className={`mr-auto text-sm ${error ? "text-danger" : "text-mute"}`}
                 role="status"
                 aria-live="polite"
               >
-                {saved
-                  ? "Платёж принят"
-                  : ready
-                    ? "Можно проводить"
-                    : "Укажите дату платежа"}
+                {error
+                  ? error
+                  : saved
+                    ? "Платёж принят"
+                    : ready
+                      ? "Можно проводить"
+                      : !amountValid
+                        ? "Проверьте сумму платежа"
+                        : "Укажите дату платежа"}
               </p>
               <button
                 type="button"

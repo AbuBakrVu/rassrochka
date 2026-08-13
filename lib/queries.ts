@@ -1005,6 +1005,15 @@ export interface AcceptPaymentOptions {
   /** Фактическая дата поступления денег — по умолчанию сегодня. */
   date?: string;
   method?: "cash" | "card" | "transfer";
+  /**
+   * Фактически внесённая сумма — по умолчанию равна очередному взносу по
+   * графику. Если клиент занёс больше, лишнее автоматически закрывает
+   * столько следующих взносов, сколько покрывает сумма (остаток меньше
+   * полного взноса добавляется к последнему закрытому — отдельного
+   * «частично оплаченного» взноса модель графика не поддерживает).
+   * Меньше очередного взноса внести нельзя — см. AMOUNT_TOO_LOW.
+   */
+  amount?: number;
 }
 
 export async function acceptPayment(
@@ -1047,18 +1056,37 @@ export async function acceptPayment(
       restructuredFrom: deal.restructured_from,
     });
 
-    const next = deal.paid_count + 1;
-    const installment = buildSchedule(
+    // Суммы по графику не зависят от paid — берём весь график один раз
+    const schedule = buildSchedule(
       deal.amount,
       deal.months,
-      next,
+      deal.months,
       deal.opened_at,
       restructure
-    )[next - 1];
+    );
+
+    const nextInstallment = schedule[deal.paid_count];
+    let cash = options.amount ?? nextInstallment.amount;
+    if (cash < nextInstallment.amount - 0.5) {
+      throw new Error("AMOUNT_TOO_LOW");
+    }
+
+    // Сколько взносов подряд закрывает внесённая сумма — остаток меньше
+    // полного взноса не считаем отдельным (недооплаченным) взносом, а
+    // приплюсовываем к сумме последнего закрытого в этом платеже
+    const covered: number[] = [];
+    let n = deal.paid_count;
+    while (n < deal.months && cash >= schedule[n].amount - 0.5) {
+      covered.push(n);
+      cash -= schedule[n].amount;
+      n++;
+    }
+    const leftover = cash;
+    const newPaidCount = n;
 
     await client.query(
       "update deals set paid_count = $2 where id = $1",
-      [dealId, next]
+      [dealId, newPaidCount]
     );
 
     // Первый принятый платёж переводит сделку в «Активна» — до этого стадию
@@ -1070,48 +1098,60 @@ export async function acceptPayment(
     );
 
     // Последняя оплата закрывает сделку
-    if (next === deal.months) {
+    if (newPaidCount === deal.months) {
       await client.query(
         "update deals set stage = 'closed' where id = $1 and stage = 'active'",
         [dealId]
       );
     }
 
-    // Дата операции — по умолчанию сегодня, а НЕ плановая дата взноса из
-    // графика: клиент может гасить июльский платёж в августе, деньги
-    // пришли фактически в августе, иначе «Приход за месяц» в кассе считался
-    // бы неверно. Менеджер может явно указать другую дату (options.date),
-    // например если заносит платёж задним числом.
-    await client.query(
-      `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note)
-       values ('payment', $1, $2, $3, $4, $5)`,
-      [
-        installment.amount,
-        occurredAt,
-        dealId,
-        `Платёж ${next} из ${deal.months} · ${deal.client_name}`,
-        methodLabel ? `${deal.product} · ${methodLabel}` : deal.product,
-      ]
-    );
+    // По одной записи в кассу и в историю на каждый закрытый этим платежом
+    // взнос — так «Отменить последний платёж» откатывает ровно один взнос
+    // за раз, даже если внесли сразу на несколько вперёд. Остаток меньше
+    // полного взноса (leftover) идёт в сумму последнего из них — деньги в
+    // кассе должны совпадать с тем, что реально занесли, до копейки.
+    for (let i = 0; i < covered.length; i++) {
+      const installmentNumber = covered[i] + 1;
+      const isLast = i === covered.length - 1;
+      const amount = schedule[covered[i]].amount + (isLast ? leftover : 0);
 
-    await client.query(
-      "insert into deal_events (deal_id, text) values ($1, $2)",
-      [
-        dealId,
-        `Платёж ${next} из ${deal.months} принят — ${installment.amount.toLocaleString("ru-RU")} ₽` +
-          (methodLabel ? ` · ${methodLabel}` : ""),
-      ]
-    );
+      // Дата операции — по умолчанию сегодня, а НЕ плановая дата взноса из
+      // графика: клиент может гасить июльский платёж в августе, деньги
+      // пришли фактически в августе, иначе «Приход за месяц» в кассе
+      // считался бы неверно. Менеджер может явно указать другую дату
+      // (options.date), например если заносит платёж задним числом.
+      await client.query(
+        `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note)
+         values ('payment', $1, $2, $3, $4, $5)`,
+        [
+          amount,
+          occurredAt,
+          dealId,
+          `Платёж ${installmentNumber} из ${deal.months} · ${deal.client_name}`,
+          methodLabel ? `${deal.product} · ${methodLabel}` : deal.product,
+        ]
+      );
 
-    await accrueCoinvestorProfit(
-      client,
-      dealId,
-      deal.amount,
-      deal.months,
-      deal.markup_pct,
-      deal.product,
-      next
-    );
+      await client.query(
+        "insert into deal_events (deal_id, text) values ($1, $2)",
+        [
+          dealId,
+          `Платёж ${installmentNumber} из ${deal.months} принят — ${amount.toLocaleString("ru-RU")} ₽` +
+            (methodLabel ? ` · ${methodLabel}` : "") +
+            (covered.length > 1 ? " · закрыт переплатой одним платежом" : ""),
+        ]
+      );
+
+      await accrueCoinvestorProfit(
+        client,
+        dealId,
+        deal.amount,
+        deal.months,
+        deal.markup_pct,
+        deal.product,
+        installmentNumber
+      );
+    }
 
     return false;
   });
