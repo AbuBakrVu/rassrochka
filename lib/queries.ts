@@ -312,7 +312,7 @@ export interface Bootstrap {
   coinvestorCapitalTx: CoinvestorCapitalTx[];
   coinvestorProfitTx: CoinvestorProfitTx[];
   templates: MessageTemplate[];
-  settings: { cashOpeningBalance: number };
+  settings: { cashOpeningBalance: number; hiddenNavItems: string[] };
 }
 
 function toCapitalTx(row: CoinvestorCapitalRow): CoinvestorCapitalTx {
@@ -441,6 +441,7 @@ export async function loadBootstrap(
   for (const row of dealRows) paidPayments[row.id] = row.paid_count;
 
   const opening = settingRows.find((s) => s.key === "cash_opening_balance");
+  const hiddenNav = settingRows.find((s) => s.key === "hidden_nav_items");
 
   return {
     user: currentUser,
@@ -479,8 +480,21 @@ export async function loadBootstrap(
     coinvestorCapitalTx,
     coinvestorProfitTx,
     templates: templateRows.map(toTemplate),
-    settings: { cashOpeningBalance: Number(opening?.value ?? 0) },
+    settings: {
+      cashOpeningBalance: Number(opening?.value ?? 0),
+      hiddenNavItems: Array.isArray(hiddenNav?.value) ? (hiddenNav.value as string[]) : [],
+    },
   };
+}
+
+/** Разделы бокового меню, которые компания решила скрыть (см. app/settings). */
+export async function setHiddenNavItems(dbName: string, hrefs: string[]): Promise<void> {
+  await query(
+    dbName,
+    `insert into settings (key, value) values ('hidden_nav_items', $1::jsonb)
+     on conflict (key) do update set value = excluded.value`,
+    [JSON.stringify(hrefs)]
+  );
 }
 
 async function loadDeal(dbName: string, id: string): Promise<Deal | undefined> {

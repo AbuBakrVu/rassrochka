@@ -24,7 +24,7 @@ import {
 import CommandPalette from "@/components/command-palette";
 import { DataProvider, useData } from "@/lib/store";
 
-const nav = [
+export const nav = [
   { href: "/", label: "Главная", icon: LayoutGrid },
   { href: "/analytics", label: "Аналитика", icon: BarChart3 },
   { href: "/deals", label: "Сделки", icon: KanbanSquare },
@@ -32,7 +32,7 @@ const nav = [
   { href: "/payments", label: "Платежи", icon: CalendarDays },
   { href: "/mailings", label: "Рассылки", icon: Send },
   { href: "/coinvestors", label: "Соинвесторы", icon: Handshake },
-  { href: "/cash", label: "Кассы", icon: Wallet },
+  { href: "/cash", label: "Финансы", icon: Wallet },
   { href: "/registry", label: "Реестр клиентов", icon: BookUser },
   { href: "/blacklist", label: "Чёрный список", icon: ShieldAlert },
   { href: "/employees", label: "Сотрудники", icon: UserCog },
@@ -51,8 +51,10 @@ function allowedForAccountant(pathname: string): boolean {
 }
 
 function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate: () => void }) {
-  const { user } = useData();
-  const items = user.role === "accountant" ? nav.filter((n) => allowedForAccountant(n.href)) : nav;
+  const { user, hiddenNavItems } = useData();
+  const items = nav
+    .filter((n) => user.role !== "accountant" || allowedForAccountant(n.href))
+    .filter((n) => !hiddenNavItems.includes(n.href));
 
   return (
     <nav className="flex flex-col gap-0.5 px-3" aria-label="Основные разделы">

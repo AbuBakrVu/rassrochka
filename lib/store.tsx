@@ -122,6 +122,7 @@ interface Snapshot {
   coinvestorProfitTx: CoinvestorProfitTx[];
   templates: MessageTemplate[];
   cashOpeningBalance: number;
+  hiddenNavItems: string[];
 }
 
 const EMPTY: Snapshot = {
@@ -137,6 +138,7 @@ const EMPTY: Snapshot = {
   coinvestorProfitTx: [],
   templates: [],
   cashOpeningBalance: 0,
+  hiddenNavItems: [],
 };
 
 export interface NewDealInput {
@@ -259,6 +261,7 @@ interface DataContextValue extends Snapshot {
   addEmployee: (input: NewEmployeeInput) => Promise<{ password: string }>;
   updateEmployee: (id: number, input: UpdateEmployeeInput) => Promise<void>;
   setEmployeeActive: (id: number, active: boolean) => Promise<void>;
+  setHiddenNavItems: (hrefs: string[]) => Promise<void>;
   logout: () => Promise<void>;
   addClient: (input: NewClientInput) => Promise<Client>;
   setClientBlacklisted: (
@@ -321,8 +324,8 @@ async function api<T>(path: string, body?: unknown, method?: string): Promise<T>
   return res.json() as Promise<T>;
 }
 
-interface BootstrapResponse extends Omit<Snapshot, "cashOpeningBalance"> {
-  settings: { cashOpeningBalance: number };
+interface BootstrapResponse extends Omit<Snapshot, "cashOpeningBalance" | "hiddenNavItems"> {
+  settings: { cashOpeningBalance: number; hiddenNavItems: string[] };
 }
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
@@ -347,6 +350,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       coinvestorProfitTx: data.coinvestorProfitTx,
       templates: data.templates,
       cashOpeningBalance: data.settings.cashOpeningBalance,
+      hiddenNavItems: data.settings.hiddenNavItems,
     });
   }, []);
 
@@ -619,6 +623,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const setHiddenNavItems = useCallback(
+    async (hrefs: string[]) => {
+      await api("/api/settings/nav", { hidden: hrefs }, "PATCH");
+      await load();
+    },
+    [load]
+  );
+
   const logout = useCallback(async () => {
     await api("/api/auth/logout", {});
     window.location.href = "/login";
@@ -653,6 +665,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addEmployee,
       updateEmployee,
       setEmployeeActive,
+      setHiddenNavItems,
       logout,
       refresh,
     }),
@@ -660,7 +673,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
      addCoinvestor, updateCoinvestor, setCoinvestorActive, deleteCoinvestor,
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,
-     addEmployee, updateEmployee, setEmployeeActive, logout, refresh]
+     addEmployee, updateEmployee, setEmployeeActive, setHiddenNavItems, logout, refresh]
   );
 
   // Пока состояние не загружено, страницы не рендерим: иначе каждая из них
