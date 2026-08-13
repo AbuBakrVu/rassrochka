@@ -7,17 +7,21 @@ export async function PATCH(
 ) {
   const { id } = await params;
 
-  return handle(request, async ({ tenant, body }) => {
-    const blacklisted = (body as { blacklisted?: unknown })?.blacklisted;
-    if (typeof blacklisted !== "boolean") {
-      throw new BadRequestError("Поле «blacklisted» должно быть true или false");
-    }
-    await setClientBlacklisted(
-      tenant.dbName,
-      id,
-      blacklisted,
-      optionalStr(body, "reason")
-    );
-    return { ok: true };
-  });
+  return handle(
+    request,
+    async ({ tenant, body }) => {
+      const blacklisted = (body as { blacklisted?: unknown })?.blacklisted;
+      if (typeof blacklisted !== "boolean") {
+        throw new BadRequestError("Поле «blacklisted» должно быть true или false");
+      }
+      await setClientBlacklisted(
+        tenant.dbName,
+        id,
+        blacklisted,
+        optionalStr(body, "reason")
+      );
+      return { ok: true };
+    },
+    { roles: ["admin", "manager"] }
+  );
 }

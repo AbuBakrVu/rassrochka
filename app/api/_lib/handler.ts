@@ -30,6 +30,12 @@ type Handler<T> = (ctx: {
 interface Options {
   /** Роут только для администратора компании. */
   adminOnly?: boolean;
+  /**
+   * Роль-бухгалтер видит только кассу и аналитику (см. components/shell.tsx) —
+   * этим списком отсекаем её и от прямых вызовов остального API, а не только
+   * от пунктов меню. Пусто/не указано — доступно всем ролям.
+   */
+  roles?: readonly SessionUser["role"][];
 }
 
 export async function handle<T>(
@@ -46,6 +52,7 @@ export async function handle<T>(
     const user = await findSessionUser(tenant.dbName, token);
     if (!user) throw new UnauthorizedError();
     if (options.adminOnly && user.role !== "admin") throw new ForbiddenError();
+    if (options.roles && !options.roles.includes(user.role)) throw new ForbiddenError();
 
     // Тело читаем как текст: у части запросов его нет вовсе (например,
     // «принять платёж» — всё нужное уже в пути), и request.json() на

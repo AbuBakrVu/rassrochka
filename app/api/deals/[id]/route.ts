@@ -7,29 +7,33 @@ export async function PATCH(
 ) {
   const { id } = await params;
 
-  return handle(request, async ({ tenant, body }) => {
-    const raw = (body as { reminderTemplateId?: unknown } | null)?.reminderTemplateId;
-    const reminderTemplateId = raw === undefined ? undefined : raw === null ? null : String(raw);
+  return handle(
+    request,
+    async ({ tenant, body }) => {
+      const raw = (body as { reminderTemplateId?: unknown } | null)?.reminderTemplateId;
+      const reminderTemplateId = raw === undefined ? undefined : raw === null ? null : String(raw);
 
-    try {
-      return await updateDeal(tenant.dbName, id, {
-        product: str(body, "product", { max: 200 }),
-        nextStep: optionalStr(body, "nextStep", ""),
-        managerId: num(body, "managerId", { min: 1, integer: true }),
-        amount: optionalNum(body, "amount", { min: 1, max: 1e9 }),
-        months: optionalNum(body, "months", { min: 1, max: 120, integer: true }),
-        markupPct: optionalNum(body, "markupPct", { min: 0, max: 1000 }),
-        reminderTemplateId,
-      });
-    } catch (err) {
-      if (err instanceof Error && err.message === "ALREADY_PAID") {
-        throw new BadRequestError(
-          "По сделке уже есть принятые платежи — сумму, срок и наценку менять нельзя"
-        );
+      try {
+        return await updateDeal(tenant.dbName, id, {
+          product: str(body, "product", { max: 200 }),
+          nextStep: optionalStr(body, "nextStep", ""),
+          managerId: num(body, "managerId", { min: 1, integer: true }),
+          amount: optionalNum(body, "amount", { min: 1, max: 1e9 }),
+          months: optionalNum(body, "months", { min: 1, max: 120, integer: true }),
+          markupPct: optionalNum(body, "markupPct", { min: 0, max: 1000 }),
+          reminderTemplateId,
+        });
+      } catch (err) {
+        if (err instanceof Error && err.message === "ALREADY_PAID") {
+          throw new BadRequestError(
+            "По сделке уже есть принятые платежи — сумму, срок и наценку менять нельзя"
+          );
+        }
+        throw err;
       }
-      throw err;
-    }
-  });
+    },
+    { roles: ["admin", "manager"] }
+  );
 }
 
 export async function DELETE(

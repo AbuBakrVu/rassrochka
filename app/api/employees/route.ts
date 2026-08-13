@@ -6,8 +6,8 @@ export async function POST(request: Request) {
     request,
     async ({ tenant, body }) => {
       const role = str(body, "role", { max: 10 });
-      if (role !== "admin" && role !== "manager") {
-        throw new BadRequestError("Роль должна быть admin или manager");
+      if (role !== "admin" && role !== "manager" && role !== "accountant") {
+        throw new BadRequestError("Роль должна быть admin, manager или accountant");
       }
 
       const email = str(body, "email", { max: 200 });

@@ -19,7 +19,7 @@ export interface SessionUser {
   email: string;
   name: string;
   initials: string;
-  role: "admin" | "manager";
+  role: "admin" | "manager" | "accountant";
   mustChangePassword: boolean;
 }
 
@@ -53,7 +53,7 @@ interface UserRow extends Record<string, unknown> {
   email: string;
   name: string;
   initials: string;
-  role: "admin" | "manager";
+  role: "admin" | "manager" | "accountant";
   password_hash: string;
   must_change_password: boolean;
 }

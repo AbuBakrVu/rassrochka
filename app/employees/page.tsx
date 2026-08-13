@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
 import { money } from "@/lib/schedule";
-import { useData, type Employee } from "@/lib/store";
+import { useData, type Employee, type EmployeeRole } from "@/lib/store";
 import { computeEmployees } from "@/lib/derive";
 import { ruPlural, type RouteKind } from "@/lib/data";
 
@@ -23,6 +23,12 @@ const kindMeta: Record<RouteKind, { label: string; icon: typeof PhoneCall; text:
   deadline: { label: "Дедлайн", icon: CalendarClock, text: "text-warn" },
   review: { label: "Проверка", icon: FileSearch, text: "text-brand" },
   request: { label: "Новая заявка", icon: UserPlus2, text: "text-brand" },
+};
+
+const ROLE_LABEL: Record<EmployeeRole, string> = {
+  admin: "Администратор",
+  manager: "Менеджер",
+  accountant: "Бухгалтер",
 };
 
 export default function EmployeesPage() {
@@ -85,7 +91,7 @@ export default function EmployeesPage() {
                   </h2>
                   <p className="flex items-center gap-1.5 text-sm text-mute">
                     <Briefcase size={13} className="shrink-0" aria-hidden />
-                    {s.employee.role === "admin" ? "Администратор" : "Менеджер"}
+                    {ROLE_LABEL[s.employee.role]}
                     {!s.employee.active && " · доступ закрыт"}
                   </p>
                 </div>
@@ -245,13 +251,13 @@ function InviteModal({
     name: string;
     email: string;
     phone: string;
-    role: "admin" | "manager";
+    role: EmployeeRole;
   }) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<"admin" | "manager">("manager");
+  const [role, setRole] = useState<EmployeeRole>("manager");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -307,7 +313,7 @@ function InviteModal({
           <div>
             <span className="mb-1.5 block text-sm font-medium">Роль</span>
             <div className="flex gap-2">
-              {(["manager", "admin"] as const).map((r) => (
+              {(["manager", "accountant", "admin"] as const).map((r) => (
                 <button
                   key={r}
                   type="button"
@@ -319,12 +325,13 @@ function InviteModal({
                       : "border-line bg-canvas text-mute hover:border-brand/40"
                   }`}
                 >
-                  {r === "admin" ? "Администратор" : "Менеджер"}
+                  {ROLE_LABEL[r]}
                 </button>
               ))}
             </div>
             <p className="mt-1.5 text-xs text-mute">
-              Администратор может приглашать и отключать сотрудников
+              Администратор может приглашать и отключать сотрудников. Бухгалтер
+              видит только кассу и аналитику.
             </p>
           </div>
         </div>
@@ -356,11 +363,11 @@ function EditEmployeeModal({
 }: {
   employee: Employee;
   onClose: () => void;
-  onSave: (input: { name: string; phone: string; role: "admin" | "manager" }) => Promise<void>;
+  onSave: (input: { name: string; phone: string; role: EmployeeRole }) => Promise<void>;
 }) {
   const [name, setName] = useState(employee.name);
   const [phone, setPhone] = useState(employee.phone === "—" ? "" : employee.phone);
-  const [role, setRole] = useState<"admin" | "manager">(employee.role);
+  const [role, setRole] = useState<EmployeeRole>(employee.role);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -410,7 +417,7 @@ function EditEmployeeModal({
           <div>
             <span className="mb-1.5 block text-sm font-medium">Роль</span>
             <div className="flex gap-2">
-              {(["manager", "admin"] as const).map((r) => (
+              {(["manager", "accountant", "admin"] as const).map((r) => (
                 <button
                   key={r}
                   type="button"
@@ -422,7 +429,7 @@ function EditEmployeeModal({
                       : "border-line bg-canvas text-mute hover:border-brand/40"
                   }`}
                 >
-                  {r === "admin" ? "Администратор" : "Менеджер"}
+                  {ROLE_LABEL[r]}
                 </button>
               ))}
             </div>

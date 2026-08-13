@@ -28,13 +28,15 @@ export interface CurrentUser {
   role: string;
 }
 
+export type EmployeeRole = "admin" | "manager" | "accountant";
+
 export interface Employee {
   id: number;
   name: string;
   initials: string;
   email: string;
   phone: string;
-  role: "admin" | "manager";
+  role: EmployeeRole;
   since: string;
   active: boolean;
 }
@@ -201,13 +203,13 @@ export interface NewEmployeeInput {
   name: string;
   email: string;
   phone: string;
-  role: "admin" | "manager";
+  role: EmployeeRole;
 }
 
 export interface UpdateEmployeeInput {
   name: string;
   phone: string;
-  role: "admin" | "manager";
+  role: EmployeeRole;
 }
 
 export interface NewCoinvestorInput {

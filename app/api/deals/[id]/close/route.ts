@@ -7,14 +7,18 @@ export async function POST(
 ) {
   const { id } = await params;
 
-  return handle(request, async ({ tenant }) => {
-    try {
-      return await closeDealEarly(tenant.dbName, id);
-    } catch (err) {
-      if (err instanceof Error && err.message === "NOT_ACTIVE") {
-        throw new BadRequestError("Закрыть досрочно можно только активную сделку");
+  return handle(
+    request,
+    async ({ tenant }) => {
+      try {
+        return await closeDealEarly(tenant.dbName, id);
+      } catch (err) {
+        if (err instanceof Error && err.message === "NOT_ACTIVE") {
+          throw new BadRequestError("Закрыть досрочно можно только активную сделку");
+        }
+        throw err;
       }
-      throw err;
-    }
-  });
+    },
+    { roles: ["admin", "manager"] }
+  );
 }

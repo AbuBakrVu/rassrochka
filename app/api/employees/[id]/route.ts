@@ -34,10 +34,10 @@ export async function PATCH(
       }
 
       const role = str(body, "role", { max: 10 });
-      if (role !== "admin" && role !== "manager") {
-        throw new BadRequestError("Роль должна быть admin или manager");
+      if (role !== "admin" && role !== "manager" && role !== "accountant") {
+        throw new BadRequestError("Роль должна быть admin, manager или accountant");
       }
-      if (userId === user.id && role === "manager") {
+      if (userId === user.id && role !== "admin") {
         throw new BadRequestError("Нельзя понизить самого себя — попросите другого администратора");
       }
 

@@ -12,17 +12,21 @@ export async function POST(
 ) {
   const { id } = await params;
 
-  return handle(request, async ({ tenant, body }) => {
-    const stage = optionalStr(body, "stage");
-    const dueDate = optionalStr(body, "dueDate");
-    if (stage && !STAGES.includes(stage)) {
-      throw new BadRequestError("Неизвестная стадия напоминания");
-    }
-    await recordReminderSent(
-      tenant.dbName,
-      id,
-      stage && dueDate ? { stage, dueDate } : undefined
-    );
-    return { ok: true };
-  });
+  return handle(
+    request,
+    async ({ tenant, body }) => {
+      const stage = optionalStr(body, "stage");
+      const dueDate = optionalStr(body, "dueDate");
+      if (stage && !STAGES.includes(stage)) {
+        throw new BadRequestError("Неизвестная стадия напоминания");
+      }
+      await recordReminderSent(
+        tenant.dbName,
+        id,
+        stage && dueDate ? { stage, dueDate } : undefined
+      );
+      return { ok: true };
+    },
+    { roles: ["admin", "manager"] }
+  );
 }

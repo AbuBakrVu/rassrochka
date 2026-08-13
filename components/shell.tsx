@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutGrid,
   BarChart3,
@@ -38,6 +38,61 @@ const nav = [
   { href: "/employees", label: "Сотрудники", icon: UserCog },
   { href: "/settings", label: "Настройки", icon: Settings },
 ];
+
+// Бухгалтер видит только кассу и аналитику — остальные разделы ему видеть
+// незачем (он не ведёт клиентов и сделки). /settings/password — исключение,
+// его должен уметь открыть кто угодно, чтобы сменить обязательный первый
+// пароль. Список используем и для сайдбара, и для редиректа с чужих страниц.
+const ACCOUNTANT_ALLOWED = ["/cash", "/analytics"];
+
+function allowedForAccountant(pathname: string): boolean {
+  if (pathname === "/settings/password") return true;
+  return ACCOUNTANT_ALLOWED.some((href) => pathname.startsWith(href));
+}
+
+function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate: () => void }) {
+  const { user } = useData();
+  const items = user.role === "accountant" ? nav.filter((n) => allowedForAccountant(n.href)) : nav;
+
+  return (
+    <nav className="flex flex-col gap-0.5 px-3" aria-label="Основные разделы">
+      {items.map(({ href, label, icon: Icon }) => {
+        const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+        return (
+          <Link
+            key={href}
+            href={href}
+            onClick={onNavigate}
+            aria-current={active ? "page" : undefined}
+            className={`flex items-center gap-3 rounded-[10px] px-3 py-2 text-sm transition-colors ${
+              active
+                ? "bg-brand-soft font-medium text-brand-deep"
+                : "text-mute hover:bg-canvas hover:text-ink"
+            }`}
+          >
+            <Icon size={18} strokeWidth={1.75} aria-hidden />
+            {label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** Если бухгалтер каким-то путём (прямая ссылка, старая закладка) попал на
+ *  чужую страницу — молча уводим на кассу, а не показываем 403. */
+function AccountantGate({ pathname }: { pathname: string }) {
+  const { user } = useData();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user.role === "accountant" && !allowedForAccountant(pathname)) {
+      router.replace("/cash");
+    }
+  }, [user.role, pathname, router]);
+
+  return null;
+}
 
 function UserFooter() {
   const { user, logout } = useData();
@@ -93,33 +148,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  const menu = (
-    <nav className="flex flex-col gap-0.5 px-3" aria-label="Основные разделы">
-      {nav.map(({ href, label, icon: Icon }) => {
-        const active =
-          href === "/" ? pathname === "/" : pathname.startsWith(href);
-        return (
-          <Link
-            key={href}
-            href={href}
-            onClick={() => setOpen(false)}
-            aria-current={active ? "page" : undefined}
-            className={`flex items-center gap-3 rounded-[10px] px-3 py-2 text-sm transition-colors ${
-              active
-                ? "bg-brand-soft font-medium text-brand-deep"
-                : "text-mute hover:bg-canvas hover:text-ink"
-            }`}
-          >
-            <Icon size={18} strokeWidth={1.75} aria-hidden />
-            {label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-
   return (
     <DataProvider>
+      <AccountantGate pathname={pathname} />
       <div className="flex min-h-screen print:hidden">
         {/* Десктопный сайдбар */}
         <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line bg-surface lg:flex">
@@ -129,7 +160,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             </span>
             <span className="text-lg font-semibold tracking-tight">Nasiya</span>
           </div>
-          {menu}
+          <SidebarNav pathname={pathname} onNavigate={() => setOpen(false)} />
           <UserFooter />
         </aside>
 
@@ -157,7 +188,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                   <X size={18} />
                 </button>
               </div>
-              {menu}
+              <SidebarNav pathname={pathname} onNavigate={() => setOpen(false)} />
               <UserFooter />
             </aside>
           </div>

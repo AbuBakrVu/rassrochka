@@ -12,19 +12,23 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handle(request, ({ tenant, body }) => {
-    const date = optionalStr(body, "date");
-    if (date && !ISO_DATE.test(date)) {
-      throw new BadRequestError("Поле «date» должно быть датой вида ГГГГ-ММ-ДД");
-    }
-    const method = optionalStr(body, "method");
-    if (method && !METHODS.has(method)) {
-      throw new BadRequestError("Поле «method» должно быть cash, card или transfer");
-    }
+  return handle(
+    request,
+    ({ tenant, body }) => {
+      const date = optionalStr(body, "date");
+      if (date && !ISO_DATE.test(date)) {
+        throw new BadRequestError("Поле «date» должно быть датой вида ГГГГ-ММ-ДД");
+      }
+      const method = optionalStr(body, "method");
+      if (method && !METHODS.has(method)) {
+        throw new BadRequestError("Поле «method» должно быть cash, card или transfer");
+      }
 
-    return acceptPayment(tenant.dbName, id, {
-      ...(date ? { date } : {}),
-      ...(method ? { method: method as "cash" | "card" | "transfer" } : {}),
-    });
-  });
+      return acceptPayment(tenant.dbName, id, {
+        ...(date ? { date } : {}),
+        ...(method ? { method: method as "cash" | "card" | "transfer" } : {}),
+      });
+    },
+    { roles: ["admin", "manager"] }
+  );
 }

@@ -295,7 +295,7 @@ export interface Employee {
   initials: string;
   email: string;
   phone: string;
-  role: "admin" | "manager";
+  role: "admin" | "manager" | "accountant";
   since: string;
   active: boolean;
 }
@@ -413,7 +413,7 @@ export async function loadBootstrap(
       query<{ key: string; value: unknown }>(dbName, "select key, value from settings"),
       query<{
         id: number; name: string; initials: string; email: string;
-        phone: string | null; role: "admin" | "manager"; active: boolean;
+        phone: string | null; role: "admin" | "manager" | "accountant"; active: boolean;
         created_at: Date;
       }>(
         dbName,
@@ -1723,7 +1723,7 @@ export interface NewEmployeeInput {
   name: string;
   email: string;
   phone: string;
-  role: "admin" | "manager";
+  role: "admin" | "manager" | "accountant";
 }
 
 /**
@@ -1790,7 +1790,7 @@ export async function setEmployeeActive(
 export interface UpdateEmployeeInput {
   name: string;
   phone: string;
-  role: "admin" | "manager";
+  role: "admin" | "manager" | "accountant";
 }
 
 /** Правки карточки сотрудника: имя, телефон, роль. Почта — логин, её не меняем отсюда. */
@@ -1802,7 +1802,7 @@ export async function updateEmployee(
   const { initialsFrom } = await import("./auth");
 
   return transaction(dbName, async (client) => {
-    if (input.role === "manager") {
+    if (input.role !== "admin") {
       const { rows } = await client.query<{ role: string; count: string }>(
         `select
            (select role from users where id = $1) as role,
@@ -1816,7 +1816,7 @@ export async function updateEmployee(
 
     const { rows } = await client.query<{
       id: number; name: string; initials: string; email: string;
-      phone: string | null; role: "admin" | "manager"; active: boolean; created_at: Date;
+      phone: string | null; role: "admin" | "manager" | "accountant"; active: boolean; created_at: Date;
     }>(
       `update users set name = $2, initials = $3, phone = $4, role = $5
        where id = $1
