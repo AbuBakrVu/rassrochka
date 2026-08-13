@@ -588,7 +588,7 @@ export async function createDeal(
   dbName: string,
   input: NewDealInput
 ): Promise<Deal> {
-  const purchase = purchasePrice(input.amount, input.markupPct);
+  const purchase = purchasePrice(input.amount, input.markupPct, input.downPayment ?? 0);
 
   const id = await transaction(dbName, async (client) => {
     const { rows } = await client.query<{ id: string; product: string }>(
@@ -637,6 +637,23 @@ export async function createDeal(
       [-purchase, input.openedAt, deal.id, `Закупка товара · ${deal.product}`, clientName]
     );
 
+    // Первоначальный взнос — реальные деньги, полученные при оформлении,
+    // а не просто число для отображения: без этой проводки касса не
+    // учитывала бы их вообще
+    if (input.downPayment) {
+      await client.query(
+        `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note)
+         values ('payment', $1, $2, $3, $4, $5)`,
+        [
+          input.downPayment,
+          input.openedAt,
+          deal.id,
+          `Первоначальный взнос · ${deal.product}`,
+          clientName,
+        ]
+      );
+    }
+
     const { rows: managerRows } = await client.query<{ name: string }>(
       "select name from users where id = $1",
       [input.managerId]
@@ -684,8 +701,8 @@ export async function updateDeal(
   input: UpdateDealInput
 ): Promise<Deal> {
   await transaction(dbName, async (client) => {
-    const { rows } = await client.query<{ paid_count: number }>(
-      "select paid_count from deals where id = $1 for update",
+    const { rows } = await client.query<{ paid_count: number; down_payment: number | null }>(
+      "select paid_count, down_payment from deals where id = $1 for update",
       [dealId]
     );
     const deal = rows[0];
@@ -721,7 +738,7 @@ export async function updateDeal(
 
       // Закупка в кассе была посчитана от старой суммы/наценки — пересчитываем,
       // иначе касса разойдётся с фактической стоимостью сделки
-      const purchase = purchasePrice(input.amount!, input.markupPct!);
+      const purchase = purchasePrice(input.amount!, input.markupPct!, deal.down_payment ?? 0);
       await client.query(
         `update cash_tx set amount = $2, title = $3 where deal_id = $1 and kind = 'purchase'`,
         [dealId, -purchase, `Закупка товара · ${input.product}`]
@@ -839,12 +856,13 @@ export async function closeDealEarly(
       amount: number;
       months: number;
       markup_pct: number;
+      down_payment: number | null;
       paid_count: number;
       stage: DealStage;
       product: string;
       client_name: string;
     }>(
-      `select d.amount, d.months, d.markup_pct, d.paid_count, d.stage, d.product,
+      `select d.amount, d.months, d.markup_pct, d.down_payment, d.paid_count, d.stage, d.product,
               c.name as client_name
        from deals d join clients c on c.id = d.client_id
        where d.id = $1
@@ -870,8 +888,8 @@ export async function closeDealEarly(
         ]
       );
 
-      const purchase = purchasePrice(deal.amount, deal.markup_pct);
-      const totalMargin = deal.amount - purchase;
+      const purchase = purchasePrice(deal.amount, deal.markup_pct, deal.down_payment ?? 0);
+      const totalMargin = deal.amount + (deal.down_payment ?? 0) - purchase;
       const remainingMargin = Math.round((totalMargin * (deal.months - deal.paid_count)) / deal.months);
       if (remainingMargin > 0) {
         const { rows: investors } = await client.query<{ id: string; profit_share_pct: number }>(
@@ -1030,6 +1048,7 @@ export async function acceptPayment(
       amount: number;
       months: number;
       markup_pct: number;
+      down_payment: number | null;
       paid_count: number;
       opened_at: string;
       product: string;
@@ -1038,7 +1057,7 @@ export async function acceptPayment(
       restructured_months: number | null;
       restructured_from: string | null;
     }>(
-      `select d.id, d.amount, d.months, d.markup_pct, d.paid_count, d.opened_at, d.product,
+      `select d.id, d.amount, d.months, d.markup_pct, d.down_payment, d.paid_count, d.opened_at, d.product,
               c.name as client_name, d.original_months, d.restructured_months, d.restructured_from
        from deals d join clients c on c.id = d.client_id
        where d.id = $1
@@ -1149,7 +1168,8 @@ export async function acceptPayment(
         deal.months,
         deal.markup_pct,
         deal.product,
-        installmentNumber
+        installmentNumber,
+        deal.down_payment ?? 0
       );
     }
 
@@ -1305,10 +1325,11 @@ async function accrueCoinvestorProfit(
   months: number,
   markupPct: number,
   product: string,
-  installmentNumber: number
+  installmentNumber: number,
+  downPayment = 0
 ): Promise<void> {
-  const purchase = purchasePrice(dealAmount, markupPct);
-  const totalMargin = dealAmount - purchase;
+  const purchase = purchasePrice(dealAmount, markupPct, downPayment);
+  const totalMargin = dealAmount + downPayment - purchase;
   const marginPerInstallment = totalMargin / months;
   if (marginPerInstallment <= 0) return;
 

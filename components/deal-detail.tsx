@@ -79,8 +79,8 @@ export default function DealDetail({ id }: { id: string }) {
     .filter((p) => p.status === "paid")
     .reduce((s, p) => s + p.amount, 0);
   const remaining = deal.amount - paidSum;
-  const purchase = purchasePrice(deal.amount, deal.markupPct);
-  const markup = deal.amount - purchase;
+  const purchase = purchasePrice(deal.amount, deal.markupPct, deal.downPayment ?? 0);
+  const markup = deal.amount + (deal.downPayment ?? 0) - purchase;
   const stageTitle =
     stages.find((s) => s.key === deal.stage)?.title ??
     (deal.stage === "closed" ? "Закрыта" : "Отклонена");
@@ -305,7 +305,13 @@ export default function DealDetail({ id }: { id: string }) {
               {[
                 ["Закупочная цена", money(purchase)],
                 [`Наценка рассрочки · ${deal.markupPct}%`, `+${money(markup)}`],
-                ["Итоговая цена для клиента", fmt(deal.amount)],
+                ["Итоговая цена для клиента", fmt(deal.amount + (deal.downPayment ?? 0))],
+                ...(deal.downPayment
+                  ? [
+                      ["Первоначальный взнос", `−${money(deal.downPayment)}`],
+                      ["Сумма в рассрочку", fmt(deal.amount)],
+                    ]
+                  : []),
               ].map(([k, v]) => (
                 <div key={k} className="flex items-center justify-between py-2.5">
                   <dt className="text-mute">{k}</dt>

@@ -77,15 +77,17 @@ export const paidCount = (d: Deal, paidPayments: Record<string, number>) =>
 
 // Наценка считается на закупочную цену, а не на сумму сделки: если товар
 // стоит 10 000 и наценка 20%, клиент платит 12 000 (10 000 + 20% от 10 000).
-// amount — это уже готовая сумма с наценкой, поэтому закупочную восстанавливаем
-// делением, а не вычитанием процента из amount. Та же формула — на сервере,
-// в lib/queries.ts::purchasePriceFromAmount (дублируется намеренно: там она
-// нужна и вне контекста Deal, для accrueCoinvestorProfit).
-export const purchasePrice = (amount: number, markupPct: number) =>
-  Math.round(amount / (1 + markupPct / 100));
+// amount — это сумма В РАССРОЧКУ (уже за вычетом первоначального взноса),
+// а не вся сумма продажи — поэтому закупочную восстанавливаем делением
+// не amount, а (amount + downPayment), иначе взнос «съедает» часть
+// закупочной цены и наценки при обратном пересчёте. Та же формула — на
+// сервере, в lib/queries.ts (используется и вне контекста Deal, для
+// accrueCoinvestorProfit).
+export const purchasePrice = (amount: number, markupPct: number, downPayment = 0) =>
+  Math.round((amount + downPayment) / (1 + markupPct / 100));
 
-export const dealMargin = (amount: number, markupPct: number) =>
-  amount - purchasePrice(amount, markupPct);
+export const dealMargin = (amount: number, markupPct: number, downPayment = 0) =>
+  amount + downPayment - purchasePrice(amount, markupPct, downPayment);
 
 export const dealState = (d: Deal): DealState =>
   d.stage === "active" || d.stage === "closed" || d.stage === "rejected"
