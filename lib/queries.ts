@@ -9,7 +9,7 @@ import "server-only";
 
 import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
-import { buildRoute, purchasePrice, type Client, type Deal, type DealStage } from "./data";
+import { buildRoute, purchasePrice, stages, type Client, type Deal, type DealStage } from "./data";
 import { buildSchedule, monthNames, restructureOf } from "./schedule";
 import { computeClientStatus, computeDealStatus, todayIso } from "./status";
 import type {
@@ -736,6 +736,55 @@ export async function updateDeal(
     await client.query(
       "insert into deal_events (deal_id, text) values ($1, 'Данные сделки отредактированы')",
       [dealId]
+    );
+  });
+
+  const updated = await loadDeal(dbName, dealId);
+  if (!updated) throw new Error(`Сделка ${dealId} не найдена`);
+  return updated;
+}
+
+const KANBAN_STAGES = new Set<DealStage>(["new", "check", "active"]);
+
+/**
+ * Перетаскивание карточки между колонками канбана. Только между new/check/
+ * active — закрытие и отказ идут через свои действия (closeDealEarly и
+ * т.п.), у них своя логика (списание кассы, финализация), которую нельзя
+ * просто подменить перетаскиванием.
+ */
+export async function setDealStage(
+  dbName: string,
+  dealId: string,
+  stage: DealStage
+): Promise<Deal> {
+  if (!KANBAN_STAGES.has(stage)) {
+    throw new Error("BAD_STAGE");
+  }
+
+  await transaction(dbName, async (client) => {
+    const { rows } = await client.query<{ stage: DealStage; paid_count: number }>(
+      "select stage, paid_count from deals where id = $1 for update",
+      [dealId]
+    );
+    const deal = rows[0];
+    if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+    if (!KANBAN_STAGES.has(deal.stage)) {
+      throw new Error("BAD_STAGE");
+    }
+    if (deal.stage === stage) return;
+
+    // Платежи уже приняты по графику — увести карточку из «Активна» назад
+    // значило бы потерять смысл графика, который уже пошёл по датам
+    if (deal.paid_count > 0 && stage !== "active") {
+      throw new Error("HAS_PAYMENTS");
+    }
+
+    await client.query("update deals set stage = $2 where id = $1", [dealId, stage]);
+
+    const stageTitle = stages.find((s) => s.key === stage)?.title ?? stage;
+    await client.query(
+      "insert into deal_events (deal_id, text) values ($1, $2)",
+      [dealId, `Этап изменён на «${stageTitle}»`]
     );
   });
 

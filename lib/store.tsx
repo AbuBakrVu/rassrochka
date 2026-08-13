@@ -256,6 +256,7 @@ interface DataContextValue extends Snapshot {
   updateDeal: (dealId: string, input: UpdateDealInput) => Promise<Deal>;
   restructureDeal: (dealId: string, input: RestructureDealInput) => Promise<Deal>;
   reassignDeal: (dealId: string, managerId: number) => Promise<Deal>;
+  setDealStage: (dealId: string, stage: "new" | "check" | "active") => Promise<Deal>;
   closeDeal: (dealId: string) => Promise<Deal>;
   deleteDeal: (dealId: string) => Promise<void>;
   addEmployee: (input: NewEmployeeInput) => Promise<{ password: string }>;
@@ -431,6 +432,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const deal = await api<Deal>(
         `/api/deals/${encodeURIComponent(dealId)}/manager`,
         { managerId }
+      );
+      await load();
+      return deal;
+    },
+    [load]
+  );
+
+  const setDealStage = useCallback(
+    async (dealId: string, stage: "new" | "check" | "active"): Promise<Deal> => {
+      const deal = await api<Deal>(
+        `/api/deals/${encodeURIComponent(dealId)}/stage`,
+        { stage },
+        "PATCH"
       );
       await load();
       return deal;
@@ -643,6 +657,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updateDeal,
       restructureDeal,
       reassignDeal,
+      setDealStage,
       closeDeal,
       deleteDeal,
       addClient,
@@ -669,7 +684,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       logout,
       refresh,
     }),
-    [state, addDeal, updateDeal, restructureDeal, reassignDeal, closeDeal, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
+    [state, addDeal, updateDeal, restructureDeal, reassignDeal, setDealStage, closeDeal, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
      addCoinvestor, updateCoinvestor, setCoinvestorActive, deleteCoinvestor,
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,

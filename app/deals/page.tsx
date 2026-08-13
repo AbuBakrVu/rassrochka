@@ -3,8 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PageHeader, Badge } from "@/components/ui";
-import { stages, fmt } from "@/lib/data";
+import { stages, fmt, type DealStage } from "@/lib/data";
 import { useData } from "@/lib/store";
+
+const KANBAN_STAGES = new Set<DealStage>(["new", "check", "active"]);
 
 const months = (n: number) => {
   const last = n % 10;
@@ -15,10 +17,35 @@ const months = (n: number) => {
 };
 
 export default function DealsPage() {
-  const { deals, employees } = useData();
+  const { deals, employees, setDealStage } = useData();
   const [managerId, setManagerId] = useState<number | "all">("all");
   const visibleDeals =
     managerId === "all" ? deals : deals.filter((d) => d.managerId === managerId);
+
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<DealStage | null>(null);
+  const [moving, setMoving] = useState<string | null>(null);
+
+  const drop = async (stage: DealStage, e: React.DragEvent) => {
+    setDragOverStage(null);
+    setDraggingId(null);
+    // Из dataTransfer, а не из React-состояния: состояние из dragstart может
+    // не успеть примениться к моменту drop (оба — часть одного жеста, но
+    // разные события), а dataTransfer для этого и придуман в HTML5 DnD.
+    const id = e.dataTransfer.getData("text/plain");
+    if (!id) return;
+    const deal = visibleDeals.find((d) => d.id === id);
+    if (!deal || deal.stage === stage || !KANBAN_STAGES.has(deal.stage)) return;
+
+    setMoving(id);
+    try {
+      await setDealStage(id, stage as "new" | "check" | "active");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось перенести сделку");
+    } finally {
+      setMoving(null);
+    }
+  };
 
   return (
     <>
@@ -60,10 +87,25 @@ export default function DealsPage() {
           <div className="flex min-w-max gap-4">
             {stages.map((stage) => {
               const items = visibleDeals.filter((d) => d.stage === stage.key);
+              const isDragOver = dragOverStage === stage.key;
               return (
                 <section
                   key={stage.key}
-                  className="w-72 shrink-0 rounded-card bg-[#eef3fa] p-3"
+                  onDragOver={(e) => {
+                    if (!draggingId) return;
+                    e.preventDefault();
+                    if (dragOverStage !== stage.key) setDragOverStage(stage.key);
+                  }}
+                  onDragLeave={() =>
+                    setDragOverStage((s) => (s === stage.key ? null : s))
+                  }
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    drop(stage.key, e);
+                  }}
+                  className={`w-72 shrink-0 rounded-card p-3 transition-colors ${
+                    isDragOver ? "bg-brand-soft ring-2 ring-brand" : "bg-[#eef3fa]"
+                  }`}
                   aria-label={`Этап «${stage.title}»`}
                 >
                   <div className="mb-3 flex items-center justify-between px-1.5 pt-1">
@@ -77,7 +119,19 @@ export default function DealsPage() {
                       <Link
                         key={d.id}
                         href={`/deals/${d.id}`}
-                        className="block rounded-[12px] border border-line bg-surface p-4 shadow-card transition-shadow hover:shadow-pop"
+                        draggable
+                        onDragStart={(e) => {
+                          setDraggingId(d.id);
+                          e.dataTransfer.effectAllowed = "move";
+                          e.dataTransfer.setData("text/plain", d.id);
+                        }}
+                        onDragEnd={() => {
+                          setDraggingId(null);
+                          setDragOverStage(null);
+                        }}
+                        className={`block cursor-grab rounded-[12px] border border-line bg-surface p-4 shadow-card transition-shadow hover:shadow-pop active:cursor-grabbing ${
+                          moving === d.id ? "opacity-50" : ""
+                        } ${draggingId === d.id ? "opacity-40" : ""}`}
                       >
                         <div className="mb-2.5 flex items-center justify-between gap-2">
                           <Badge tone={d.statusTone}>{d.status}</Badge>

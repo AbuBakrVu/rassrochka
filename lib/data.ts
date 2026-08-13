@@ -68,7 +68,6 @@ export interface DealGuarantor {
 export const stages: { key: DealStage; title: string }[] = [
   { key: "new", title: "Новая заявка" },
   { key: "check", title: "Проверка" },
-  { key: "signing", title: "Подписание" },
   { key: "active", title: "Активна" },
 ];
 
