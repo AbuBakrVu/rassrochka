@@ -39,8 +39,8 @@ const tabs = [
 ] as const;
 
 export default function RoutePage() {
-  const { deals } = useData();
-  const items = useMemo(() => buildRoute(deals), [deals]);
+  const { deals, paidPayments } = useData();
+  const items = useMemo(() => buildRoute(deals, paidPayments), [deals, paidPayments]);
   const [done, setDone] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<(typeof tabs)[number]["key"]>("left");
 

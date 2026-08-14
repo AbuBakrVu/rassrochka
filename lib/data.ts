@@ -1,5 +1,7 @@
 // Моковые данные CRM «Nasiya» — учёт рассрочек. Сегодня 5 августа 2026 г.
 
+import { scheduleForDeal } from "./schedule";
+
 export const fmt = (n: number) =>
   new Intl.NumberFormat("ru-RU").format(n) + " ₽";
 
@@ -198,8 +200,14 @@ export interface RouteItem {
 
 // Маршрут менеджера на сегодня: объединяет всё, что требует действия,
 // в один приоритизированный список — из тех же данных о сделках,
-// без отдельного источника правды.
-export function buildRoute(deals: Deal[]): RouteItem[] {
+// без отдельного источника правды. paidPayments нужен только для точной
+// суммы просроченного взноса (после реструктуризации amount/months «в
+// лоб» отличается от настоящего графика) — необязателен, раз не всем
+// вызовам эта сумма важна.
+export function buildRoute(
+  deals: Deal[],
+  paidPayments: Record<string, number> = {}
+): RouteItem[] {
   const items: RouteItem[] = [];
 
   for (const d of deals) {
@@ -207,6 +215,10 @@ export function buildRoute(deals: Deal[]): RouteItem[] {
 
     if (d.stage === "active") {
       if (d.statusTone === "red" || d.urgent) {
+        const schedule = scheduleForDeal(d, paidCount(d, paidPayments));
+        const nextAmount =
+          schedule.find((p) => p.status === "due")?.amount ??
+          Math.round(d.amount / d.months);
         items.push({
           key: d.id,
           dealId: d.id,
@@ -214,7 +226,7 @@ export function buildRoute(deals: Deal[]): RouteItem[] {
           clientName: d.client,
           kind: "overdue",
           text: d.nextStep,
-          amount: Math.round(d.amount / d.months),
+          amount: nextAmount,
           priority: 100,
         });
       }

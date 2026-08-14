@@ -84,7 +84,7 @@ export function computeDashboard(
 
   const activeClientIds = new Set(active.map((c) => c.deal.clientId));
 
-  const route = buildRoute(deals);
+  const route = buildRoute(deals, paidPayments);
 
   const newRequests = deals
     .filter((d) => d.stage === "new")
@@ -237,7 +237,7 @@ export function computeCalendar(
   });
 
   // Повестка «Сегодня»: просрочки → платежи дня → дедлайны
-  const route = buildRoute(deals);
+  const route = buildRoute(deals, paidPayments);
   const agenda: AgendaItem[] = [];
 
   for (const r of route.filter((r) => r.kind === "overdue")) {
@@ -381,7 +381,7 @@ export function computeEmployees(
   deals: Deal[],
   paidPayments: Record<string, number>
 ): EmployeeStats[] {
-  const route = buildRoute(deals);
+  const route = buildRoute(deals, paidPayments);
 
   // Связываем по managerId, а не по инициалам: у двух сотрудников они
   // легко совпадут («Алексей Соколов» и «Анна Смирнова» оба дают «АС»)
