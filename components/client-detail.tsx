@@ -105,7 +105,9 @@ export default function ClientDetail({ id }: { id: string }) {
     statusTone: deal.statusTone,
     paid,
     remaining: deal.amount - paidSum,
-    monthly: Math.round(deal.amount / deal.months),
+    // next?.amount, а не amount/months «в лоб» — после реструктуризации
+    // размер взноса отличается от простого среднего
+    monthly: next?.amount ?? Math.round(deal.amount / deal.months),
     nextDate: next?.date ?? null,
     openedLabel: `с ${longDate(new Date(deal.openedAt))}`,
     nextStep: deal.nextStep,

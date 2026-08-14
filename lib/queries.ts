@@ -858,12 +858,17 @@ export async function closeDealEarly(
       markup_pct: number;
       down_payment: number | null;
       paid_count: number;
+      opened_at: string;
+      original_months: number | null;
+      restructured_months: number | null;
+      restructured_from: string | null;
       stage: DealStage;
       product: string;
       client_name: string;
     }>(
-      `select d.amount, d.months, d.markup_pct, d.down_payment, d.paid_count, d.stage, d.product,
-              c.name as client_name
+      `select d.amount, d.months, d.markup_pct, d.down_payment, d.paid_count, d.opened_at,
+              d.original_months, d.restructured_months, d.restructured_from,
+              d.stage, d.product, c.name as client_name
        from deals d join clients c on c.id = d.client_id
        where d.id = $1
        for update of d`,
@@ -873,7 +878,23 @@ export async function closeDealEarly(
     if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
     if (deal.stage !== "active") throw new Error("NOT_ACTIVE");
 
-    const paidSum = Math.round((deal.amount / deal.months) * deal.paid_count);
+    // Не amount/months «в лоб» — после реструктуризации взносы неравные,
+    // а последний взнос графика вообще забирает остаток округления
+    const restructure = restructureOf({
+      originalMonths: deal.original_months,
+      restructuredMonths: deal.restructured_months,
+      restructuredFrom: deal.restructured_from,
+    });
+    const schedule = buildSchedule(
+      deal.amount,
+      deal.months,
+      deal.paid_count,
+      deal.opened_at,
+      restructure
+    );
+    const paidSum = schedule
+      .filter((p) => p.status === "paid")
+      .reduce((s, p) => s + p.amount, 0);
     const remaining = deal.amount - paidSum;
 
     if (remaining > 0) {

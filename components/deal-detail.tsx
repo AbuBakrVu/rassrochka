@@ -74,7 +74,11 @@ export default function DealDetail({ id }: { id: string }) {
   const client = clientById(clients, deal.clientId);
   const paid = paidCount(deal, paidPayments);
   const schedule = scheduleForDeal(deal, paid);
-  const monthly = Math.round(deal.amount / deal.months);
+  // Не amount/months «в лоб» — после реструктуризации размер взноса
+  // отличается от простого среднего
+  const monthly =
+    schedule.find((p) => p.status !== "paid")?.amount ??
+    Math.round(deal.amount / deal.months);
   const paidSum = schedule
     .filter((p) => p.status === "paid")
     .reduce((s, p) => s + p.amount, 0);
