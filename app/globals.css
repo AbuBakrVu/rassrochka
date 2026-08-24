@@ -16,6 +16,7 @@
   --color-good: #1e8e5a;
   --color-good-soft: #e7f6ee;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-montserrat), var(--font-sans);
   --radius-card: 16px;
   --radius-field: 10px;
   --shadow-card: 0 1px 2px rgba(23, 38, 64, 0.04), 0 4px 16px rgba(23, 38, 64, 0.04);
@@ -31,6 +32,14 @@ body {
 
 ::placeholder {
   color: var(--color-mute);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-heading);
+  letter-spacing: -0.01em;
 }
 
 * {
