@@ -3,23 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { Zap, Check } from "lucide-react";
-import { PT_Serif, JetBrains_Mono } from "next/font/google";
-
-// Витрина входа — единственное место в интерфейсе с этой парой шрифтов,
-// сознательно: сцена «тетрадь долгов» (см. LedgerCard ниже), пилот перед
-// возможным переносом на остальные экраны.
-const ptSerif = PT_Serif({
-  subsets: ["latin", "cyrillic"],
-  weight: ["400", "700"],
-  style: ["normal", "italic"],
-  variable: "--font-pt-serif",
-});
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["500", "600"],
-  variable: "--font-jetbrains-mono",
-});
+import { Zap } from "lucide-react";
 
 const field =
   "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
@@ -121,135 +105,70 @@ function LoginForm() {
   );
 }
 
-// Сегодняшняя дата для датлайна на странице тетради — тот же формат,
-// что и в остальном интерфейсе (lib/schedule.ts longDate), но без
-// импорта: витрина не должна зависеть от рабочих данных компании.
-const monthNames = [
-  "января", "февраля", "марта", "апреля", "мая", "июня",
-  "июля", "августа", "сентября", "октября", "ноября", "декабря",
-];
-function todayLabel() {
-  const d = new Date();
-  return `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()} г.`;
-}
-
-interface LedgerRow {
-  name: string;
-  amount: string;
-  state: "paid" | "overdue" | "due";
-}
-
-const LEDGER_ROWS: LedgerRow[] = [
-  { name: "Абрамов Никита", amount: "12 000 ₽", state: "paid" },
-  { name: "Котова Марина", amount: "96 000 ₽", state: "overdue" },
-  { name: "Юсупов Дилшод", amount: "5 000 ₽", state: "due" },
-];
-
-/** Разворот тетради долгов — сцена входа. Настоящий текст, не иконки: это
- *  единственное место в продукте, где стоит один раз показать характер. */
-function LedgerCard() {
+/** Декоративная витрина справа — карточка сделки и график поступлений, в тон общей палитре сайта. */
+function BrandIllustration() {
   return (
-    <div
-      className="relative w-[300px] -rotate-2 rounded-[6px] bg-[var(--color-ledger-paper)] px-6 pt-5 pb-7 text-left shadow-[0_24px_50px_rgba(0,0,0,0.35)]"
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(to bottom, transparent, transparent 27px, var(--color-ledger-paper-line) 28px)",
-      }}
-    >
-      {/* Красная поля-линия, как в разлинованных бухгалтерских тетрадях */}
-      <span className="absolute top-0 bottom-0 left-9 w-px bg-[var(--color-ledger-stamp)]/35" aria-hidden />
+    <svg viewBox="0 0 360 300" className="w-full max-w-[320px]" aria-hidden>
+      <defs>
+        <linearGradient id="lg-card" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="100%" stopColor="#eaf2fd" />
+        </linearGradient>
+      </defs>
 
-      <p
-        className={`${jetbrainsMono.variable} pl-6 text-[11px] tracking-[0.08em] text-ink/50 uppercase`}
-        style={{ fontFamily: "var(--font-jetbrains-mono)" }}
-      >
-        {todayLabel()}
-      </p>
-      <div className="mt-1 mb-4 h-px pl-6">
-        <div className="h-px bg-ink/15" />
-      </div>
+      <circle cx="70" cy="240" r="90" fill="#ffffff" opacity="0.08" />
+      <circle cx="310" cy="40" r="60" fill="#ffffff" opacity="0.08" />
 
-      <ul className="flex flex-col gap-3.5 pl-6">
-        {LEDGER_ROWS.map((row, i) => (
-          <li
-            key={row.name}
-            className={`${ptSerif.variable} flex items-baseline gap-2 opacity-0`}
-            style={{
-              animation: "ledger-row-in 0.5s ease-out forwards",
-              animationDelay: `${300 + i * 180}ms`,
-            }}
-          >
-            {row.state === "paid" ? (
-              <Check size={13} className="mb-0.5 shrink-0 text-good" aria-hidden />
-            ) : (
-              <span
-                className={`mb-0.5 h-[13px] w-[13px] shrink-0 rounded-full border ${
-                  row.state === "overdue" ? "border-[var(--color-ledger-stamp)]" : "border-ink/30"
-                }`}
-                aria-hidden
-              />
-            )}
-            <span
-              className="truncate text-[15px] text-ink italic"
-              style={{ fontFamily: "var(--font-pt-serif)" }}
-            >
-              {row.name}
-            </span>
-            <span className="flex-1 border-b border-dotted border-ink/25 translate-y-[-3px]" aria-hidden />
-            <span
-              className={`shrink-0 text-[13px] tabular-nums ${
-                row.state === "overdue" ? "text-[var(--color-ledger-stamp)]" : "text-ink/80"
-              }`}
-              style={{ fontFamily: "var(--font-jetbrains-mono)" }}
-            >
-              {row.amount}
-            </span>
-          </li>
-        ))}
-      </ul>
+      {/* Карточка сделки */}
+      <g transform="translate(30,40)">
+        <rect width="230" height="150" rx="16" fill="url(#lg-card)" />
+        <rect x="20" y="22" width="90" height="10" rx="5" fill="#175ba9" opacity="0.35" />
+        <rect x="20" y="40" width="60" height="8" rx="4" fill="#77869c" opacity="0.35" />
+        <rect x="20" y="70" width="190" height="1" fill="#e3ebf5" />
 
-      {/* Штамп — единственный по-настоящему декоративный элемент во всём
-          интерфейсе, и только здесь: печать на странице, а не иконка. */}
-      <div
-        className="absolute -right-4 -bottom-4 flex h-[74px] w-[74px] rotate-[-8deg] items-center justify-center rounded-full border-2 border-double border-[var(--color-ledger-stamp)] bg-[var(--color-ledger-paper)] text-center opacity-0 mix-blend-multiply"
-        style={{
-          animation: "ledger-stamp-in 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards",
-          animationDelay: "850ms",
-        }}
-        aria-hidden
-      >
-        <span className="leading-tight text-[var(--color-ledger-stamp)]">
-          <span
-            className="block text-[10px] font-bold tracking-[0.14em]"
-            style={{ fontFamily: "var(--font-jetbrains-mono)" }}
-          >
-            NASIYA
-          </span>
-          <span
-            className="mt-0.5 block text-[9px] tracking-[0.05em]"
-            style={{ fontFamily: "var(--font-pt-serif)" }}
-          >
-            рассрочка
-          </span>
-        </span>
-      </div>
-    </div>
+        {/* Столбики графика поступлений */}
+        <g fill="#2f80ed">
+          <rect x="20" y="118" width="14" height="16" rx="3" opacity="0.55" />
+          <rect x="42" y="104" width="14" height="30" rx="3" opacity="0.7" />
+          <rect x="64" y="94" width="14" height="40" rx="3" opacity="0.85" />
+          <rect x="86" y="112" width="14" height="22" rx="3" opacity="0.6" />
+          <rect x="108" y="86" width="14" height="48" rx="3" />
+        </g>
+        <circle cx="175" cy="108" r="26" fill="none" stroke="#2f80ed" strokeWidth="8" opacity="0.25" />
+        <circle
+          cx="175"
+          cy="108"
+          r="26"
+          fill="none"
+          stroke="#2f80ed"
+          strokeWidth="8"
+          strokeDasharray="120 163"
+          strokeLinecap="round"
+        />
+      </g>
+
+      {/* Плавающая карточка платежа */}
+      <g transform="translate(190,190)">
+        <rect width="140" height="60" rx="14" fill="#ffffff" />
+        <circle cx="24" cy="30" r="14" fill="#e7f6ee" />
+        <path d="M18 30l4 4 8-8" stroke="#1e8e5a" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <rect x="48" y="18" width="70" height="9" rx="4.5" fill="#172640" opacity="0.55" />
+        <rect x="48" y="34" width="50" height="8" rx="4" fill="#77869c" opacity="0.4" />
+      </g>
+    </svg>
   );
 }
 
 function BrandPanel() {
   return (
-    <div className="relative hidden shrink-0 items-center justify-center overflow-hidden bg-[var(--color-ledger-panel)] px-10 lg:flex lg:w-[44%]">
+    <div className="relative hidden shrink-0 items-center justify-center overflow-hidden bg-brand px-10 lg:flex lg:w-[42%]">
       <div className="relative z-10 flex flex-col items-center text-center">
-        <LedgerCard />
-        <h2
-          className={`${ptSerif.variable} mt-10 max-w-[19rem] text-[28px] leading-[1.2] text-white`}
-          style={{ fontFamily: "var(--font-pt-serif)" }}
-        >
-          Тетрадь долгов, которая сама считает
+        <BrandIllustration />
+        <h2 className="mt-8 text-xl font-semibold text-white">
+          Рассрочки под контролем
         </h2>
-        <p className="mt-3 max-w-xs text-sm text-white/55">
-          Кто должен, сколько и когда — видно сразу, без пересчёта на бумаге.
+        <p className="mt-2 max-w-xs text-sm text-white/80">
+          Сделки, платежи и клиенты — в одном окне, без таблиц и путаницы.
         </p>
       </div>
     </div>
