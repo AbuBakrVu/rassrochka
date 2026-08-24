@@ -15,6 +15,16 @@
   --color-warn-soft: #fdf3e2;
   --color-good: #1e8e5a;
   --color-good-soft: #e7f6ee;
+
+  /* Витрина «тетрадь долгов» — пока только вход (app/login), пилот перед
+     возможным раскатыванием на остальной интерфейс. Не трогать основную
+     рабочую палитру выше: она уже отвечает за статусы и легко читается
+     в плотных таблицах — эти токены живут отдельно и только для сцены. */
+  --color-ledger-panel: #14213a;
+  --color-ledger-paper: #f1e9d8;
+  --color-ledger-paper-line: rgba(23, 38, 64, 0.14);
+  --color-ledger-stamp: #b5482e;
+
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --radius-card: 16px;
   --radius-field: 10px;
@@ -55,5 +65,35 @@ body {
 @media print {
   body {
     background: #ffffff;
+  }
+}
+
+/* Сцена «тетрадь долгов» на входе (app/login) — строки вписываются по
+   очереди, штамп ложится последним. Глобальное правило
+   prefers-reduced-motion выше уже гасит анимации почти до нуля, поэтому
+   отдельного медиа-запроса здесь не нужно. */
+@keyframes ledger-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ledger-stamp-in {
+  0% {
+    opacity: 0;
+    transform: rotate(-20deg) scale(0.7);
+  }
+  65% {
+    opacity: 1;
+    transform: rotate(-7deg) scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(-8deg) scale(1);
   }
 }
