@@ -432,7 +432,7 @@ export default function DealDetail({ id }: { id: string }) {
                         {p.status !== "paid" && p.n === paid + 1 && (
                           <button
                             onClick={() => acceptPayment(deal.id)}
-                            className="rounded-[10px] bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep hover:bg-brand hover:text-white"
+                            className="rounded-[10px] bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep hover:bg-brand hover:text-on-brand"
                           >
                             Отметить оплату
                           </button>
@@ -461,7 +461,7 @@ export default function DealDetail({ id }: { id: string }) {
           <Card className="p-5">
             <h2 className="mb-3 font-semibold">Клиент</h2>
             <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-semibold text-on-brand">
                 {deal.client
                   .split(" ")
                   .map((w) => w[0])
@@ -485,7 +485,7 @@ export default function DealDetail({ id }: { id: string }) {
                 <button
                   onClick={remind}
                   disabled={templates.length === 0 || !client}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
                 >
                   <MessageCircle size={16} aria-hidden />
                   Напомнить об оплате
@@ -786,7 +786,7 @@ function EditDealModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <form
         onSubmit={submit}
         role="dialog"
@@ -874,7 +874,7 @@ function EditDealModal({
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Сохранить
           </button>

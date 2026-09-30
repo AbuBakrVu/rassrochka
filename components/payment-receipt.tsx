@@ -112,7 +112,7 @@ export default function PaymentReceipt({ token, id }: { token: string; id: strin
         <article className="rounded-card border border-line bg-surface p-6 shadow-card print:border-black/20 print:shadow-none">
           <header className="flex items-start justify-between gap-3 border-b border-line pb-4">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-white print:hidden">
+              <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-on-brand print:hidden">
                 <Zap size={17} aria-hidden />
               </span>
               <div>

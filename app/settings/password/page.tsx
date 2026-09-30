@@ -102,7 +102,7 @@ export default function PasswordPage() {
             <button
               type="submit"
               disabled={!ready || busy || done}
-              className="mt-1 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+              className="mt-1 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
             >
               {done ? "Пароль изменён" : busy ? "Сохраняем…" : "Сменить пароль"}
             </button>

@@ -194,7 +194,7 @@ function DayModal({ cell, onClose }: { cell: CalendarCell; onClose: () => void }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"

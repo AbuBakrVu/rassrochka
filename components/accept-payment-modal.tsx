@@ -199,7 +199,7 @@ export default function AcceptPaymentModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
       <button
         aria-label="Закрыть окно"
-        className="absolute inset-0 bg-ink/30"
+        className="absolute inset-0 bg-scrim"
         onClick={onClose}
       />
       <div
@@ -318,7 +318,7 @@ export default function AcceptPaymentModal({
           <form onSubmit={submit} className="flex min-h-0 flex-col">
             <div className="flex flex-col gap-5 overflow-y-auto px-6 py-5">
               <div className="flex items-center gap-3 rounded-[12px] bg-canvas px-4 py-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-semibold text-on-brand">
                   {initials(selected!.deal.client)}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -450,7 +450,7 @@ export default function AcceptPaymentModal({
                   type="button"
                   onClick={sendReceipt}
                   disabled={newPayments.length === 0 || !payer}
-                  className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+                  className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
                 >
                   <ReceiptText size={15} aria-hidden />
                   Отправить квитанцию
@@ -459,7 +459,7 @@ export default function AcceptPaymentModal({
                 <button
                   type="submit"
                   disabled={!ready}
-                  className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+                  className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
                 >
                   <Check size={15} aria-hidden />
                   Принять платёж

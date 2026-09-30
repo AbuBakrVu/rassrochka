@@ -83,7 +83,7 @@ export default function RestructureModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
       <button
         aria-label="Закрыть окно"
-        className="absolute inset-0 bg-ink/30"
+        className="absolute inset-0 bg-scrim"
         onClick={onClose}
       />
       <form
@@ -142,7 +142,7 @@ export default function RestructureModal({
                   aria-pressed={months === t}
                   className={`rounded-full px-4 py-2 text-sm transition-colors ${
                     months === t
-                      ? "bg-brand font-medium text-white"
+                      ? "bg-brand font-medium text-on-brand"
                       : "border border-line bg-canvas text-mute hover:text-ink"
                   }`}
                 >
@@ -275,7 +275,7 @@ export default function RestructureModal({
           <button
             type="submit"
             disabled={!ready || saving || saved}
-            className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             <Check size={15} aria-hidden />
             {saved ? "Сохранено" : "Сохранить новый график"}

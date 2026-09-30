@@ -200,7 +200,7 @@ export default function CoinvestorDetail({ id }: { id: string }) {
       <Card className="p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand text-lg font-semibold text-white">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand text-lg font-semibold text-on-brand">
               {investor.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
             </span>
             <div className="min-w-0">
@@ -226,7 +226,7 @@ export default function CoinvestorDetail({ id }: { id: string }) {
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
                 disabled={busy}
-                className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:opacity-60"
+                className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:opacity-60"
               >
                 Действия
                 <ChevronDown size={15} className={`transition-transform ${menuOpen ? "rotate-180" : ""}`} aria-hidden />
@@ -329,7 +329,7 @@ export default function CoinvestorDetail({ id }: { id: string }) {
             aria-pressed={filter === key}
             className={`rounded-[10px] px-3.5 py-2 text-sm transition-colors ${
               filter === key
-                ? "bg-brand font-medium text-white"
+                ? "bg-brand font-medium text-on-brand"
                 : "border border-line bg-surface text-mute hover:text-ink"
             }`}
           >
@@ -570,7 +570,7 @@ function AmountModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <form
         onSubmit={submit}
         role="dialog"
@@ -613,7 +613,7 @@ function AmountModal({
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             {submitLabel}
           </button>
@@ -660,7 +660,7 @@ function EditModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <form
         onSubmit={submit}
         role="dialog"
@@ -702,7 +702,7 @@ function EditModal({
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Сохранить
           </button>

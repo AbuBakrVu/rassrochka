@@ -23,6 +23,7 @@ import {
   ScrollText,
 } from "lucide-react";
 import CommandPalette from "@/components/command-palette";
+import ThemeToggle from "@/components/theme-toggle";
 import { DataProvider, useData } from "@/lib/store";
 
 export const nav: {
@@ -124,6 +125,7 @@ function UserFooter() {
         <p className="truncate text-sm font-medium">{user.name}</p>
         <p className="truncate text-xs text-mute">{user.email}</p>
       </div>
+      <ThemeToggle />
       <button
         onClick={signOut}
         disabled={busy}
@@ -166,7 +168,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         {/* Десктопный сайдбар */}
         <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line bg-surface lg:flex">
           <div className="flex items-center gap-2.5 px-6 py-5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-white">
+            <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-on-brand">
               <Zap size={18} aria-hidden />
             </span>
             <span className="text-lg font-semibold tracking-tight">Nasiya</span>
@@ -180,13 +182,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <div className="fixed inset-0 z-40 lg:hidden">
             <button
               aria-label="Закрыть меню"
-              className="absolute inset-0 bg-ink/30"
+              className="absolute inset-0 bg-scrim"
               onClick={() => setOpen(false)}
             />
             <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-surface shadow-pop">
               <div className="flex items-center justify-between px-5 py-4">
                 <div className="flex items-center gap-2.5">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-brand text-white">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-brand text-on-brand">
                     <Zap size={16} aria-hidden />
                   </span>
                   <span className="font-semibold">Nasiya</span>

@@ -272,7 +272,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex items-stretch justify-center sm:items-center sm:p-4 lg:p-6">
       <button
         aria-label="Закрыть окно"
-        className="absolute inset-0 bg-ink/35"
+        className="absolute inset-0 bg-scrim"
         onClick={onClose}
       />
       <div
@@ -329,7 +329,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                         done
                           ? "bg-brand-soft text-brand-deep"
                           : current
-                            ? "bg-brand text-white"
+                            ? "bg-brand text-on-brand"
                             : "bg-line text-mute"
                       }`}
                     >
@@ -594,7 +594,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                           aria-pressed={months === t}
                           className={`rounded-full px-4 py-2 text-sm transition-colors ${
                             months === t
-                              ? "bg-brand font-medium text-white"
+                              ? "bg-brand font-medium text-on-brand"
                               : "border border-line bg-canvas text-mute hover:text-ink"
                           }`}
                         >
@@ -669,7 +669,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                           <span
                             className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                               manager === e.id
-                                ? "bg-brand text-white"
+                                ? "bg-brand text-on-brand"
                                 : "bg-surface text-mute"
                             }`}
                           >
@@ -696,7 +696,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                     <Label required>Клиент</Label>
                     {client ? (
                       <div className="flex items-center gap-3 rounded-[12px] border border-brand bg-brand-soft px-4 py-3">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-semibold text-on-brand">
                           {client.name
                             .split(" ")
                             .map((w) => w[0])
@@ -964,14 +964,14 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
               </div>
             </dl>
 
-            <div className="mt-4 flex items-center justify-between rounded-[12px] bg-brand px-4 py-3.5 text-white lg:block lg:py-4 lg:text-center">
-              <p className="text-xs tracking-wide text-white/80 uppercase">
+            <div className="mt-4 flex items-center justify-between rounded-[12px] bg-brand px-4 py-3.5 text-on-brand lg:block lg:py-4 lg:text-center">
+              <p className="text-xs tracking-wide text-on-brand/80 uppercase">
                 Ежемесячный платёж
               </p>
               <p className="text-xl font-semibold lg:mt-1 lg:text-[28px]">
                 {calc.monthly ? `≈ ${money(calc.monthly)}` : "—"}
               </p>
-              <p className="hidden text-sm text-white/80 lg:block">
+              <p className="hidden text-sm text-on-brand/80 lg:block">
                 {months} месяцев · равные платежи
               </p>
             </div>
@@ -1053,7 +1053,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
             <button
               onClick={() => setStep((s) => s + 1)}
               disabled={!stepReady[step]}
-              className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+              className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
             >
               Далее <ArrowRight size={15} aria-hidden />
             </button>
@@ -1061,7 +1061,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
             <button
               onClick={create}
               disabled={created || saving}
-              className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:bg-line disabled:text-mute"
+              className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:bg-line disabled:text-mute"
             >
               <Check size={15} aria-hidden />
               {created ? "Сделка создана" : saving ? "Сохраняем…" : "Создать сделку"}

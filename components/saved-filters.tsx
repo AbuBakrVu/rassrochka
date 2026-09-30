@@ -98,7 +98,7 @@ export default function SavedFilters({
           <button
             type="submit"
             disabled={!name.trim() || busy}
-            className="rounded-full bg-brand px-3 py-1 text-sm font-medium text-white disabled:bg-line disabled:text-mute"
+            className="rounded-full bg-brand px-3 py-1 text-sm font-medium text-on-brand disabled:bg-line disabled:text-mute"
           >
             Сохранить
           </button>

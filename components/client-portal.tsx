@@ -75,7 +75,7 @@ function Header({ subtitle, id }: { subtitle: string; id?: string }) {
   return (
     <header className="flex items-center justify-between">
       <div className="flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-white">
+        <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-on-brand">
           <Zap size={17} aria-hidden />
         </span>
         <div>
@@ -216,7 +216,7 @@ function ContactSection({
           </a>
           <a
             href={`https://wa.me/${managerPhone.replace(/\D/g, "")}`}
-            className="flex items-center justify-center gap-2 rounded-[10px] bg-brand px-3 py-2.5 text-sm font-medium text-white hover:bg-brand-deep"
+            className="flex items-center justify-center gap-2 rounded-[10px] bg-brand px-3 py-2.5 text-sm font-medium text-on-brand hover:bg-brand-deep"
           >
             <MessageCircle size={15} aria-hidden /> Написать
           </a>
@@ -266,7 +266,7 @@ function DealSchedule({
                 <span
                   className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                     p.status === "paid"
-                      ? "bg-brand text-white"
+                      ? "bg-brand text-on-brand"
                       : isNext
                         ? "bg-brand-soft text-brand-deep"
                         : "bg-canvas text-mute"

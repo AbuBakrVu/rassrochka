@@ -119,7 +119,7 @@ export default function RoutePage() {
                 onClick={() => setTab(t.key)}
                 className={`flex items-center gap-2 rounded-[10px] px-3.5 py-2 text-sm transition-colors ${
                   tab === t.key
-                    ? "bg-brand font-medium text-white"
+                    ? "bg-brand font-medium text-on-brand"
                     : "border border-line bg-surface text-mute hover:text-ink"
                 }`}
               >
@@ -127,7 +127,7 @@ export default function RoutePage() {
                 <span
                   className={`rounded-full px-1.5 py-0.5 text-xs ${
                     tab === t.key
-                      ? "bg-white/20 text-white"
+                      ? "bg-on-brand/20 text-on-brand"
                       : "bg-canvas text-mute"
                   }`}
                 >
@@ -175,7 +175,7 @@ export default function RoutePage() {
                       }
                       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
                         isDone
-                          ? "border-good bg-good text-white"
+                          ? "border-good bg-good text-on-brand"
                           : "border-line text-transparent hover:border-brand"
                       }`}
                     >

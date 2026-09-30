@@ -111,7 +111,7 @@ export default function CoinvestorsPage() {
             aria-pressed={onlyActive}
             className={`rounded-[10px] px-3.5 py-2 text-sm transition-colors ${
               onlyActive
-                ? "bg-brand font-medium text-white"
+                ? "bg-brand font-medium text-on-brand"
                 : "border border-line bg-surface text-mute hover:text-ink"
             }`}
           >
@@ -120,7 +120,7 @@ export default function CoinvestorsPage() {
           {isAdmin && (
             <button
               onClick={() => setAddOpen(true)}
-              className="ml-auto rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+              className="ml-auto rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
             >
               + Добавить соинвестора
             </button>
@@ -295,7 +295,7 @@ function AddModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <form
         onSubmit={submit}
         role="dialog"
@@ -367,7 +367,7 @@ function AddModal({
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Добавить
           </button>

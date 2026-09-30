@@ -85,7 +85,7 @@ export default function CommandPalette() {
     <div className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-[10vh] sm:pt-[14vh]">
       <button
         aria-label="Закрыть поиск"
-        className="absolute inset-0 bg-ink/30"
+        className="absolute inset-0 bg-scrim"
         onClick={() => setOpen(false)}
       />
       <div

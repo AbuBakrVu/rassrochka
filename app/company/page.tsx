@@ -24,7 +24,7 @@ export default function CompanyPage() {
         className="w-full max-w-sm rounded-card border border-line bg-surface p-6 shadow-card sm:p-8"
       >
         <div className="mb-6 flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-white">
+          <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-on-brand">
             <Zap size={18} aria-hidden />
           </span>
           <div>
@@ -50,7 +50,7 @@ export default function CompanyPage() {
         <button
           type="submit"
           disabled={!clean}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
         >
           Перейти <ArrowRight size={15} aria-hidden />
         </button>

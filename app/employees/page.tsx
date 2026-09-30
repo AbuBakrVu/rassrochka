@@ -66,7 +66,7 @@ export default function EmployeesPage() {
           <div className="mb-4 flex justify-end">
             <button
               onClick={() => setInviteOpen(true)}
-              className="flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+              className="flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
             >
               <UserPlus2 size={16} aria-hidden /> Пригласить сотрудника
             </button>
@@ -79,7 +79,7 @@ export default function EmployeesPage() {
                 <span
                   className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
                     s.employee.active
-                      ? "bg-brand text-white"
+                      ? "bg-brand text-on-brand"
                       : "bg-canvas text-mute"
                   }`}
                 >
@@ -278,7 +278,7 @@ function InviteModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <form
         onSubmit={submit}
         role="dialog"
@@ -346,7 +346,7 @@ function InviteModal({
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Создать
           </button>
@@ -388,7 +388,7 @@ function EditEmployeeModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <form
         onSubmit={submit}
         role="dialog"
@@ -446,7 +446,7 @@ function EditEmployeeModal({
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Сохранить
           </button>
@@ -465,7 +465,7 @@ function PasswordIssued({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <div role="dialog" aria-modal="true" className="relative w-full max-w-sm rounded-card bg-surface p-6 text-center shadow-pop">
         <p className="font-semibold tracking-tight">{data.name} добавлен</p>
         <p className="mt-1 text-sm text-mute">Временный пароль показывается один раз</p>
@@ -477,7 +477,7 @@ function PasswordIssued({
         </p>
         <button
           onClick={onClose}
-          className="mt-4 w-full rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-deep"
+          className="mt-4 w-full rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand hover:bg-brand-deep"
         >
           Записал
         </button>

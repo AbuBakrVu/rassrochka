@@ -76,7 +76,7 @@ function ReminderQueue() {
             <button
               onClick={() => send(item)}
               disabled={sendingKey === item.dealId + item.stage}
-              className="flex shrink-0 items-center gap-1.5 rounded-[10px] bg-brand px-3.5 py-2 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:opacity-50"
+              className="flex shrink-0 items-center gap-1.5 rounded-[10px] bg-brand px-3.5 py-2 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:opacity-50"
             >
               <Send size={14} aria-hidden />
               Отправить
@@ -148,7 +148,7 @@ export default function MailingsPage() {
           <div className="mb-4 flex justify-end">
             <button
               onClick={() => setModal("new")}
-              className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+              className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
             >
               + Создать шаблон
             </button>
@@ -270,7 +270,7 @@ function TemplateModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <form
         onSubmit={submit}
         role="dialog"
@@ -329,7 +329,7 @@ function TemplateModal({
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Сохранить
           </button>

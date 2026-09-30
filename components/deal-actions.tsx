@@ -69,7 +69,7 @@ export default function DealActions({
         type="button"
         onClick={onPrimary}
         disabled={!onPrimary}
-        className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:opacity-60"
       >
         {primaryLabel} <ArrowRight size={15} aria-hidden />
       </button>

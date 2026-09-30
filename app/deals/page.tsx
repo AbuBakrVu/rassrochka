@@ -169,7 +169,7 @@ export default function DealsPage() {
               aria-pressed={selecting}
               className={`flex items-center gap-1.5 rounded-[10px] px-3.5 py-2 text-sm transition-colors ${
                 selecting
-                  ? "bg-brand font-medium text-white"
+                  ? "bg-brand font-medium text-on-brand"
                   : "border border-line bg-surface text-mute hover:text-ink"
               }`}
             >
@@ -241,7 +241,7 @@ export default function DealsPage() {
                     drop(stage.key, e);
                   }}
                   className={`w-72 shrink-0 rounded-card p-3 transition-colors ${
-                    isDragOver ? "bg-brand-soft ring-2 ring-brand" : "bg-[#eef3fa]"
+                    isDragOver ? "bg-brand-soft ring-2 ring-brand" : "bg-lane"
                   }`}
                   aria-label={`Этап «${stage.title}»`}
                 >

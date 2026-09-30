@@ -154,7 +154,7 @@ export default function ClientDetail({ id }: { id: string }) {
       <Card className="p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand text-lg font-semibold text-white">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand text-lg font-semibold text-on-brand">
               {initials(client.name)}
             </span>
             <div className="min-w-0">
@@ -216,7 +216,7 @@ export default function ClientDetail({ id }: { id: string }) {
                   "noopener,noreferrer"
                 )
               }
-              className="flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+              className="flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
             >
               <MessageCircle size={16} aria-hidden />
               Написать клиенту
@@ -273,7 +273,7 @@ export default function ClientDetail({ id }: { id: string }) {
           {client.nextDealId && (
             <button
               onClick={() => router.push(`/deals/${client.nextDealId}`)}
-              className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+              className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
             >
               Выполнить
             </button>
@@ -493,7 +493,7 @@ function BlacklistModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <form
         onSubmit={submit}
         role="dialog"

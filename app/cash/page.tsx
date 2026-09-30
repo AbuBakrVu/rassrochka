@@ -120,7 +120,7 @@ function AdjustmentModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
       <button
         aria-label="Закрыть окно"
-        className="absolute inset-0 bg-ink/30"
+        className="absolute inset-0 bg-scrim"
         onClick={onClose}
       />
       <form
@@ -229,7 +229,7 @@ function AdjustmentModal({ onClose }: { onClose: () => void }) {
           <button
             type="submit"
             disabled={!ready}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Провести
           </button>
@@ -441,7 +441,7 @@ export default function CashPage() {
                 aria-pressed={filter === f.key}
                 className={`rounded-[10px] px-3.5 py-2 text-sm transition-colors ${
                   filter === f.key
-                    ? "bg-brand font-medium text-white"
+                    ? "bg-brand font-medium text-on-brand"
                     : "border border-line bg-surface text-mute hover:text-ink"
                 }`}
               >
@@ -461,7 +461,7 @@ export default function CashPage() {
             </button>
             <button
               onClick={() => setModal(true)}
-              className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+              className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
             >
               + Движение по кассе
             </button>

@@ -261,7 +261,7 @@ export default function Home() {
                     </div>
                     <Link
                       href={`/deals/${r.dealId}`}
-                      className="rounded-[10px] bg-brand-soft px-3.5 py-2 text-sm font-medium text-brand-deep hover:bg-brand hover:text-white"
+                      className="rounded-[10px] bg-brand-soft px-3.5 py-2 text-sm font-medium text-brand-deep hover:bg-brand hover:text-on-brand"
                     >
                       Проверить
                     </Link>

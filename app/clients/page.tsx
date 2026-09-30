@@ -131,7 +131,7 @@ export default function ClientsPage() {
                 aria-pressed={filter === f.key}
                 className={`rounded-[10px] px-3.5 py-2 text-sm transition-colors ${
                   filter === f.key
-                    ? "bg-brand font-medium text-white"
+                    ? "bg-brand font-medium text-on-brand"
                     : "border border-line bg-surface text-mute hover:text-ink"
                 }`}
               >

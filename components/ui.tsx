@@ -103,7 +103,7 @@ function CtaMenu({ label }: { label: string }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep"
+        className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep"
       >
         {label}
         <ChevronDown
@@ -205,7 +205,7 @@ export function EmptyState({
       {action && (
         <button
           onClick={onAction}
-          className="mt-4 rounded-[10px] bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-deep"
+          className="mt-4 rounded-[10px] bg-brand px-4 py-2 text-sm font-medium text-on-brand hover:bg-brand-deep"
         >
           {action}
         </button>

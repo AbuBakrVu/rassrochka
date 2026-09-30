@@ -1,26 +1,188 @@
 @import "tailwindcss";
 
+/* Тёмная тема — классом .dark на <html> (см. components/theme-toggle.tsx
+   и скрипт в app/layout.tsx, который ставит класс до первой отрисовки). */
+@custom-variant dark (&:is(.dark *));
+
+/* ── Палитра ──────────────────────────────────────────────────────────────
+   Бирюзовая тема (primary — глубокий бирюзовый, accent — зелёный). Имена
+   переменных — как в shadcn/ui; интерфейс CRM пользуется своими токенами
+   (brand, surface, canvas, ink…), они привязаны к этим переменным ниже в
+   @theme, поэтому смена темы не требует правки компонентов. */
+
+:root {
+  --background: oklch(0.9605 0.0046 258.3248);
+  --foreground: oklch(0.2153 0.0187 235.1251);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2153 0.0187 235.1251);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2153 0.0187 235.1251);
+  --primary: oklch(0.4335 0.0754 182.2315);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.9644 0.0208 166.1014);
+  --secondary-foreground: oklch(0.4335 0.0754 182.2315);
+  --muted: oklch(0.9605 0.0046 258.3248);
+  --muted-foreground: oklch(0.5589 0.0255 233.7233);
+  --accent: oklch(0.761 0.2015 149.7403);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.6257 0.2058 29.0773);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.9436 0.0051 228.8204);
+  --input: oklch(0.9436 0.0051 228.8204);
+  --ring: oklch(0.761 0.2015 149.7403);
+  --chart-1: oklch(0.761 0.2015 149.7403);
+  --chart-2: oklch(0.4335 0.0754 182.2315);
+  --chart-3: oklch(0.5762 0.0995 182.3964);
+  --chart-4: oklch(0.7356 0.137 232.8053);
+  --chart-5: oklch(0.6509 0.1283 170.4258);
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.2153 0.0187 235.1251);
+  --sidebar-primary: oklch(0.4335 0.0754 182.2315);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.9644 0.0208 166.1014);
+  --sidebar-accent-foreground: oklch(0.4335 0.0754 182.2315);
+  --sidebar-border: oklch(0.9436 0.0051 228.8204);
+  --sidebar-ring: oklch(0.761 0.2015 149.7403);
+  --radius: 1rem;
+  --shadow-sm: 0px 2px 10px 0px hsl(0 0% 0% / 0.1), 0px 1px 2px -1px hsl(0 0% 0% / 0.1);
+  --shadow-lg: 0px 2px 10px 0px hsl(0 0% 0% / 0.1), 0px 4px 6px -1px hsl(0 0% 0% / 0.1);
+
+  /* Дополнения CRM, которых нет в базовой палитре */
+  --primary-deep: oklch(0.37 0.07 182); /* hover кнопок, текст на мятной подложке */
+  --lane: oklch(0.93 0.008 250); /* фон колонок канбана */
+  --danger-soft: oklch(0.955 0.025 29);
+  --warn: oklch(0.6 0.12 75);
+  --warn-soft: oklch(0.965 0.03 85);
+  --good: oklch(0.55 0.14 152); /* темнее accent — читается как текст на белом */
+  --good-soft: oklch(0.96 0.04 155);
+  --scrim: oklch(0.2153 0.0187 235.1251 / 0.35); /* затемнение под модалками */
+  --scrollbar: oklch(0.85 0.01 235);
+}
+
+/* Тёмные значения — только на экране: печать (договор, квитанция) всегда
+   светлая, на бумаге тёмный фон не нужен. */
+@media screen {
+  .dark {
+    --background: oklch(0.1854 0.0182 238.2143);
+    --foreground: oklch(0.9436 0.0051 228.8204);
+    --card: oklch(0.2848 0.023 235.6578);
+    --card-foreground: oklch(0.9436 0.0051 228.8204);
+    --popover: oklch(0.2848 0.023 235.6578);
+    --popover-foreground: oklch(0.9436 0.0051 228.8204);
+    --primary: oklch(0.6509 0.1283 170.4258);
+    --primary-foreground: oklch(0.2153 0.0187 235.1251);
+    --secondary: oklch(0.2933 0.0423 172.8195);
+    --secondary-foreground: oklch(0.6509 0.1283 170.4258);
+    --muted: oklch(0.2456 0.0195 239.1061);
+    --muted-foreground: oklch(0.6637 0.0236 235.1968);
+    --accent: oklch(0.761 0.2015 149.7403);
+    --accent-foreground: oklch(0.2153 0.0187 235.1251);
+    --destructive: oklch(0.6257 0.2058 29.0773);
+    --destructive-foreground: oklch(0.9436 0.0051 228.8204);
+    --border: oklch(0.3351 0.0253 234.8586);
+    --input: oklch(0.3351 0.0253 234.8586);
+    --ring: oklch(0.6509 0.1283 170.4258);
+    --chart-1: oklch(0.761 0.2015 149.7403);
+    --chart-2: oklch(0.6509 0.1283 170.4258);
+    --chart-3: oklch(0.5762 0.0995 182.3964);
+    --chart-4: oklch(0.7356 0.137 232.8053);
+    --chart-5: oklch(0.4335 0.0754 182.2315);
+    --sidebar: oklch(0.2153 0.0187 235.1251);
+    --sidebar-foreground: oklch(0.9436 0.0051 228.8204);
+    --sidebar-primary: oklch(0.6509 0.1283 170.4258);
+    --sidebar-primary-foreground: oklch(0.2153 0.0187 235.1251);
+    --sidebar-accent: oklch(0.2933 0.0423 172.8195);
+    --sidebar-accent-foreground: oklch(0.6509 0.1283 170.4258);
+    --sidebar-border: oklch(0.3351 0.0253 234.8586);
+    --sidebar-ring: oklch(0.6509 0.1283 170.4258);
+    --shadow-sm: 0px 4px 12px 0px hsl(0 0% 0% / 0.4), 0px 1px 2px -1px hsl(0 0% 0% / 0.4);
+    --shadow-lg: 0px 4px 12px 0px hsl(0 0% 0% / 0.4), 0px 4px 6px -1px hsl(0 0% 0% / 0.4);
+
+    --primary-deep: oklch(0.74 0.12 170); /* в тёмной теме «глубже» = светлее */
+    --lane: oklch(0.225 0.02 237);
+    --danger-soft: oklch(0.3 0.07 29);
+    --warn: oklch(0.8 0.12 80);
+    --warn-soft: oklch(0.31 0.05 75);
+    --good: oklch(0.761 0.2015 149.7403);
+    --good-soft: oklch(0.3 0.06 155);
+    --scrim: oklch(0 0 0 / 0.55);
+    --scrollbar: oklch(0.4 0.02 235);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  /* Токены интерфейса CRM */
+  --color-surface: var(--card);
+  --color-canvas: var(--background);
+  --color-line: var(--border);
+  --color-brand: var(--primary);
+  --color-brand-deep: var(--primary-deep);
+  --color-brand-soft: var(--secondary);
+  --color-on-brand: var(--primary-foreground);
+  --color-ink: var(--foreground);
+  --color-mute: var(--muted-foreground);
+  --color-danger: var(--destructive);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-lane: var(--lane);
+  --color-scrim: var(--scrim);
+  --shadow-card: var(--shadow-sm);
+  --shadow-pop: var(--shadow-lg);
+  --radius-card: var(--radius);
+
+  /* Имена shadcn/ui — для новых компонентов */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
 @theme {
-  --color-surface: #ffffff;
-  --color-canvas: #f7faff;
-  --color-line: #e3ebf5;
-  --color-brand: #2f80ed;
-  --color-brand-deep: #175ba9;
-  --color-brand-soft: #eaf2fd;
-  --color-ink: #172640;
-  --color-mute: #77869c;
-  --color-danger: #e2574c;
-  --color-danger-soft: #fdeeec;
-  --color-warn: #b9822a;
-  --color-warn-soft: #fdf3e2;
-  --color-good: #1e8e5a;
-  --color-good-soft: #e7f6ee;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-montserrat), var(--font-sans);
-  --radius-card: 16px;
   --radius-field: 10px;
-  --shadow-card: 0 1px 2px rgba(23, 38, 64, 0.04), 0 4px 16px rgba(23, 38, 64, 0.04);
-  --shadow-pop: 0 8px 30px rgba(23, 38, 64, 0.1);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
 }
 
 body {
@@ -44,11 +206,11 @@ h4 {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #cdd9ea transparent;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-brand);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 

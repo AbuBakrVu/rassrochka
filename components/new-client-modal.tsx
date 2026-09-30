@@ -157,7 +157,7 @@ export default function NewClientModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
       <button
         aria-label="Закрыть окно"
-        className="absolute inset-0 bg-ink/30"
+        className="absolute inset-0 bg-scrim"
         onClick={onClose}
       />
       <form
@@ -334,7 +334,7 @@ export default function NewClientModal({
           <button
             type="submit"
             disabled={!ready || saved || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             {saved ? "Клиент создан" : saving ? "Сохраняем…" : "Создать клиента"}
           </button>
