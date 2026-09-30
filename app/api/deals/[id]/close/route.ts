@@ -1,5 +1,6 @@
 import { BadRequestError, handle } from "@/app/api/_lib/handler";
 import { closeDealEarly } from "@/lib/queries";
+import { audit } from "@/lib/audit";
 
 export async function POST(
   request: Request,
@@ -9,9 +10,11 @@ export async function POST(
 
   return handle(
     request,
-    async ({ tenant }) => {
+    async ({ tenant, user }) => {
       try {
-        return await closeDealEarly(tenant.dbName, id);
+        const deal = await closeDealEarly(tenant.dbName, id);
+        await audit(tenant.dbName, user.id, "deal.close", id, `Сделка ${id} · ${deal.client} закрыта досрочно`);
+        return deal;
       } catch (err) {
         if (err instanceof Error && err.message === "NOT_ACTIVE") {
           throw new BadRequestError("Закрыть досрочно можно только активную сделку");

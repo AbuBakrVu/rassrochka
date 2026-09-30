@@ -18,6 +18,7 @@ import {
   Check,
   History,
   SearchX,
+  ReceiptText,
 } from "lucide-react";
 import { Card, Badge, EmptyState } from "@/components/ui";
 import DealActions from "@/components/deal-actions";
@@ -29,10 +30,11 @@ import { reminderStageFor, pickReminderTemplate, buildReminderText } from "@/lib
 import { todayIso } from "@/lib/status";
 import CopyLinkButton from "@/components/copy-link";
 import DealPrint, { type PrintMode } from "@/components/deal-print";
+import { paymentTitle, receiptMessage, receiptPath } from "@/lib/receipts";
 
 export default function DealDetail({ id }: { id: string }) {
   const {
-    deals, clients, paidPayments, events, templates, employees, user,
+    deals, clients, paidPayments, events, templates, employees, user, cash,
     acceptPayment, undoLastPayment, sendReminder, updateDeal, restructureDeal,
     closeDeal, reassignDeal, deleteDeal,
   } = useData();
@@ -92,6 +94,41 @@ export default function DealDetail({ id }: { id: string }) {
   const finished = deal.stage === "closed" || deal.stage === "rejected";
   const openedLabel = longDate(new Date(deal.openedAt));
   const nextPayment = schedule.find((p) => p.status !== "paid");
+
+  // Платёж в кассе по каждому оплаченному взносу — для квитанции.
+  // Отменённые платежи (у которых есть запись-отмена) пропускаем.
+  const reversed = new Set(cash.filter((t) => t.reversesId).map((t) => t.reversesId));
+  const receiptByInstallment = new Map<number, { id: string; amount: number }>();
+  for (const t of cash) {
+    if (
+      t.dealId === deal.id &&
+      t.kind === "payment" &&
+      t.amount > 0 &&
+      t.installmentNumber &&
+      !t.reversesId &&
+      !reversed.has(t.id)
+    ) {
+      receiptByInstallment.set(t.installmentNumber, { id: t.id, amount: t.amount });
+    }
+  }
+
+  const sendReceipt = (n: number) => {
+    const payment = receiptByInstallment.get(n);
+    if (!client || !payment) return;
+    const url = `${window.location.origin}${receiptPath(client.portalToken, payment.id)}`;
+    const text = receiptMessage({
+      clientName: client.name,
+      product: deal.product,
+      amount: payment.amount,
+      title: paymentTitle("installment", n, deal.months),
+      url,
+    });
+    window.open(
+      `https://wa.me/${client.phone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
 
   const history = dealEvents(events, deal.id).map((e) => ({
     date: longDate(new Date(e.date)),
@@ -352,7 +389,7 @@ export default function DealDetail({ id }: { id: string }) {
               </button>
             </div>
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[560px] text-sm">
+              <table className="w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-xs text-mute">
                     <th className="px-5 py-2.5 font-medium sm:px-6">№</th>
@@ -382,7 +419,16 @@ export default function DealDetail({ id }: { id: string }) {
                           {p.status === "paid" ? "Оплачен" : "Ожидается"}
                         </Badge>
                       </td>
-                      <td className="px-5 py-3 text-right sm:px-6">
+                      <td className="px-5 py-3 text-right whitespace-nowrap sm:px-6">
+                        {p.status === "paid" && receiptByInstallment.has(p.n) && client && (
+                          <button
+                            onClick={() => sendReceipt(p.n)}
+                            title="Отправить клиенту квитанцию об этом платеже в WhatsApp"
+                            className="mr-2 inline-flex items-center gap-1 rounded-[10px] border border-line px-2.5 py-1.5 text-xs font-medium text-mute hover:border-brand hover:text-brand-deep"
+                          >
+                            <ReceiptText size={13} aria-hidden /> Квитанция
+                          </button>
+                        )}
                         {p.status !== "paid" && p.n === paid + 1 && (
                           <button
                             onClick={() => acceptPayment(deal.id)}

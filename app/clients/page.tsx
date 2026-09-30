@@ -9,6 +9,7 @@ import { dealsOfClient, dealState, paidCount, type Client } from "@/lib/data";
 import { scheduleForDeal, money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
 import { downloadCsv } from "@/lib/csv";
+import SavedFilters from "@/components/saved-filters";
 
 const statusTone: Record<Client["status"], "green" | "red" | "gray" | "blue"> = {
   active: "green",
@@ -27,9 +28,12 @@ const filters = [
 
 export default function ClientsPage() {
   const router = useRouter();
-  const { clients, deals, paidPayments } = useData();
+  const { clients, deals, paidPayments, employees } = useData();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<(typeof filters)[number]["key"]>("all");
+  // Менеджер — у клиента нет своего ответственного, фильтр оставляет тех,
+  // у кого есть хоть одна сделка этого менеджера
+  const [managerId, setManagerId] = useState("");
 
   // Сводка по каждому клиенту считается из его сделок
   const rows = useMemo(
@@ -45,7 +49,12 @@ export default function ClientsPage() {
               .reduce((s, p) => s + p.amount, 0);
             return sum + (d.amount - paidSum);
           }, 0);
-        return { client, deals: list.length, portfolio };
+        return {
+          client,
+          deals: list.length,
+          portfolio,
+          managerIds: new Set(list.map((d) => String(d.managerId ?? ""))),
+        };
       }),
     [clients, deals, paidPayments]
   );
@@ -54,14 +63,21 @@ export default function ClientsPage() {
     const q = query.trim().toLowerCase();
     const digits = query.replace(/\D/g, "");
     return rows.filter(
-      ({ client }) =>
+      ({ client, managerIds }) =>
         (filter === "all" || client.status === filter) &&
+        (managerId === "" || managerIds.has(managerId)) &&
         (q === "" ||
           client.name.toLowerCase().includes(q) ||
           (digits.length >= 3 &&
             client.phone.replace(/\D/g, "").includes(digits)))
     );
-  }, [rows, query, filter]);
+  }, [rows, query, filter, managerId]);
+
+  const applyFilter = (p: Record<string, string>) => {
+    setQuery(p.q ?? "");
+    setFilter((filters.find((f) => f.key === p.status)?.key ?? "all"));
+    setManagerId(p.manager ?? "");
+  };
 
   const exportCsv = () => {
     downloadCsv(
@@ -123,6 +139,19 @@ export default function ClientsPage() {
               </button>
             ))}
           </div>
+          <select
+            value={managerId}
+            onChange={(e) => setManagerId(e.target.value)}
+            aria-label="Фильтр по менеджеру"
+            className="rounded-[10px] border border-line bg-surface px-3 py-2 text-sm text-mute hover:text-ink"
+          >
+            <option value="">Все менеджеры</option>
+            {employees.map((e) => (
+              <option key={e.id} value={String(e.id)}>
+                {e.name}
+              </option>
+            ))}
+          </select>
           <button
             onClick={exportCsv}
             disabled={list.length === 0}
@@ -134,6 +163,15 @@ export default function ClientsPage() {
           </button>
         </div>
 
+        <div className="mb-4 empty:hidden">
+          <SavedFilters
+            page="clients"
+            current={{ q: query.trim(), status: filter === "all" ? "" : filter, manager: managerId }}
+            onApply={applyFilter}
+            canSave={query.trim() !== "" || filter !== "all" || managerId !== ""}
+          />
+        </div>
+
         <Card className="overflow-hidden">
           {list.length === 0 ? (
             <EmptyState
@@ -141,10 +179,7 @@ export default function ClientsPage() {
               title="Никого не нашли"
               text="Проверьте написание имени или сбросьте фильтр по статусу — список обновится сразу."
               action="Сбросить фильтры"
-              onAction={() => {
-                setQuery("");
-                setFilter("all");
-              }}
+              onAction={() => applyFilter({})}
             />
           ) : (
             <div className="overflow-x-auto">

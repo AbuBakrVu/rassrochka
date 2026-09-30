@@ -1,5 +1,8 @@
 import { BadRequestError, handle, optionalStr, str } from "@/app/api/_lib/handler";
 import { setEmployeeActive, updateEmployee } from "@/lib/queries";
+import { audit, employeeName } from "@/lib/audit";
+
+const ROLE_TITLE = { admin: "администратор", manager: "менеджер", accountant: "бухгалтер" } as const;
 
 export async function PATCH(
   request: Request,
@@ -24,6 +27,10 @@ export async function PATCH(
 
         try {
           await setEmployeeActive(tenant.dbName, userId, active);
+          await audit(
+            tenant.dbName, user.id, "employee.update", null,
+            `Сотрудник ${await employeeName(tenant.dbName, userId)} ${active ? "включён" : "отключён"}`
+          );
         } catch (err) {
           if (err instanceof Error && err.message === "LAST_ADMIN") {
             throw new BadRequestError("Это последний администратор компании");
@@ -42,11 +49,14 @@ export async function PATCH(
       }
 
       try {
-        return await updateEmployee(tenant.dbName, userId, {
-          name: str(body, "name", { max: 120 }),
+        const name = str(body, "name", { max: 120 });
+        const updated = await updateEmployee(tenant.dbName, userId, {
+          name,
           phone: optionalStr(body, "phone"),
           role,
         });
+        await audit(tenant.dbName, user.id, "employee.update", null, `Изменены данные сотрудника ${name}, роль ${ROLE_TITLE[role]}`);
+        return updated;
       } catch (err) {
         if (err instanceof Error && err.message === "LAST_ADMIN") {
           throw new BadRequestError("Это последний администратор компании");

@@ -62,6 +62,10 @@ export interface CashTx {
   coinvestorId?: string;
   title: string;
   note?: string;
+  /** Номер взноса графика, который закрыла (или отменяет) эта запись. */
+  installmentNumber?: number;
+  /** Запись-отмена: id отменённого ею платежа. */
+  reversesId?: string;
 }
 
 export interface Coinvestor {
@@ -100,6 +104,15 @@ export interface CoinvestorProfitTx {
   note?: string;
 }
 
+export type SavedFilterPage = "clients" | "cash" | "deals";
+
+export interface SavedFilter {
+  id: string;
+  page: SavedFilterPage;
+  name: string;
+  params: Record<string, string>;
+}
+
 export interface MessageTemplate {
   id: string;
   name: string;
@@ -121,6 +134,7 @@ interface Snapshot {
   coinvestorCapitalTx: CoinvestorCapitalTx[];
   coinvestorProfitTx: CoinvestorProfitTx[];
   templates: MessageTemplate[];
+  savedFilters: SavedFilter[];
   cashOpeningBalance: number;
   hiddenNavItems: string[];
 }
@@ -137,6 +151,7 @@ const EMPTY: Snapshot = {
   coinvestorCapitalTx: [],
   coinvestorProfitTx: [],
   templates: [],
+  savedFilters: [],
   cashOpeningBalance: 0,
   hiddenNavItems: [],
 };
@@ -290,8 +305,19 @@ interface DataContextValue extends Snapshot {
     dealId: string,
     stageInfo?: { stage: ReminderStage; dueDate: string }
   ) => Promise<void>;
+  bulkUpdateDeals: (
+    ids: string[],
+    change: { action: "stage"; stage: "new" | "check" | "active" } | { action: "manager"; managerId: number }
+  ) => Promise<BulkResult>;
+  saveFilter: (page: SavedFilterPage, name: string, params: Record<string, string>) => Promise<void>;
+  deleteFilter: (id: string) => Promise<void>;
   /** Перечитать всё состояние с сервера. */
   refresh: () => Promise<void>;
+}
+
+export interface BulkResult {
+  ok: string[];
+  failed: { id: string; error: string }[];
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -352,6 +378,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       coinvestorCapitalTx: data.coinvestorCapitalTx,
       coinvestorProfitTx: data.coinvestorProfitTx,
       templates: data.templates,
+      savedFilters: data.savedFilters,
       cashOpeningBalance: data.settings.cashOpeningBalance,
       hiddenNavItems: data.settings.hiddenNavItems,
     });
@@ -647,6 +674,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const bulkUpdateDeals = useCallback(
+    async (
+      ids: string[],
+      change: { action: "stage"; stage: "new" | "check" | "active" } | { action: "manager"; managerId: number }
+    ): Promise<BulkResult> => {
+      const result = await api<BulkResult>("/api/deals/bulk", { ids, ...change });
+      await load();
+      return result;
+    },
+    [load]
+  );
+
+  const saveFilter = useCallback(
+    async (page: SavedFilterPage, name: string, params: Record<string, string>) => {
+      await api("/api/saved-filters", { page, name, params });
+      await load();
+    },
+    [load]
+  );
+
+  const deleteFilter = useCallback(
+    async (id: string) => {
+      await api(`/api/saved-filters/${encodeURIComponent(id)}`, undefined, "DELETE");
+      await load();
+    },
+    [load]
+  );
+
   const logout = useCallback(async () => {
     await api("/api/auth/logout", {});
     window.location.href = "/login";
@@ -683,6 +738,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updateEmployee,
       setEmployeeActive,
       setHiddenNavItems,
+      bulkUpdateDeals,
+      saveFilter,
+      deleteFilter,
       logout,
       refresh,
     }),
@@ -690,7 +748,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
      addCoinvestor, updateCoinvestor, setCoinvestorActive, deleteCoinvestor,
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,
-     addEmployee, updateEmployee, setEmployeeActive, setHiddenNavItems, logout, refresh]
+     addEmployee, updateEmployee, setEmployeeActive, setHiddenNavItems,
+     bulkUpdateDeals, saveFilter, deleteFilter, logout, refresh]
   );
 
   // Пока состояние не загружено, страницы не рендерим: иначе каждая из них

@@ -11,12 +11,15 @@ import {
   CreditCard,
   Landmark,
   CalendarDays,
+  ReceiptText,
 } from "lucide-react";
 import { clientById, paidCount, dealState, ruPlural, type Deal } from "@/lib/data";
 import { scheduleForDeal } from "@/lib/schedule";
 import { todayIso } from "@/lib/derive";
 import { useData } from "@/lib/store";
 import { Badge } from "@/components/ui";
+import { money as moneyFmt } from "@/lib/schedule";
+import { paymentTitle, receiptPath } from "@/lib/receipts";
 
 const money = (n: number) =>
   new Intl.NumberFormat("ru-RU").format(Math.round(n)) + " ₽";
@@ -44,7 +47,7 @@ export default function AcceptPaymentModal({
 }: {
   onClose: () => void;
 }) {
-  const { deals, clients, paidPayments, acceptPayment } = useData();
+  const { deals, clients, paidPayments, acceptPayment, cash } = useData();
   const [query, setQuery] = useState("");
   const [deal, setDeal] = useState<Deal | null>(null);
   const [amountInput, setAmountInput] = useState("");
@@ -52,6 +55,8 @@ export default function AcceptPaymentModal({
     useState<(typeof methods)[number]["key"]>("cash");
   const [date, setDate] = useState(todayIso());
   const [saved, setSaved] = useState(false);
+  // Последний id в кассе до проведения — всё, что новее, записал этот платёж
+  const [cashIdBefore, setCashIdBefore] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -144,12 +149,50 @@ export default function AcceptPaymentModal({
     if (!ready || !deal) return;
     setError(null);
     try {
+      setCashIdBefore(cash.reduce((max, t) => Math.max(max, Number(t.id)), 0));
       await acceptPayment(deal.id, { date, method, amount });
       setSaved(true);
-      setTimeout(onClose, 1300);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось принять платёж");
     }
+  };
+
+  // После проведения — предложить отправить клиенту квитанцию. Переплата
+  // пишет в кассу по записи на каждый закрытый взнос — ссылка на каждую.
+  const newPayments =
+    saved && deal && cashIdBefore !== null
+      ? cash.filter(
+          (t) =>
+            t.dealId === deal.id &&
+            t.kind === "payment" &&
+            t.amount > 0 &&
+            t.installmentNumber &&
+            Number(t.id) > cashIdBefore
+        )
+      : [];
+  const payer = deal ? clientById(clients, deal.clientId) : undefined;
+
+  const sendReceipt = () => {
+    if (!deal || !payer || newPayments.length === 0) return;
+    const firstName = payer.name.split(" ")[1] ?? payer.name;
+    const total = newPayments.reduce((s, t) => s + t.amount, 0);
+    const url = (id: string) => `${window.location.origin}${receiptPath(payer.portalToken, id)}`;
+    const receipts =
+      newPayments.length === 1
+        ? `Квитанция: ${url(newPayments[0].id)}`
+        : "Квитанции:\n" +
+          newPayments
+            .map((t) => `${paymentTitle("installment", t.installmentNumber, deal.months)} — ${url(t.id)}`)
+            .join("\n");
+    const text =
+      `${firstName}, здравствуйте! Платёж ${moneyFmt(total)} по рассрочке «${deal.product}» получен. Спасибо!\n\n` +
+      receipts;
+    window.open(
+      `https://wa.me/${payer.phone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+    onClose();
   };
 
   return (
@@ -388,7 +431,7 @@ export default function AcceptPaymentModal({
                 {error
                   ? error
                   : saved
-                    ? "Платёж принят"
+                    ? "Платёж принят — отправьте клиенту квитанцию"
                     : ready
                       ? "Можно проводить"
                       : !amountValid
@@ -400,16 +443,28 @@ export default function AcceptPaymentModal({
                 onClick={onClose}
                 className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
               >
-                Отмена
+                {saved ? "Готово" : "Отмена"}
               </button>
-              <button
-                type="submit"
-                disabled={!ready || saved}
-                className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
-              >
-                <Check size={15} aria-hidden />
-                {saved ? "Платёж принят" : "Принять платёж"}
-              </button>
+              {saved ? (
+                <button
+                  type="button"
+                  onClick={sendReceipt}
+                  disabled={newPayments.length === 0 || !payer}
+                  className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+                >
+                  <ReceiptText size={15} aria-hidden />
+                  Отправить квитанцию
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!ready}
+                  className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+                >
+                  <Check size={15} aria-hidden />
+                  Принять платёж
+                </button>
+              )}
             </footer>
           </form>
         )}

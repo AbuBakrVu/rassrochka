@@ -1,16 +1,17 @@
 import { BadRequestError, handle, isoDate, num, optionalNum, optionalStr, str, strArray } from "@/app/api/_lib/handler";
 import { createDeal } from "@/lib/queries";
+import { audit, rub } from "@/lib/audit";
 
 export async function POST(request: Request) {
   return handle(
     request,
-    ({ tenant, body }) => {
+    async ({ tenant, body, user }) => {
       const guarantorIds = strArray(body, "guarantorIds", { maxItems: 5, maxLen: 20 });
       if (guarantorIds.length !== new Set(guarantorIds).size) {
         throw new BadRequestError("Поручитель указан дважды");
       }
 
-      return createDeal(tenant.dbName, {
+      const deal = await createDeal(tenant.dbName, {
         product: str(body, "product", { max: 200 }),
         amount: num(body, "amount", { min: 1, max: 1e9 }),
         months: num(body, "months", { min: 1, max: 120, integer: true }),
@@ -24,6 +25,11 @@ export async function POST(request: Request) {
         guarantorIds,
         downPayment: optionalNum(body, "downPayment", { min: 0, max: 1e9 }),
       });
+      await audit(
+        tenant.dbName, user.id, "deal.create", deal.id,
+        `Создана сделка ${deal.id} · ${deal.client} · ${deal.product} на ${rub(deal.amount)}, ${deal.months} мес.`
+      );
+      return deal;
     },
     { roles: ["admin", "manager"] }
   );

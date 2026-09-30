@@ -20,11 +20,18 @@ import {
   Zap,
   LogOut,
   ShieldAlert,
+  ScrollText,
 } from "lucide-react";
 import CommandPalette from "@/components/command-palette";
 import { DataProvider, useData } from "@/lib/store";
 
-export const nav = [
+export const nav: {
+  href: string;
+  label: string;
+  icon: typeof LayoutGrid;
+  /** Пункт виден только администратору компании. */
+  adminOnly?: boolean;
+}[] = [
   { href: "/", label: "Главная", icon: LayoutGrid },
   { href: "/analytics", label: "Аналитика", icon: BarChart3 },
   { href: "/deals", label: "Сделки", icon: KanbanSquare },
@@ -36,6 +43,7 @@ export const nav = [
   { href: "/registry", label: "Реестр клиентов", icon: BookUser },
   { href: "/blacklist", label: "Чёрный список", icon: ShieldAlert },
   { href: "/employees", label: "Сотрудники", icon: UserCog },
+  { href: "/journal", label: "Журнал действий", icon: ScrollText, adminOnly: true },
   { href: "/settings", label: "Настройки", icon: Settings },
 ];
 
@@ -54,6 +62,7 @@ function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate: ()
   const { user, hiddenNavItems } = useData();
   const items = nav
     .filter((n) => user.role !== "accountant" || allowedForAccountant(n.href))
+    .filter((n) => !n.adminOnly || user.role === "admin")
     .filter((n) => !hiddenNavItems.includes(n.href));
 
   return (

@@ -20,6 +20,7 @@ import type {
   MessageTemplate,
 } from "./store";
 import type { DealEvent } from "./events";
+import { listSavedFilters, type SavedFilter } from "./saved-filters";
 
 // ── Формы строк БД ─────────────────────────────────────────────────────
 
@@ -83,6 +84,9 @@ interface CashRow extends Record<string, unknown> {
   coinvestor_id: string | null;
   title: string;
   note: string | null;
+  installment_number: number | null;
+  method: "cash" | "card" | "transfer" | null;
+  reverses_id: number | null;
 }
 
 interface CoinvestorRow extends Record<string, unknown> {
@@ -312,6 +316,7 @@ export interface Bootstrap {
   coinvestorCapitalTx: CoinvestorCapitalTx[];
   coinvestorProfitTx: CoinvestorProfitTx[];
   templates: MessageTemplate[];
+  savedFilters: SavedFilter[];
   settings: { cashOpeningBalance: number; hiddenNavItems: string[] };
 }
 
@@ -403,7 +408,7 @@ export async function loadBootstrap(
 
   const [
     dealRows, clientRows, cashRows, eventRows, settingRows, userRows,
-    coinvestorRows, capitalRows, profitRows, templateRows,
+    coinvestorRows, capitalRows, profitRows, templateRows, savedFilters,
   ] =
     await Promise.all([
       query<DealRow>(dbName, DEALS_SQL),
@@ -430,6 +435,7 @@ export async function loadBootstrap(
         "select * from coinvestor_profit_tx order by occurred_at desc, id desc"
       ),
       query<TemplateRow>(dbName, "select * from message_templates order by created_at"),
+      listSavedFilters(dbName, currentUser.id),
     ]);
 
   const coinvestorCapitalTx = capitalRows.map(toCapitalTx);
@@ -467,6 +473,8 @@ export async function loadBootstrap(
       ...(r.deal_id ? { dealId: r.deal_id } : {}),
       ...(r.coinvestor_id ? { coinvestorId: r.coinvestor_id } : {}),
       ...(r.note ? { note: r.note } : {}),
+      ...(r.installment_number !== null ? { installmentNumber: r.installment_number } : {}),
+      ...(r.reverses_id !== null ? { reversesId: String(r.reverses_id) } : {}),
     })),
     events: eventRows.map((r) => ({
       id: String(r.id),
@@ -480,6 +488,7 @@ export async function loadBootstrap(
     coinvestorCapitalTx,
     coinvestorProfitTx,
     templates: templateRows.map(toTemplate),
+    savedFilters,
     settings: {
       cashOpeningBalance: Number(opening?.value ?? 0),
       hiddenNavItems: Array.isArray(hiddenNav?.value) ? (hiddenNav.value as string[]) : [],
@@ -1059,9 +1068,12 @@ export async function acceptPayment(
   dbName: string,
   dealId: string,
   options: AcceptPaymentOptions = {}
-): Promise<{ deal: Deal; alreadyPaid: boolean }> {
+): Promise<{ deal: Deal; alreadyPaid: boolean; received: number; installments: number[] }> {
   const occurredAt = options.date ?? todayIso();
   const methodLabel = options.method ? PAYMENT_METHOD_LABEL[options.method] : undefined;
+  // Что реально провели — для журнала действий
+  let received = 0;
+  const installments: number[] = [];
 
   const alreadyPaid = await transaction(dbName, async (client) => {
     const { rows } = await client.query<{
@@ -1154,6 +1166,8 @@ export async function acceptPayment(
       const installmentNumber = covered[i] + 1;
       const isLast = i === covered.length - 1;
       const amount = schedule[covered[i]].amount + (isLast ? leftover : 0);
+      received += amount;
+      installments.push(installmentNumber);
 
       // Дата операции — по умолчанию сегодня, а НЕ плановая дата взноса из
       // графика: клиент может гасить июльский платёж в августе, деньги
@@ -1161,14 +1175,16 @@ export async function acceptPayment(
       // считался бы неверно. Менеджер может явно указать другую дату
       // (options.date), например если заносит платёж задним числом.
       await client.query(
-        `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note)
-         values ('payment', $1, $2, $3, $4, $5)`,
+        `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note, installment_number, method)
+         values ('payment', $1, $2, $3, $4, $5, $6, $7)`,
         [
           amount,
           occurredAt,
           dealId,
           `Платёж ${installmentNumber} из ${deal.months} · ${deal.client_name}`,
           methodLabel ? `${deal.product} · ${methodLabel}` : deal.product,
+          installmentNumber,
+          options.method ?? null,
         ]
       );
 
@@ -1199,7 +1215,7 @@ export async function acceptPayment(
 
   const deal = await loadDeal(dbName, dealId);
   if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
-  return { deal, alreadyPaid };
+  return { deal, alreadyPaid, received, installments };
 }
 
 /**
@@ -1213,8 +1229,11 @@ export async function acceptPayment(
  * Начисление соинвесторам за этот взнос удаляется: это ещё не выплаченные
  * деньги, просто прогноз, отменённому платежу неоткуда взяться.
  */
-export async function undoLastPayment(dbName: string, dealId: string): Promise<Deal> {
-  await transaction(dbName, async (client) => {
+export async function undoLastPayment(
+  dbName: string,
+  dealId: string
+): Promise<{ deal: Deal; installment: number; amount: number }> {
+  const undone = await transaction(dbName, async (client) => {
     const { rows } = await client.query<{
       months: number;
       paid_count: number;
@@ -1233,21 +1252,33 @@ export async function undoLastPayment(dbName: string, dealId: string): Promise<D
 
     const n = deal.paid_count;
 
+    // Именно платёж этого взноса, который ещё никто не отменял. Раньше
+    // брали просто последнюю запись кассы по сделке — второй откат подряд
+    // попадал в запись-отмену первого и «отменял отмену» (плюс в кассу
+    // вместо минуса)
     const { rows: txRows } = await client.query<{ id: string; amount: number }>(
-      `select id, amount from cash_tx where deal_id = $1 and kind = 'payment' order by id desc limit 1`,
-      [dealId]
+      `select p.id, p.amount from cash_tx p
+       where p.deal_id = $1 and p.kind = 'payment' and p.installment_number = $2
+         and p.amount > 0 and p.reverses_id is null
+         and not exists (select 1 from cash_tx r where r.reverses_id = p.id)
+       order by p.id desc limit 1`,
+      [dealId, n]
     );
     const lastTx = txRows[0];
-    if (!lastTx) throw new Error(`У сделки ${dealId} нет записей о платежах в кассе`);
+    // Нет записи — взнос закрыт не отдельным платежом (досрочное погашение
+    // одной суммой) или это данные до появления связи платёж ↔ взнос
+    if (!lastTx) throw new Error("NO_PAYMENT_RECORD");
 
     await client.query(
-      `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note)
-       values ('payment', $1, current_date, $2, $3, $4)`,
+      `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note, installment_number, reverses_id)
+       values ('payment', $1, current_date, $2, $3, $4, $5, $6)`,
       [
         -lastTx.amount,
         dealId,
         `Отмена платежа ${n} из ${deal.months} · ${deal.client_name}`,
         deal.product,
+        n,
+        lastTx.id,
       ]
     );
 
@@ -1266,11 +1297,13 @@ export async function undoLastPayment(dbName: string, dealId: string): Promise<D
       "insert into deal_events (deal_id, text) values ($1, $2)",
       [dealId, `Платёж ${n} из ${deal.months} отменён — принят по ошибке`]
     );
+
+    return { installment: n, amount: Number(lastTx.amount) };
   });
 
   const updated = await loadDeal(dbName, dealId);
   if (!updated) throw new Error(`Сделка ${dealId} не найдена`);
-  return updated;
+  return { deal: updated, ...undone };
 }
 
 export interface CashAdjustmentInput {
@@ -1686,6 +1719,7 @@ export async function recordReminderSent(
 export interface PortalDeal {
   id: string;
   clientFirstName: string;
+  payments: PortalPayment[];
   product: string;
   amount: number;
   months: number;
@@ -1745,10 +1779,12 @@ export async function loadPortalDeal(
     restructuredMonths: row.restructured_months,
     restructuredFrom: row.restructured_from,
   });
+  const payments = await loadPortalPayments(dbName, [row.id]);
 
   return {
     id: row.id,
     clientFirstName: row.client_name.split(" ")[1] ?? row.client_name,
+    payments: payments.get(row.id) ?? [],
     product: row.product,
     amount: row.amount,
     months: row.months,
@@ -1769,6 +1805,7 @@ export async function loadPortalDeal(
 
 export interface PortalClientDeal {
   id: string;
+  payments: PortalPayment[];
   product: string;
   amount: number;
   months: number;
@@ -1832,6 +1869,8 @@ export async function loadPortalClient(
 
   if (rows.length === 0) return undefined;
 
+  const payments = await loadPortalPayments(dbName, rows.map((r) => r.id));
+
   return {
     clientFirstName: client.name.split(" ")[1] ?? client.name,
     managerName: rows[0].manager_name ?? "менеджер",
@@ -1844,6 +1883,7 @@ export async function loadPortalClient(
       });
       return {
         id: row.id,
+        payments: payments.get(row.id) ?? [],
         product: row.product,
         amount: row.amount,
         months: row.months,
@@ -1859,6 +1899,169 @@ export async function loadPortalClient(
           : {}),
       };
     }),
+  };
+}
+
+// ── Квитанции ──────────────────────────────────────────────────────────
+
+export type PaymentKind = "installment" | "down" | "payoff";
+
+/** Один реально поступивший и не отменённый платёж клиента — строка «Истории платежей» в кабинете. */
+export interface PortalPayment {
+  id: string;
+  kind: PaymentKind;
+  installment?: number;
+  date: string;
+  amount: number;
+}
+
+interface PaymentRow extends Record<string, unknown> {
+  id: string;
+  deal_id: string;
+  amount: number;
+  occurred_at: string;
+  installment_number: number | null;
+  method: "cash" | "card" | "transfer" | null;
+  title: string;
+}
+
+// Платежи клиента в кассе: взносы графика, первоначальный взнос и
+// досрочное погашение. Отменённые (у которых есть запись-отмена) и сами
+// записи-отмены не показываем — клиенту они ни о чём не говорят.
+const VALID_PAYMENTS_SQL = `
+  select p.id, p.deal_id, p.amount, p.occurred_at, p.installment_number, p.method, p.title
+  from cash_tx p
+  where p.kind = 'payment' and p.amount > 0 and p.reverses_id is null
+    and not exists (select 1 from cash_tx r where r.reverses_id = p.id)`;
+
+function paymentKind(row: PaymentRow): PaymentKind | undefined {
+  if (row.installment_number !== null) return "installment";
+  if (row.title.startsWith("Первоначальный взнос")) return "down";
+  if (row.title.startsWith("Досрочное погашение")) return "payoff";
+  return undefined;
+}
+
+async function loadPortalPayments(
+  dbName: string,
+  dealIds: string[]
+): Promise<Map<string, PortalPayment[]>> {
+  const rows = await query<PaymentRow>(
+    dbName,
+    `${VALID_PAYMENTS_SQL} and p.deal_id = any($1) order by p.occurred_at, p.id`,
+    [dealIds]
+  );
+
+  const byDeal = new Map<string, PortalPayment[]>();
+  for (const row of rows) {
+    const kind = paymentKind(row);
+    if (!kind) continue;
+    const list = byDeal.get(row.deal_id) ?? [];
+    list.push({
+      id: String(row.id),
+      kind,
+      ...(row.installment_number !== null ? { installment: row.installment_number } : {}),
+      date: row.occurred_at,
+      amount: row.amount,
+    });
+    byDeal.set(row.deal_id, list);
+  }
+  return byDeal;
+}
+
+export interface PortalReceipt {
+  id: string;
+  companyName: string;
+  payerName: string;
+  dealId: string;
+  product: string;
+  kind: PaymentKind;
+  installment?: number;
+  months: number;
+  date: string;
+  amount: number;
+  method: "cash" | "card" | "transfer" | null;
+  /** Остаток долга по графику после этого платежа. */
+  remainingAfter: number;
+  managerName: string;
+}
+
+/**
+ * Квитанция для /pay/<token>/receipt/<id>. Токен — клиентский или
+ * сделки, как у самого кабинета; платёж обязан принадлежать сделке этого
+ * токена, иначе квитанции «нет» — перебором id чужую квитанцию не открыть.
+ */
+export async function loadPortalReceipt(
+  dbName: string,
+  token: string,
+  paymentId: string,
+  companyName: string
+): Promise<PortalReceipt | undefined> {
+  if (!/^\d{1,18}$/.test(paymentId)) return undefined;
+
+  const row = await queryOne<PaymentRow & {
+    client_name: string;
+    product: string;
+    deal_amount: number;
+    months: number;
+    opened_at: string;
+    original_months: number | null;
+    restructured_months: number | null;
+    restructured_from: string | null;
+    manager_name: string | null;
+  }>(
+    dbName,
+    `select v.*, c.name as client_name, d.product, d.amount as deal_amount, d.months,
+            d.opened_at, d.original_months, d.restructured_months, d.restructured_from,
+            u.name as manager_name
+     from (${VALID_PAYMENTS_SQL} and p.id = $2) v
+     join deals d on d.id = v.deal_id
+     join clients c on c.id = d.client_id
+     left join users u on u.id = d.manager_id
+     where d.deleted_at is null
+       and (c.portal_token = $1 or d.portal_token = $1)`,
+    [token, paymentId]
+  );
+  if (!row) return undefined;
+
+  const kind = paymentKind(row);
+  if (!kind) return undefined;
+
+  const schedule = buildSchedule(
+    row.deal_amount,
+    row.months,
+    row.months,
+    row.opened_at,
+    restructureOf({
+      originalMonths: row.original_months,
+      restructuredMonths: row.restructured_months,
+      restructuredFrom: row.restructured_from,
+    })
+  );
+  const remainingAfter =
+    kind === "payoff"
+      ? 0
+      : kind === "down"
+        ? row.deal_amount
+        : (schedule[(row.installment_number ?? 1) - 1]?.remaining ?? 0);
+
+  // Как в самом кабинете — без полного ФИО: «Пётр С.»
+  const [last, first] = row.client_name.split(" ");
+  const payerName = first ? `${first} ${last[0]}.` : row.client_name;
+
+  return {
+    id: String(row.id),
+    companyName,
+    payerName,
+    dealId: row.deal_id,
+    product: row.product,
+    kind,
+    ...(row.installment_number !== null ? { installment: row.installment_number } : {}),
+    months: row.months,
+    date: row.occurred_at,
+    amount: row.amount,
+    method: row.method,
+    remainingAfter,
+    managerName: row.manager_name ?? "менеджер",
   };
 }
 

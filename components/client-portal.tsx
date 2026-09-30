@@ -1,15 +1,37 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Zap, Check, Phone, MessageCircle, CalendarDays, SearchX, ChevronDown } from "lucide-react";
+import Link from "next/link";
+import {
+  Zap,
+  Check,
+  Phone,
+  MessageCircle,
+  CalendarDays,
+  CalendarPlus,
+  SearchX,
+  ChevronDown,
+  ReceiptText,
+} from "lucide-react";
 import { fmt } from "@/lib/data";
-import { scheduleForDeal, longDate, money } from "@/lib/schedule";
+import { scheduleForDeal, longDate, money, type Installment } from "@/lib/schedule";
+import { paymentTitle, receiptPath, type PaymentKind } from "@/lib/receipts";
+import { todayIso } from "@/lib/status";
 
 // Кабинет намеренно НЕ пользуется общим стором: заёмщик открывает страницу
 // по ссылке без авторизации, и useData() отдал бы ему в браузер все сделки
 // и всех клиентов компании. Здесь приходит только то, что относится к нему.
+interface PortalPayment {
+  id: string;
+  kind: PaymentKind;
+  installment?: number;
+  date: string;
+  amount: number;
+}
+
 interface PortalDealShape {
   id: string;
+  payments: PortalPayment[];
   product: string;
   amount: number;
   months: number;
@@ -68,6 +90,107 @@ function Header({ subtitle, id }: { subtitle: string; id?: string }) {
   );
 }
 
+const DAY_MS = 86_400_000;
+
+function ruDays(n: number) {
+  const last = n % 10;
+  if (n % 100 >= 11 && n % 100 <= 14) return `${n} дней`;
+  if (last === 1) return `${n} день`;
+  if (last >= 2 && last <= 4) return `${n} дня`;
+  return `${n} дней`;
+}
+
+/** «Сегодня» / «Через 3 дня» / «Просрочен на 2 дня» — от даты взноса до сегодня. */
+function dueLabel(iso: string): { text: string; overdue: boolean } {
+  const days = Math.round(
+    (Date.parse(`${iso}T00:00:00Z`) - Date.parse(`${todayIso()}T00:00:00Z`)) / DAY_MS
+  );
+  if (days < 0) return { text: `Просрочен на ${ruDays(-days)}`, overdue: true };
+  if (days === 0) return { text: "Сегодня", overdue: false };
+  if (days === 1) return { text: "Завтра", overdue: false };
+  return { text: `Через ${ruDays(days)}`, overdue: false };
+}
+
+/**
+ * Главный вопрос клиента — «сколько и когда платить» — крупно, первым
+ * экраном. Плюс кнопка, которая добавит все будущие платежи в календарь
+ * телефона с напоминанием накануне.
+ */
+function NextPaymentHero({
+  token,
+  next,
+  product,
+}: {
+  token: string;
+  next: Installment;
+  product?: string;
+}) {
+  const due = dueLabel(next.iso);
+
+  return (
+    <section className="rounded-card border border-line bg-surface p-5 shadow-card">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-mute">Следующий платёж</p>
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            due.overdue ? "bg-danger-soft text-danger" : "bg-brand-soft text-brand-deep"
+          }`}
+        >
+          {due.text}
+        </span>
+      </div>
+      <p className="mt-1 text-[32px] font-semibold tracking-tight">{money(next.amount)}</p>
+      <p className="text-sm text-mute">
+        до {next.date} г.{product ? ` · ${product}` : ""}
+      </p>
+      <a
+        href={`/api/portal/${encodeURIComponent(token)}/calendar`}
+        className="mt-4 flex items-center justify-center gap-2 rounded-[10px] border border-line px-3 py-2.5 text-sm font-medium hover:border-brand hover:text-brand-deep"
+      >
+        <CalendarPlus size={15} aria-hidden /> Добавить платежи в календарь
+      </a>
+    </section>
+  );
+}
+
+/** Реально поступившие платежи со ссылкой на квитанцию по каждому. */
+function PaymentHistory({
+  token,
+  deal,
+}: {
+  token: string;
+  deal: PortalDealShape;
+}) {
+  if (deal.payments.length === 0) return null;
+
+  return (
+    <section className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
+      <h2 className="px-5 pt-4 pb-2 font-semibold">История платежей</h2>
+      <ul className="divide-y divide-line">
+        {[...deal.payments].reverse().map((p) => (
+          <li key={p.id}>
+            <Link
+              href={receiptPath(token, p.id)}
+              className="flex items-center gap-3 px-5 py-3 hover:bg-canvas"
+            >
+              <ReceiptText size={16} className="shrink-0 text-brand" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">
+                  {paymentTitle(p.kind, p.installment, deal.months)}
+                </p>
+                <p className="text-xs text-mute">
+                  {longDate(new Date(p.date))} г. · квитанция
+                </p>
+              </div>
+              <span className="text-sm font-semibold whitespace-nowrap">{money(p.amount)}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function ContactSection({
   managerName,
   managerPhone,
@@ -104,13 +227,21 @@ function ContactSection({
 }
 
 /** Полный график одной сделки — общий для одиночного и клиентского режима. */
-function DealSchedule({ deal }: { deal: PortalDealShape }) {
+function DealSchedule({
+  deal,
+  token,
+  showNext = true,
+}: {
+  deal: PortalDealShape;
+  token: string;
+  showNext?: boolean;
+}) {
   const schedule = scheduleForDeal(deal, deal.paid);
   const next = schedule.find((p) => p.status === "due");
 
   return (
     <>
-      {next && (
+      {showNext && next && (
         <section className="flex items-center gap-3 rounded-card border border-line bg-brand-soft px-5 py-4">
           <CalendarDays size={18} className="shrink-0 text-brand" aria-hidden />
           <div>
@@ -161,18 +292,23 @@ function DealSchedule({ deal }: { deal: PortalDealShape }) {
           })}
         </ol>
       </section>
+
+      <PaymentHistory token={token} deal={deal} />
     </>
   );
 }
 
-function SingleDealView({ data }: { data: SingleDealResponse }) {
+function SingleDealView({ data, token }: { data: SingleDealResponse; token: string }) {
   const schedule = scheduleForDeal(data, data.paid);
   const paidSum = schedule.filter((p) => p.status === "paid").reduce((s, p) => s + p.amount, 0);
   const remaining = data.amount - paidSum;
+  const next = schedule.find((p) => p.status === "due");
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 px-4 py-6 sm:py-10">
       <Header subtitle="Моя рассрочка" id={data.id} />
+
+      {next && <NextPaymentHero token={token} next={next} />}
 
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
         <p className="text-sm text-mute">{data.clientFirstName}, ваш остаток по рассрочке</p>
@@ -195,7 +331,7 @@ function SingleDealView({ data }: { data: SingleDealResponse }) {
         </div>
       </section>
 
-      <DealSchedule deal={data} />
+      <DealSchedule deal={data} token={token} showNext={false} />
       <ContactSection managerName={data.managerName} managerPhone={data.managerPhone} />
 
       <p className="text-center text-xs text-mute">
@@ -205,7 +341,15 @@ function SingleDealView({ data }: { data: SingleDealResponse }) {
   );
 }
 
-function DealCard({ deal }: { deal: ClientResponse["deals"][number] }) {
+function DealCard({
+  deal,
+  token,
+  showNext = true,
+}: {
+  deal: ClientResponse["deals"][number];
+  token: string;
+  showNext?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const schedule = scheduleForDeal(deal, deal.paid);
   const paidSum = schedule.filter((p) => p.status === "paid").reduce((s, p) => s + p.amount, 0);
@@ -245,16 +389,25 @@ function DealCard({ deal }: { deal: ClientResponse["deals"][number] }) {
       </button>
       {open && (
         <div className="flex flex-col gap-3 border-t border-line bg-canvas p-3">
-          <DealSchedule deal={deal} />
+          <DealSchedule deal={deal} token={token} showNext={showNext} />
         </div>
       )}
     </section>
   );
 }
 
-function ClientView({ data }: { data: ClientResponse }) {
+function ClientView({ data, token }: { data: ClientResponse; token: string }) {
   const active = data.deals.filter((d) => d.stage === "active");
   const closed = data.deals.filter((d) => d.stage !== "active");
+
+  // Ближайший платёж среди всех активных сделок — его клиент видит первым
+  const nearest = active
+    .map((deal) => ({
+      deal,
+      next: scheduleForDeal(deal, deal.paid).find((p) => p.status === "due"),
+    }))
+    .filter((x): x is { deal: typeof x.deal; next: Installment } => !!x.next)
+    .sort((a, b) => (a.next.iso < b.next.iso ? -1 : a.next.iso > b.next.iso ? 1 : 0))[0];
 
   const remaining = active.reduce((sum, deal) => {
     const schedule = scheduleForDeal(deal, deal.paid);
@@ -265,6 +418,14 @@ function ClientView({ data }: { data: ClientResponse }) {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 px-4 py-6 sm:py-10">
       <Header subtitle="Мои рассрочки" />
+
+      {nearest && (
+        <NextPaymentHero
+          token={token}
+          next={nearest.next}
+          product={active.length > 1 ? nearest.deal.product : undefined}
+        />
+      )}
 
       {active.length > 0 && (
         <section className="rounded-card border border-line bg-surface p-5 shadow-card">
@@ -279,7 +440,8 @@ function ClientView({ data }: { data: ClientResponse }) {
       {active.length > 0 && (
         <div className="flex flex-col gap-3">
           {active.map((deal) => (
-            <DealCard key={deal.id} deal={deal} />
+            // Одна активная сделка — её ближайший платёж уже крупно наверху
+            <DealCard key={deal.id} deal={deal} token={token} showNext={active.length > 1} />
           ))}
         </div>
       )}
@@ -288,7 +450,7 @@ function ClientView({ data }: { data: ClientResponse }) {
         <div className="flex flex-col gap-3">
           <p className="text-sm font-medium text-mute">Закрытые сделки</p>
           {closed.map((deal) => (
-            <DealCard key={deal.id} deal={deal} />
+            <DealCard key={deal.id} deal={deal} token={token} />
           ))}
         </div>
       )}
@@ -363,7 +525,11 @@ export default function ClientPortal({ token }: { token: string }) {
 
   return (
     <div className="min-h-screen bg-canvas">
-      {data.kind === "client" ? <ClientView data={data} /> : <SingleDealView data={data} />}
+      {data.kind === "client" ? (
+        <ClientView data={data} token={token} />
+      ) : (
+        <SingleDealView data={data} token={token} />
+      )}
     </div>
   );
 }

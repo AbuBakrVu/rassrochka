@@ -15,6 +15,7 @@ import {
   Minus,
   X,
   Download,
+  LineChart,
 } from "lucide-react";
 import { PageHeader, Card, EmptyState } from "@/components/ui";
 import { money, longDate } from "@/lib/schedule";
@@ -22,6 +23,20 @@ import { useData, type CashKind } from "@/lib/store";
 import { cashSummary } from "@/lib/cash";
 import { todayIso } from "@/lib/derive";
 import { downloadCsv } from "@/lib/csv";
+import { computeCashForecast } from "@/lib/forecast";
+import SavedFilters from "@/components/saved-filters";
+
+const MONTHS_NOMINATIVE = [
+  "январь", "февраль", "март", "апрель", "май", "июнь",
+  "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь",
+];
+
+/** "2026-10" → "Октябрь 2026" */
+function monthTitle(key: string) {
+  const [y, m] = key.split("-").map(Number);
+  const name = MONTHS_NOMINATIVE[m - 1];
+  return `${name[0].toUpperCase()}${name.slice(1)} ${y}`;
+}
 
 const kindMeta: Record<
   CashKind,
@@ -225,8 +240,10 @@ function AdjustmentModal({ onClose }: { onClose: () => void }) {
 }
 
 export default function CashPage() {
-  const { cash, cashOpeningBalance } = useData();
+  const { cash, cashOpeningBalance, deals, paidPayments, coinvestors } = useData();
   const [filter, setFilter] = useState<(typeof filters)[number]["key"]>("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [modal, setModal] = useState(false);
 
   const monthPrefix = todayIso().slice(0, 7);
@@ -235,14 +252,33 @@ export default function CashPage() {
     [cash, monthPrefix]
   );
 
+  const forecast = useMemo(
+    () =>
+      computeCashForecast({
+        deals,
+        paidPayments,
+        coinvestors,
+        balance: summary.balance,
+        today: todayIso(),
+      }),
+    [deals, paidPayments, coinvestors, summary.balance]
+  );
+
   const activeKinds = filters.find((f) => f.key === filter)?.kinds ?? null;
   const list = useMemo(
     () =>
       [...cash]
         .filter((t) => !activeKinds || (activeKinds as readonly string[]).includes(t.kind))
-        .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)),
-    [cash, activeKinds]
+        .filter((t) => (from === "" || t.date >= from) && (to === "" || t.date <= to))
+        .sort((a, b) => b.date.localeCompare(a.date) || Number(b.id) - Number(a.id)),
+    [cash, activeKinds, from, to]
   );
+
+  const applyFilter = (p: Record<string, string>) => {
+    setFilter(filters.find((f) => f.key === p.kind)?.key ?? "all");
+    setFrom(p.from ?? "");
+    setTo(p.to ?? "");
+  };
 
   const exportCsv = () => {
     downloadCsv(
@@ -268,14 +304,14 @@ export default function CashPage() {
       icon: Wallet,
     },
     {
-      label: "Приход за август",
+      label: `Приход за ${MONTHS_NOMINATIVE[Number(monthPrefix.slice(5)) - 1]}`,
       value: money(summary.monthIncome),
       note: "платежи клиентов и внесения",
       cls: "text-good",
       icon: TrendingUp,
     },
     {
-      label: "Расход за август",
+      label: `Расход за ${MONTHS_NOMINATIVE[Number(monthPrefix.slice(5)) - 1]}`,
       value: money(summary.monthExpense),
       note: "закупки товара и изъятия",
       cls: "text-danger",
@@ -316,6 +352,82 @@ export default function CashPage() {
           ))}
         </div>
 
+        <Card className="mt-4 overflow-hidden">
+          <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5 sm:px-6">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold">
+                <LineChart size={17} className="text-brand" aria-hidden />
+                Прогноз на 3 месяца
+              </h2>
+              <p className="mt-0.5 text-sm text-mute">
+                Если все взносы по графику придут вовремя. Просрочка в прогноз
+                не входит.
+              </p>
+            </div>
+            <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              {forecast.overdue > 0 && (
+                <div>
+                  <dt className="text-mute">Просрочено сейчас</dt>
+                  <dd className="font-semibold text-danger">
+                    {money(forecast.overdue)} · {forecast.overdueInstallments} взн.
+                  </dd>
+                </div>
+              )}
+              {forecast.owedToCoinvestors > 0 && (
+                <div>
+                  <dt className="text-mute">Долг соинвесторам</dt>
+                  <dd className="font-semibold">{money(forecast.owedToCoinvestors)}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[620px] text-sm">
+              <thead>
+                <tr className="border-y border-line text-left text-xs text-mute">
+                  <th className="px-5 py-2.5 font-medium sm:px-6">Месяц</th>
+                  <th className="px-3 py-2.5 font-medium">Поступления по графику</th>
+                  <th className="px-3 py-2.5 font-medium">Доля соинвесторов</th>
+                  <th className="px-3 py-2.5 font-medium">Чистыми</th>
+                  <th className="px-5 py-2.5 font-medium sm:px-6">Касса на конец месяца</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {forecast.months.map((m, i) => (
+                  <tr key={m.key}>
+                    <td className="px-5 py-3 font-medium sm:px-6">
+                      {monthTitle(m.key)}
+                      {i === 0 && <span className="ml-1.5 text-xs font-normal text-mute">с сегодня</span>}
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      <span className="font-medium text-good">+{money(m.expected)}</span>
+                      <span className="ml-1.5 text-xs text-mute">{m.installments} взн.</span>
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap text-mute">
+                      {m.coinvestorShare > 0 ? `−${money(m.coinvestorShare)}` : "—"}
+                    </td>
+                    <td className="px-3 py-3 font-medium whitespace-nowrap">{money(m.net)}</td>
+                    <td
+                      className={`px-5 py-3 font-semibold whitespace-nowrap sm:px-6 ${
+                        m.balanceAfter < 0 ? "text-danger" : ""
+                      }`}
+                    >
+                      {money(m.balanceAfter)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="border-t border-line px-5 py-3 text-xs text-mute sm:px-6">
+            Старт — текущий остаток {money(forecast.startBalance)}
+            {forecast.owedToCoinvestors > 0
+              ? ` минус уже начисленное соинвесторам ${money(forecast.owedToCoinvestors)}`
+              : ""}
+            . Новые закупки и ручные операции не учтены.
+          </p>
+        </Card>
+
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div
             className="flex flex-wrap gap-1.5"
@@ -354,6 +466,46 @@ export default function CashPage() {
               + Движение по кассе
             </button>
           </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-mute">
+            С
+            <input
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={(e) => setFrom(e.target.value)}
+              className="rounded-[10px] border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-sm text-mute">
+            по
+            <input
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(e) => setTo(e.target.value)}
+              className="rounded-[10px] border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
+            />
+          </label>
+          {(from || to) && (
+            <button
+              onClick={() => {
+                setFrom("");
+                setTo("");
+              }}
+              className="text-sm text-mute hover:text-ink"
+            >
+              Сбросить период
+            </button>
+          )}
+          <SavedFilters
+            page="cash"
+            current={{ kind: filter === "all" ? "" : filter, from, to }}
+            onApply={applyFilter}
+            canSave={filter !== "all" || from !== "" || to !== ""}
+          />
         </div>
 
         <Card className="mt-4 overflow-hidden">
