@@ -185,8 +185,16 @@
   }
 }
 
+/* Мягкие пятна акцентного цвета под «стеклянными» карточками и меню: без
+   них полупрозрачность и размытие не видны. Цвета берутся из темы, поэтому
+   в тёмном режиме пятна тоже тёмные. */
 body {
-  background: var(--color-canvas);
+  background:
+    radial-gradient(60rem 40rem at 0% 0%, color-mix(in oklch, var(--primary) 10%, transparent), transparent 70%),
+    radial-gradient(50rem 36rem at 100% 10%, color-mix(in oklch, var(--accent) 9%, transparent), transparent 70%),
+    radial-gradient(56rem 40rem at 60% 100%, color-mix(in oklch, var(--chart-4) 8%, transparent), transparent 70%),
+    var(--color-canvas);
+  background-attachment: fixed;
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;

@@ -28,17 +28,19 @@ export function PageHeader({
   cta?: string;
 }) {
   return (
-    <div className="border-b border-line bg-surface px-4 py-4 sm:px-8">
+    // Шапка лежит прямо на фоне страницы (без белой полосы) — как и
+    // плавающее меню, отделяется от контента воздухом, а не рамкой
+    <div className="px-4 pt-5 pb-1 sm:px-8 lg:pt-6">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           <p className="mt-0.5 truncate text-sm text-mute">{subtitle}</p>
         </div>
         {searchPlaceholder && (
           <button
             type="button"
             onClick={() => window.dispatchEvent(new Event("open-command-palette"))}
-            className="hidden w-64 items-center gap-2 rounded-[10px] border border-line bg-canvas px-3 py-2 text-sm text-mute transition-colors hover:border-brand/40 hover:text-ink md:flex"
+            className="hidden w-72 items-center gap-2 rounded-full border border-line/70 bg-surface/80 px-4 py-2.5 text-sm text-mute shadow-card backdrop-blur-xl transition-colors hover:border-brand/40 hover:text-ink md:flex"
           >
             <Search size={16} className="shrink-0" aria-hidden />
             <span className="flex-1 truncate text-left">
@@ -103,7 +105,7 @@ function CtaMenu({ label }: { label: string }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep"
+        className="flex items-center gap-1.5 rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep"
       >
         {label}
         <ChevronDown
@@ -174,8 +176,10 @@ export function Card({
   children: React.ReactNode;
 }) {
   return (
+    // Полупрозрачная карточка с размытием фона — «стекло» поверх мягкого
+    // градиента страницы (app/globals.css, body)
     <section
-      className={`rounded-card border border-line bg-surface shadow-card ${className}`}
+      className={`rounded-card border border-line/70 bg-surface/85 shadow-card backdrop-blur-xl ${className}`}
     >
       {children}
     </section>

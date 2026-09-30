@@ -21,6 +21,8 @@ import {
   LogOut,
   ShieldAlert,
   ScrollText,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import CommandPalette from "@/components/command-palette";
 import ThemeToggle from "@/components/theme-toggle";
@@ -59,7 +61,16 @@ function allowedForAccountant(pathname: string): boolean {
   return ACCOUNTANT_ALLOWED.some((href) => pathname.startsWith(href));
 }
 
-function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate: () => void }) {
+function SidebarNav({
+  pathname,
+  onNavigate,
+  collapsed = false,
+}: {
+  pathname: string;
+  onNavigate: () => void;
+  /** Узкая полоса только с иконками; подпись — всплывающей подсказкой. */
+  collapsed?: boolean;
+}) {
   const { user, hiddenNavItems } = useData();
   const items = nav
     .filter((n) => user.role !== "accountant" || allowedForAccountant(n.href))
@@ -67,7 +78,10 @@ function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate: ()
     .filter((n) => !hiddenNavItems.includes(n.href));
 
   return (
-    <nav className="flex flex-col gap-0.5 px-3" aria-label="Основные разделы">
+    <nav
+      className={`flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto ${collapsed ? "items-center px-2" : "px-3"}`}
+      aria-label="Основные разделы"
+    >
       {items.map(({ href, label, icon: Icon }) => {
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
@@ -76,19 +90,42 @@ function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate: ()
             href={href}
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
-            className={`flex items-center gap-3 rounded-[10px] px-3 py-2 text-sm transition-colors ${
+            aria-label={collapsed ? label : undefined}
+            className={`group relative flex items-center rounded-[14px] text-sm transition-colors ${
+              collapsed ? "h-11 w-11 shrink-0 justify-center" : "gap-3 px-3 py-2.5"
+            } ${
               active
-                ? "bg-brand-soft font-medium text-brand-deep"
-                : "text-mute hover:bg-canvas hover:text-ink"
+                ? "bg-brand font-medium text-on-brand shadow-card"
+                : "text-mute hover:bg-brand-soft hover:text-brand-deep"
             }`}
           >
             <Icon size={18} strokeWidth={1.75} aria-hidden />
-            {label}
+            {collapsed ? (
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-full z-50 ml-3 hidden rounded-[10px] bg-ink px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-canvas shadow-pop group-hover:block group-focus-visible:block"
+              >
+                {label}
+              </span>
+            ) : (
+              label
+            )}
           </Link>
         );
       })}
     </nav>
   );
+}
+
+// Свёрнутое меню — личная настройка, в браузере сотрудника
+const COLLAPSED_KEY = "nav-collapsed";
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 /** Если бухгалтер каким-то путём (прямая ссылка, старая закладка) попал на
@@ -106,7 +143,7 @@ function AccountantGate({ pathname }: { pathname: string }) {
   return null;
 }
 
-function UserFooter() {
+function UserFooter({ collapsed = false }: { collapsed?: boolean }) {
   const { user, logout } = useData();
   const [busy, setBusy] = useState(false);
 
@@ -116,9 +153,32 @@ function UserFooter() {
     await logout();
   };
 
+  if (collapsed) {
+    return (
+      <div className="mt-2 flex flex-col items-center gap-1 border-t border-line px-2 pt-3 pb-4">
+        <ThemeToggle />
+        <button
+          onClick={signOut}
+          disabled={busy}
+          title="Выйти"
+          aria-label="Выйти из аккаунта"
+          className="rounded-[10px] p-2 text-mute transition-colors hover:bg-canvas hover:text-danger disabled:opacity-50"
+        >
+          <LogOut size={17} aria-hidden />
+        </button>
+        <span
+          title={`${user.name} · ${user.email}`}
+          className="mt-1 flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-deep"
+        >
+          {user.initials}
+        </span>
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-auto flex items-center gap-2.5 border-t border-line px-4 py-3">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-deep">
+    <div className="mt-2 flex items-center gap-2 border-t border-line px-4 py-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-deep">
         {user.initials}
       </span>
       <div className="min-w-0 flex-1">
@@ -141,7 +201,24 @@ function UserFooter() {
 
 export default function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  // Разметка меню впервые рисуется уже после загрузки данных (до этого
+  // DataProvider показывает скелет), поэтому прочитать localStorage прямо в
+  // начальном состоянии безопасно — серверного HTML меню нет, сверять нечего
+  const [collapsed, setCollapsed] = useState(() =>
+    typeof window === "undefined" ? false : readCollapsed()
+  );
   const pathname = usePathname();
+
+  const toggleCollapsed = () => {
+    setCollapsed((v) => {
+      try {
+        localStorage.setItem(COLLAPSED_KEY, v ? "0" : "1");
+      } catch {
+        // приватный режим — просто не запомнится
+      }
+      return !v;
+    });
+  };
 
   // Страницы без CRM-оболочки и БЕЗ общего стора:
   //   /pay/<токен> — кабинет заёмщика, грузит только свою сделку через
@@ -165,16 +242,41 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     <DataProvider>
       <AccountantGate pathname={pathname} />
       <div className="flex min-h-screen print:hidden">
-        {/* Десктопный сайдбар */}
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-line bg-surface lg:flex">
-          <div className="flex items-center gap-2.5 px-6 py-5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-on-brand">
+        {/* Десктопный сайдбар — плавающая «стеклянная» панель, сворачивается в полосу иконок */}
+        <aside
+          className={`fixed inset-y-3 left-3 z-30 hidden flex-col rounded-[24px] border border-line/70 bg-surface/80 shadow-card backdrop-blur-xl transition-[width] lg:flex ${
+            collapsed ? "w-[76px]" : "w-60"
+          }`}
+        >
+          <div
+            className={`flex items-center py-5 ${collapsed ? "flex-col gap-3 px-2" : "gap-2.5 px-5"}`}
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-brand text-on-brand shadow-card">
               <Zap size={18} aria-hidden />
             </span>
-            <span className="text-lg font-semibold tracking-tight">Nasiya</span>
+            {!collapsed && (
+              <span className="flex-1 text-lg font-semibold tracking-tight">Nasiya</span>
+            )}
+            <button
+              onClick={toggleCollapsed}
+              title={collapsed ? "Развернуть меню" : "Свернуть меню"}
+              aria-label={collapsed ? "Развернуть меню" : "Свернуть меню"}
+              aria-expanded={!collapsed}
+              className="rounded-[10px] p-1.5 text-mute transition-colors hover:bg-canvas hover:text-ink"
+            >
+              {collapsed ? (
+                <PanelLeftOpen size={17} aria-hidden />
+              ) : (
+                <PanelLeftClose size={17} aria-hidden />
+              )}
+            </button>
           </div>
-          <SidebarNav pathname={pathname} onNavigate={() => setOpen(false)} />
-          <UserFooter />
+          <SidebarNav
+            pathname={pathname}
+            onNavigate={() => setOpen(false)}
+            collapsed={collapsed}
+          />
+          <UserFooter collapsed={collapsed} />
         </aside>
 
         {/* Мобильная шторка */}
@@ -207,9 +309,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <div className="flex min-w-0 flex-1 flex-col lg:pl-60">
+        <div
+          className={`flex min-w-0 flex-1 flex-col transition-[padding] ${
+            collapsed ? "lg:pl-[88px]" : "lg:pl-[252px]"
+          }`}
+        >
           {/* Мобильная шапка */}
-          <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-surface px-4 py-3 lg:hidden">
+          <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line/70 bg-surface/80 px-4 py-3 backdrop-blur-xl lg:hidden">
             <button
               onClick={() => setOpen(true)}
               aria-label="Открыть меню"

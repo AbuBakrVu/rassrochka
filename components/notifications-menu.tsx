@@ -62,7 +62,7 @@ export default function NotificationsMenu() {
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label={`Уведомления${unread ? ` — есть новые (${items.length})` : ""}`}
-        className="relative rounded-[10px] border border-line bg-surface p-2.5 text-mute hover:text-ink"
+        className="relative rounded-full border border-line/70 bg-surface/80 p-2.5 text-mute shadow-card backdrop-blur-xl hover:text-ink"
       >
         <Bell size={17} />
         {unread && (
