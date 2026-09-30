@@ -21,8 +21,6 @@ import {
   LogOut,
   ShieldAlert,
   ScrollText,
-  PanelLeftClose,
-  PanelLeftOpen,
 } from "lucide-react";
 import CommandPalette from "@/components/command-palette";
 import ThemeToggle from "@/components/theme-toggle";
@@ -61,55 +59,55 @@ function allowedForAccountant(pathname: string): boolean {
   return ACCOUNTANT_ALLOWED.some((href) => pathname.startsWith(href));
 }
 
-function SidebarNav({
-  pathname,
-  onNavigate,
-  collapsed = false,
-}: {
-  pathname: string;
-  onNavigate: () => void;
-  /** Узкая полоса только с иконками; подпись — всплывающей подсказкой. */
-  collapsed?: boolean;
-}) {
+function useNavItems() {
   const { user, hiddenNavItems } = useData();
-  const items = nav
+  return nav
     .filter((n) => user.role !== "accountant" || allowedForAccountant(n.href))
     .filter((n) => !n.adminOnly || user.role === "admin")
     .filter((n) => !hiddenNavItems.includes(n.href));
+}
+
+const isActive = (href: string, pathname: string) =>
+  href === "/" ? pathname === "/" : pathname.startsWith(href);
+
+/**
+ * Десктопное меню — тёмная полоса иконок (как «Dashboards V2»). Активный
+ * пункт — светлая вкладка цвета фона страницы, которая «врезается» в полосу
+ * и сливается с контентом; вогнутые скругления над и под ней — радиальные
+ * градиенты в ::before/::after. Подписи — всплывающими подсказками.
+ */
+function RailNav({ pathname }: { pathname: string }) {
+  const items = useNavItems();
 
   return (
-    <nav
-      className={`flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto ${collapsed ? "items-center px-2" : "px-3"}`}
-      aria-label="Основные разделы"
-    >
+    <nav className="flex flex-1 flex-col gap-1.5 py-2" aria-label="Основные разделы">
       {items.map(({ href, label, icon: Icon }) => {
-        const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+        const active = isActive(href, pathname);
         return (
           <Link
             key={href}
             href={href}
-            onClick={onNavigate}
             aria-current={active ? "page" : undefined}
-            aria-label={collapsed ? label : undefined}
-            className={`group relative flex items-center rounded-[14px] text-sm transition-colors ${
-              collapsed ? "h-11 w-11 shrink-0 justify-center" : "gap-3 px-3 py-2.5"
-            } ${
+            aria-label={label}
+            className={`group relative flex h-11 shrink-0 items-center transition-colors ${
               active
-                ? "bg-brand font-medium text-on-brand shadow-card"
-                : "text-mute hover:bg-brand-soft hover:text-brand-deep"
+                ? "ml-3 rounded-l-[16px] bg-canvas pl-[7px] text-brand before:pointer-events-none before:absolute before:-top-4 before:right-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_0_0,transparent_15.5px,var(--color-canvas)_16px)] after:pointer-events-none after:absolute after:-bottom-4 after:right-0 after:h-4 after:w-4 after:bg-[radial-gradient(circle_at_0_100%,transparent_15.5px,var(--color-canvas)_16px)]"
+                : "mx-auto w-11 justify-center rounded-[14px] text-rail-mute hover:bg-rail-hover hover:text-rail-fg"
             }`}
           >
-            <Icon size={18} strokeWidth={1.75} aria-hidden />
-            {collapsed ? (
-              <span
-                role="tooltip"
-                className="pointer-events-none absolute left-full z-50 ml-3 hidden rounded-[10px] bg-ink px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-canvas shadow-pop group-hover:block group-focus-visible:block"
-              >
-                {label}
-              </span>
-            ) : (
-              label
-            )}
+            <span
+              className={`flex h-9 w-9 items-center justify-center rounded-[12px] ${
+                active ? "bg-brand text-on-brand shadow-card" : ""
+              }`}
+            >
+              <Icon size={18} strokeWidth={1.9} aria-hidden />
+            </span>
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute left-full z-50 ml-3 hidden rounded-[10px] bg-ink px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-canvas shadow-pop group-hover:block group-focus-visible:block"
+            >
+              {label}
+            </span>
           </Link>
         );
       })}
@@ -117,15 +115,33 @@ function SidebarNav({
   );
 }
 
-// Свёрнутое меню — личная настройка, в браузере сотрудника
-const COLLAPSED_KEY = "nav-collapsed";
+/** Мобильная шторка — полный список с подписями. */
+function DrawerNav({ pathname, onNavigate }: { pathname: string; onNavigate: () => void }) {
+  const items = useNavItems();
 
-function readCollapsed(): boolean {
-  try {
-    return localStorage.getItem(COLLAPSED_KEY) === "1";
-  } catch {
-    return false;
-  }
+  return (
+    <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3" aria-label="Основные разделы">
+      {items.map(({ href, label, icon: Icon }) => {
+        const active = isActive(href, pathname);
+        return (
+          <Link
+            key={href}
+            href={href}
+            onClick={onNavigate}
+            aria-current={active ? "page" : undefined}
+            className={`flex items-center gap-3 rounded-[14px] px-3 py-2.5 text-sm transition-colors ${
+              active
+                ? "bg-brand font-medium text-on-brand shadow-card"
+                : "text-mute hover:bg-brand-soft hover:text-brand-deep"
+            }`}
+          >
+            <Icon size={18} strokeWidth={1.75} aria-hidden />
+            {label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
 }
 
 /** Если бухгалтер каким-то путём (прямая ссылка, старая закладка) попал на
@@ -143,38 +159,47 @@ function AccountantGate({ pathname }: { pathname: string }) {
   return null;
 }
 
-function UserFooter({ collapsed = false }: { collapsed?: boolean }) {
-  const { user, logout } = useData();
+function useSignOut() {
+  const { logout } = useData();
   const [busy, setBusy] = useState(false);
-
   const signOut = async () => {
     if (busy) return;
     setBusy(true);
     await logout();
   };
+  return { busy, signOut };
+}
 
-  if (collapsed) {
-    return (
-      <div className="mt-2 flex flex-col items-center gap-1 border-t border-line px-2 pt-3 pb-4">
-        <ThemeToggle />
-        <button
-          onClick={signOut}
-          disabled={busy}
-          title="Выйти"
-          aria-label="Выйти из аккаунта"
-          className="rounded-[10px] p-2 text-mute transition-colors hover:bg-canvas hover:text-danger disabled:opacity-50"
-        >
-          <LogOut size={17} aria-hidden />
-        </button>
-        <span
-          title={`${user.name} · ${user.email}`}
-          className="mt-1 flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-deep"
-        >
-          {user.initials}
-        </span>
-      </div>
-    );
-  }
+/** Низ тёмной полосы: тема, выход, аватар. */
+function RailFooter() {
+  const { user } = useData();
+  const { busy, signOut } = useSignOut();
+
+  return (
+    <div className="flex flex-col items-center gap-1 pt-2 pb-4">
+      <ThemeToggle className="text-rail-mute hover:bg-rail-hover hover:text-rail-fg" />
+      <button
+        onClick={signOut}
+        disabled={busy}
+        title="Выйти"
+        aria-label="Выйти из аккаунта"
+        className="rounded-[10px] p-2 text-rail-mute transition-colors hover:bg-rail-hover hover:text-danger disabled:opacity-50"
+      >
+        <LogOut size={17} aria-hidden />
+      </button>
+      <span
+        title={`${user.name} · ${user.email}`}
+        className="mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-canvas text-xs font-semibold text-ink"
+      >
+        {user.initials}
+      </span>
+    </div>
+  );
+}
+
+function DrawerFooter() {
+  const { user } = useData();
+  const { busy, signOut } = useSignOut();
 
   return (
     <div className="mt-2 flex items-center gap-2 border-t border-line px-4 py-3">
@@ -201,24 +226,7 @@ function UserFooter({ collapsed = false }: { collapsed?: boolean }) {
 
 export default function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
-  // Разметка меню впервые рисуется уже после загрузки данных (до этого
-  // DataProvider показывает скелет), поэтому прочитать localStorage прямо в
-  // начальном состоянии безопасно — серверного HTML меню нет, сверять нечего
-  const [collapsed, setCollapsed] = useState(() =>
-    typeof window === "undefined" ? false : readCollapsed()
-  );
   const pathname = usePathname();
-
-  const toggleCollapsed = () => {
-    setCollapsed((v) => {
-      try {
-        localStorage.setItem(COLLAPSED_KEY, v ? "0" : "1");
-      } catch {
-        // приватный режим — просто не запомнится
-      }
-      return !v;
-    });
-  };
 
   // Страницы без CRM-оболочки и БЕЗ общего стора:
   //   /pay/<токен> — кабинет заёмщика, грузит только свою сделку через
@@ -242,41 +250,17 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     <DataProvider>
       <AccountantGate pathname={pathname} />
       <div className="flex min-h-screen print:hidden">
-        {/* Десктопный сайдбар — плавающая «стеклянная» панель, сворачивается в полосу иконок */}
-        <aside
-          className={`fixed inset-y-3 left-3 z-30 hidden flex-col rounded-[24px] border border-line/70 bg-surface/80 shadow-card backdrop-blur-xl transition-[width] lg:flex ${
-            collapsed ? "w-[76px]" : "w-60"
-          }`}
-        >
-          <div
-            className={`flex items-center py-5 ${collapsed ? "flex-col gap-3 px-2" : "gap-2.5 px-5"}`}
+        {/* Десктопное меню — тёмная полоса иконок */}
+        <aside className="fixed inset-y-3 left-3 z-30 hidden w-[76px] flex-col rounded-[28px] bg-rail shadow-pop lg:flex [@media(max-height:760px)]:overflow-y-auto">
+          <Link
+            href="/"
+            aria-label="Nasiya — на главную"
+            className="mx-auto mt-5 mb-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-canvas text-brand"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-brand text-on-brand shadow-card">
-              <Zap size={18} aria-hidden />
-            </span>
-            {!collapsed && (
-              <span className="flex-1 text-lg font-semibold tracking-tight">Nasiya</span>
-            )}
-            <button
-              onClick={toggleCollapsed}
-              title={collapsed ? "Развернуть меню" : "Свернуть меню"}
-              aria-label={collapsed ? "Развернуть меню" : "Свернуть меню"}
-              aria-expanded={!collapsed}
-              className="rounded-[10px] p-1.5 text-mute transition-colors hover:bg-canvas hover:text-ink"
-            >
-              {collapsed ? (
-                <PanelLeftOpen size={17} aria-hidden />
-              ) : (
-                <PanelLeftClose size={17} aria-hidden />
-              )}
-            </button>
-          </div>
-          <SidebarNav
-            pathname={pathname}
-            onNavigate={() => setOpen(false)}
-            collapsed={collapsed}
-          />
-          <UserFooter collapsed={collapsed} />
+            <Zap size={18} aria-hidden />
+          </Link>
+          <RailNav pathname={pathname} />
+          <RailFooter />
         </aside>
 
         {/* Мобильная шторка */}
@@ -303,17 +287,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                   <X size={18} />
                 </button>
               </div>
-              <SidebarNav pathname={pathname} onNavigate={() => setOpen(false)} />
-              <UserFooter />
+              <DrawerNav pathname={pathname} onNavigate={() => setOpen(false)} />
+              <DrawerFooter />
             </aside>
           </div>
         )}
 
-        <div
-          className={`flex min-w-0 flex-1 flex-col transition-[padding] ${
-            collapsed ? "lg:pl-[88px]" : "lg:pl-[252px]"
-          }`}
-        >
+        <div className="flex min-w-0 flex-1 flex-col lg:pl-[88px]">
           {/* Мобильная шапка */}
           <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line/70 bg-surface/80 px-4 py-3 backdrop-blur-xl lg:hidden">
             <button

@@ -35,7 +35,12 @@ const META: Record<ThemeChoice, { label: string; icon: typeof Sun }> = {
   dark: { label: "Тёмная тема", icon: Moon },
 };
 
-export default function ThemeToggle() {
+export default function ThemeToggle({
+  className = "text-mute hover:bg-canvas hover:text-ink",
+}: {
+  /** Цвета кнопки — на тёмной полосе меню они свои. */
+  className?: string;
+}) {
   const [choice, setChoice] = useState<ThemeChoice>("system");
 
   // Читаем сохранённый выбор и заново ставим класс: в разработке React при
@@ -73,7 +78,7 @@ export default function ThemeToggle() {
       onClick={next}
       title={`${label} — нажмите, чтобы сменить`}
       aria-label={`Тема оформления: ${label.toLowerCase()}. Сменить`}
-      className="shrink-0 rounded-[10px] p-2 text-mute transition-colors hover:bg-canvas hover:text-ink"
+      className={`shrink-0 rounded-[10px] p-2 transition-colors ${className}`}
     >
       <Icon size={17} aria-hidden />
     </button>

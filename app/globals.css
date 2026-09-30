@@ -57,6 +57,11 @@
   --good-soft: oklch(0.96 0.04 155);
   --scrim: oklch(0.2153 0.0187 235.1251 / 0.35); /* затемнение под модалками */
   --scrollbar: oklch(0.85 0.01 235);
+  /* Тёмная полоса бокового меню — тёмная и в светлой теме */
+  --rail: oklch(0.2153 0.0187 235.1251);
+  --rail-fg: oklch(0.97 0.004 235);
+  --rail-mute: oklch(0.7 0.02 235);
+  --rail-hover: oklch(1 0 0 / 0.08);
 }
 
 /* Тёмные значения — только на экране: печать (договор, квитанция) всегда
@@ -107,6 +112,8 @@
     --good-soft: oklch(0.3 0.06 155);
     --scrim: oklch(0 0 0 / 0.55);
     --scrollbar: oklch(0.4 0.02 235);
+    --rail: oklch(0.2848 0.023 235.6578); /* светлее фона, чтобы полоса читалась */
+    --rail-mute: oklch(0.72 0.02 235);
     color-scheme: dark;
   }
 }
@@ -130,6 +137,10 @@
   --color-good-soft: var(--good-soft);
   --color-lane: var(--lane);
   --color-scrim: var(--scrim);
+  --color-rail: var(--rail);
+  --color-rail-fg: var(--rail-fg);
+  --color-rail-mute: var(--rail-mute);
+  --color-rail-hover: var(--rail-hover);
   --shadow-card: var(--shadow-sm);
   --shadow-pop: var(--shadow-lg);
   --radius-card: var(--radius);
@@ -190,7 +201,7 @@
    в тёмном режиме пятна тоже тёмные. */
 body {
   background:
-    radial-gradient(60rem 40rem at 0% 0%, color-mix(in oklch, var(--primary) 10%, transparent), transparent 70%),
+    radial-gradient(60rem 40rem at 35% 0%, color-mix(in oklch, var(--primary) 10%, transparent), transparent 70%),
     radial-gradient(50rem 36rem at 100% 10%, color-mix(in oklch, var(--accent) 9%, transparent), transparent 70%),
     radial-gradient(56rem 40rem at 60% 100%, color-mix(in oklch, var(--chart-4) 8%, transparent), transparent 70%),
     var(--color-canvas);
