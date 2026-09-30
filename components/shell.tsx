@@ -70,11 +70,17 @@ function useNavItems() {
 const isActive = (href: string, pathname: string) =>
   href === "/" ? pathname === "/" : pathname.startsWith(href);
 
+/** Подпись в полосе меню: видна, только когда полоса раскрыта (наведение или клавиатура). */
+const railLabel =
+  "whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/rail:opacity-100 group-has-[:focus-visible]/rail:opacity-100";
+
 /**
- * Десктопное меню — тёмная полоса иконок (как «Dashboards V2»). Активный
- * пункт — светлая вкладка цвета фона страницы, которая «врезается» в полосу
- * и сливается с контентом; вогнутые скругления над и под ней — радиальные
- * градиенты в ::before/::after. Подписи — всплывающими подсказками.
+ * Десктопное меню — тёмная полоса иконок (как «Dashboards V2»), которая при
+ * наведении раскрывается поверх контента и показывает подписи. В узком виде
+ * активный пункт — светлая вкладка цвета фона, «врезанная» в полосу
+ * (вогнутые скругления — радиальные градиенты в ::before/::after); в
+ * раскрытом — светлая плашка внутри панели, потому что край панели тогда
+ * лежит уже над контентом, а не над фоном.
  */
 function RailNav({ pathname }: { pathname: string }) {
   const items = useNavItems();
@@ -88,26 +94,20 @@ function RailNav({ pathname }: { pathname: string }) {
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
-            aria-label={label}
-            className={`group relative flex h-11 shrink-0 items-center transition-colors ${
+            className={`relative flex h-11 shrink-0 items-center gap-3 text-sm transition-colors ${
               active
-                ? "ml-3 rounded-l-[16px] bg-canvas pl-[7px] text-brand before:pointer-events-none before:absolute before:-top-4 before:right-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_0_0,transparent_15.5px,var(--color-canvas)_16px)] after:pointer-events-none after:absolute after:-bottom-4 after:right-0 after:h-4 after:w-4 after:bg-[radial-gradient(circle_at_0_100%,transparent_15.5px,var(--color-canvas)_16px)]"
-                : "mx-auto w-11 justify-center rounded-[14px] text-rail-mute hover:bg-rail-hover hover:text-rail-fg"
+                ? "ml-3 rounded-l-[16px] bg-canvas pl-2 font-medium text-ink before:pointer-events-none before:absolute before:-top-4 before:right-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_0_0,transparent_15.5px,var(--color-canvas)_16px)] after:pointer-events-none after:absolute after:-bottom-4 after:right-0 after:h-4 after:w-4 after:bg-[radial-gradient(circle_at_0_100%,transparent_15.5px,var(--color-canvas)_16px)] group-hover/rail:mr-3 group-hover/rail:rounded-[16px] group-hover/rail:before:hidden group-hover/rail:after:hidden group-has-[:focus-visible]/rail:mr-3 group-has-[:focus-visible]/rail:rounded-[16px] group-has-[:focus-visible]/rail:before:hidden group-has-[:focus-visible]/rail:after:hidden"
+                : "mx-4 rounded-[14px] px-1 text-rail-mute hover:bg-rail-hover hover:text-rail-fg"
             }`}
           >
             <span
-              className={`flex h-9 w-9 items-center justify-center rounded-[12px] ${
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] ${
                 active ? "bg-brand text-on-brand shadow-card" : ""
               }`}
             >
               <Icon size={18} strokeWidth={1.9} aria-hidden />
             </span>
-            <span
-              role="tooltip"
-              className="pointer-events-none absolute left-full z-50 ml-3 hidden rounded-[10px] bg-ink px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-canvas shadow-pop group-hover:block group-focus-visible:block"
-            >
-              {label}
-            </span>
+            <span className={railLabel}>{label}</span>
           </Link>
         );
       })}
@@ -170,29 +170,43 @@ function useSignOut() {
   return { busy, signOut };
 }
 
-/** Низ тёмной полосы: тема, выход, аватар. */
+/** Низ тёмной полосы: тема, выход, аватар — с подписями в раскрытом виде. */
 function RailFooter() {
   const { user } = useData();
   const { busy, signOut } = useSignOut();
 
   return (
-    <div className="flex flex-col items-center gap-1 pt-2 pb-4">
-      <ThemeToggle className="text-rail-mute hover:bg-rail-hover hover:text-rail-fg" />
+    <div className="flex flex-col gap-1 px-4 pt-2 pb-4">
+      {/* Иконки подвала — в тех же 36px-ячейках, что и пункты меню, чтобы
+          иконки и подписи стояли на одной линии с разделами */}
+      <div className="flex items-center gap-3 px-1 text-sm text-rail-mute">
+        <span className="flex w-9 shrink-0 justify-center">
+          <ThemeToggle className="text-rail-mute hover:bg-rail-hover hover:text-rail-fg" />
+        </span>
+        <span className={railLabel} aria-hidden>
+          Тема оформления
+        </span>
+      </div>
       <button
         onClick={signOut}
         disabled={busy}
-        title="Выйти"
         aria-label="Выйти из аккаунта"
-        className="rounded-[10px] p-2 text-rail-mute transition-colors hover:bg-rail-hover hover:text-danger disabled:opacity-50"
+        className="flex h-10 items-center gap-3 rounded-[14px] px-1 text-sm text-rail-mute transition-colors hover:bg-rail-hover hover:text-danger disabled:opacity-50"
       >
-        <LogOut size={17} aria-hidden />
+        <span className="flex w-9 shrink-0 justify-center">
+          <LogOut size={17} aria-hidden />
+        </span>
+        <span className={railLabel}>Выйти</span>
       </button>
-      <span
-        title={`${user.name} · ${user.email}`}
-        className="mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-canvas text-xs font-semibold text-ink"
-      >
-        {user.initials}
-      </span>
+      <div className="mt-1 flex items-center gap-3 pl-0.5">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-canvas text-xs font-semibold text-ink">
+          {user.initials}
+        </span>
+        <span className={`min-w-0 ${railLabel}`}>
+          <span className="block truncate text-sm font-medium text-rail-fg">{user.name}</span>
+          <span className="block truncate text-xs text-rail-mute">{user.email}</span>
+        </span>
+      </div>
     </div>
   );
 }
@@ -250,14 +264,20 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     <DataProvider>
       <AccountantGate pathname={pathname} />
       <div className="flex min-h-screen print:hidden">
-        {/* Десктопное меню — тёмная полоса иконок */}
-        <aside className="fixed inset-y-3 left-3 z-30 hidden w-[76px] flex-col rounded-[28px] bg-rail shadow-pop lg:flex [@media(max-height:760px)]:overflow-y-auto">
+        {/* Десктопное меню — тёмная полоса иконок, при наведении раскрывается
+            поверх контента (контент не сдвигается). Небольшая задержка на
+            раскрытие — чтобы меню не «выпрыгивало», когда курсор просто
+            пересекает полосу. С клавиатуры раскрывается по Tab. */}
+        <aside className="group/rail fixed inset-y-3 left-3 z-40 hidden w-[76px] flex-col overflow-hidden rounded-[28px] bg-rail shadow-pop transition-[width] delay-0 duration-200 ease-out hover:w-60 hover:delay-150 has-[:focus-visible]:w-60 lg:flex [@media(max-height:760px)]:overflow-y-auto">
           <Link
             href="/"
             aria-label="Nasiya — на главную"
-            className="mx-auto mt-5 mb-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-canvas text-brand"
+            className="mx-4 mt-5 mb-4 flex h-11 shrink-0 items-center gap-3 rounded-full"
           >
-            <Zap size={18} aria-hidden />
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-canvas text-brand">
+              <Zap size={18} aria-hidden />
+            </span>
+            <span className={`text-lg font-semibold tracking-tight text-rail-fg ${railLabel}`}>Nasiya</span>
           </Link>
           <RailNav pathname={pathname} />
           <RailFooter />
