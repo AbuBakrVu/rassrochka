@@ -96,6 +96,31 @@ if command -v ufw >/dev/null 2>&1; then
   ufw --force enable >/dev/null
 fi
 
+# Защита от перебора паролей SSH и автоматические обновления безопасности.
+# Раньше это настраивалось руками и пропало при переустановке сервера.
+if command -v apt-get >/dev/null 2>&1; then
+  echo "→ Ставлю fail2ban и автообновления безопасности"
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq fail2ban unattended-upgrades >/dev/null
+  mkdir -p /etc/fail2ban/jail.d
+  cat > /etc/fail2ban/jail.d/nasiya.local <<'JAIL'
+# 5 неудачных входов по SSH за 10 минут — бан на час, повторный — дольше (до недели)
+[sshd]
+enabled = true
+maxretry = 5
+findtime = 10m
+bantime = 1h
+bantime.increment = true
+bantime.maxtime = 1w
+JAIL
+  systemctl enable fail2ban >/dev/null 2>&1 || true
+  systemctl restart fail2ban >/dev/null 2>&1 || true
+  cat > /etc/apt/apt.conf.d/20auto-upgrades <<'APT'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT
+fi
+
 # ── .env ──────────────────────────────────────────────────────────────
 
 echo "→ Пишу .env"
@@ -144,8 +169,8 @@ echo "  Логин       $ADMIN_EMAIL"
 echo "───────────────────────────────────────────────"
 echo
 echo "Дальше:"
-echo "  ./nasiya status    — проверить состояние"
-echo "  ./nasiya settings  — сменить домен, почту или пароль"
-echo "  ./nasiya update    — обновить код из git"
-echo
-echo "Не забудьте настроить резервные копии — см. DEPLOY.md §5."
+echo "  ./nasiya backup-setup    — резервные копии в облако (обязательно)"
+echo "  ./nasiya restore latest  — перенести данные со старого сервера"
+echo "  ./nasiya status          — проверить состояние"
+echo "  ./nasiya settings        — сменить домен, почту или пароль"
+echo "  ./nasiya update          — обновить код из git"

@@ -6,6 +6,9 @@
 #   ./nasiya settings    — сменить домен, почту или пароль сотрудника
 #   ./nasiya status       — проверить, что всё работает
 #   ./nasiya backup        — сделать резервную копию прямо сейчас
+#   ./nasiya backup-setup  — настроить копии в облако и расписание
+#   ./nasiya restore       — восстановить базу из копии
+#   ./nasiya deploy root@IP — с вашего компьютера: поставить на новый сервер
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
@@ -17,6 +20,9 @@ case "$cmd" in
   update)   exec bash scripts/update.sh "$@" ;;
   settings) exec bash scripts/settings.sh "$@" ;;
   status)   exec bash scripts/status.sh "$@" ;;
+  backup-setup) exec bash scripts/backup-setup.sh "$@" ;;
+  restore)  exec bash scripts/restore.sh "$@" ;;
+  deploy)   exec bash scripts/deploy.sh "$@" ;;
   backup)
     [ -f .env ] && set -a && . ./.env && set +a
     exec bash scripts/backup.sh "$@"
@@ -30,6 +36,11 @@ case "$cmd" in
   settings   сменить домен, e-mail для сертификатов, пароль сотрудника
   status     проверить состояние сервисов и сайта
   backup     запустить резервное копирование прямо сейчас
+  backup-setup  настроить копии в облако, шифрование и расписание
+  restore    восстановить базу компании из копии (latest — самую свежую)
+
+С вашего компьютера:
+  deploy root@<IP>  поставить на новый сервер одной командой
 EOF
     exit 1
     ;;
