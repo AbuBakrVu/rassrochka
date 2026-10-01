@@ -11,6 +11,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
+import AnalyticsTabs from "@/components/analytics-tabs";
 import { stages, paidCount, dealMargin, type Deal } from "@/lib/data";
 import { scheduleForDeal, money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
@@ -146,7 +147,8 @@ export default function AnalyticsPage() {
         title="Аналитика"
         subtitle="Воронка, отказы и нагрузка по сотрудникам"
       />
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8">
+      <AnalyticsTabs />
+      <div className="mx-auto max-w-6xl px-4 py-5 sm:px-8">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {kpis.map(({ label, value, note, icon: Icon }) => (
             <Card key={label} className="p-5">

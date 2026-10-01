@@ -45,6 +45,7 @@ const ACTION_LABEL: Record<string, string> = {
   "cash.adjustment": "Ручная операция",
   "client.create": "Новый клиент",
   "client.blacklist": "Чёрный список",
+  "client.limit": "Лимит клиента",
   "employee.create": "Новый сотрудник",
   "employee.update": "Правка сотрудника",
   "coinvestor.create": "Новый соинвестор",
@@ -54,6 +55,7 @@ const ACTION_LABEL: Record<string, string> = {
   "coinvestor.reinvest": "Реинвестирование",
   "coinvestor.capital": "Капитал соинвестора",
   "settings.nav": "Разделы меню",
+  "settings.credit": "Базовый лимит",
 };
 
 // Действия, на которые владельцу стоит смотреть в первую очередь

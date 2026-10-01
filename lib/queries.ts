@@ -73,6 +73,7 @@ interface ClientRow extends Record<string, unknown> {
   blacklisted_at: Date | null;
   blacklist_reason: string | null;
   portal_token: string;
+  credit_limit: number | null;
 }
 
 interface CashRow extends Record<string, unknown> {
@@ -264,6 +265,9 @@ function toClient(row: ClientRow, deals: Deal[], today: string): Client {
       : {}),
     ...(row.blacklist_reason ? { blacklistReason: row.blacklist_reason } : {}),
     portalToken: row.portal_token,
+    ...(row.credit_limit !== null && row.credit_limit !== undefined
+      ? { creditLimit: Number(row.credit_limit) }
+      : {}),
   };
 }
 
@@ -317,7 +321,7 @@ export interface Bootstrap {
   coinvestorProfitTx: CoinvestorProfitTx[];
   templates: MessageTemplate[];
   savedFilters: SavedFilter[];
-  settings: { cashOpeningBalance: number; hiddenNavItems: string[] };
+  settings: { cashOpeningBalance: number; hiddenNavItems: string[]; clientDefaultLimit: number };
 }
 
 function toCapitalTx(row: CoinvestorCapitalRow): CoinvestorCapitalTx {
@@ -448,6 +452,7 @@ export async function loadBootstrap(
 
   const opening = settingRows.find((s) => s.key === "cash_opening_balance");
   const hiddenNav = settingRows.find((s) => s.key === "hidden_nav_items");
+  const defaultLimit = settingRows.find((s) => s.key === "client_default_limit");
 
   return {
     user: currentUser,
@@ -492,6 +497,8 @@ export async function loadBootstrap(
     settings: {
       cashOpeningBalance: Number(opening?.value ?? 0),
       hiddenNavItems: Array.isArray(hiddenNav?.value) ? (hiddenNav.value as string[]) : [],
+      // Ключа нет только до миграции 018 — тогда лимиты выключены
+      clientDefaultLimit: Number(defaultLimit?.value ?? 0),
     },
   };
 }
@@ -559,6 +566,29 @@ export async function createClient(
   );
   if (!row) throw new Error("Клиент не создан");
   return toClient(row, [], todayIso());
+}
+
+/** Ручной лимит клиента; null возвращает автоматический расчёт. */
+export async function setClientCreditLimit(
+  dbName: string,
+  clientId: string,
+  limit: number | null
+): Promise<void> {
+  const row = await queryOne<{ id: string }>(
+    dbName,
+    "update clients set credit_limit = $2 where id = $1 returning id",
+    [clientId, limit]
+  );
+  if (!row) throw new Error(`Клиент ${clientId} не найден`);
+}
+
+export async function setClientDefaultLimit(dbName: string, limit: number): Promise<void> {
+  await query(
+    dbName,
+    `insert into settings (key, value) values ('client_default_limit', $1::jsonb)
+     on conflict (key) do update set value = excluded.value`,
+    [JSON.stringify(limit)]
+  );
 }
 
 export async function setClientBlacklisted(

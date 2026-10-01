@@ -25,9 +25,13 @@ export async function POST(request: Request) {
         guarantorIds,
         downPayment: optionalNum(body, "downPayment", { min: 0, max: 1e9 }),
       });
+      // Лимит клиента считается в браузере (lib/credit.ts) и только
+      // предупреждает — флаг нужен, чтобы владелец видел такие сделки в журнале
+      const overLimit = (body as { overLimit?: unknown })?.overLimit === true;
       await audit(
         tenant.dbName, user.id, "deal.create", deal.id,
-        `Создана сделка ${deal.id} · ${deal.client} · ${deal.product} на ${rub(deal.amount)}, ${deal.months} мес.`
+        `Создана сделка ${deal.id} · ${deal.client} · ${deal.product} на ${rub(deal.amount)}, ${deal.months} мес.` +
+          (overLimit ? " · сверх лимита клиента" : "")
       );
       return deal;
     },

@@ -20,6 +20,7 @@ export type AuditAction =
   | "cash.adjustment"
   | "client.create"
   | "client.blacklist"
+  | "client.limit"
   | "employee.create"
   | "employee.update"
   | "coinvestor.create"
@@ -28,7 +29,8 @@ export type AuditAction =
   | "coinvestor.payout"
   | "coinvestor.reinvest"
   | "coinvestor.capital"
-  | "settings.nav";
+  | "settings.nav"
+  | "settings.credit";
 
 export async function audit(
   dbName: string,

@@ -119,7 +119,12 @@ export interface RiskAssessment {
 
 // Простая прозрачная скоринговая модель: каждый фактор виден в reasons,
 // решение не должно выглядеть чёрным ящиком для менеджера.
-export function assessRisk(deals: Deal[], clientId: string): RiskAssessment {
+export function assessRisk(
+  deals: Deal[],
+  clientId: string,
+  /** Дисциплина платежей из lib/credit.ts — без неё оценка только по сделкам. */
+  punctuality?: { total: number; onTime: number; late: number; maxLateDays: number }
+): RiskAssessment {
   const list = dealsOfClient(deals, clientId);
   const closed = list.filter((d) => d.stage === "closed").length;
   const rejected = list.filter((d) => d.stage === "rejected").length;
@@ -169,6 +174,30 @@ export function assessRisk(deals: Deal[], clientId: string): RiskAssessment {
     score -= rejected * 12;
     reasons.push({
       text: `${rejected} ${ruPlural(rejected, "отклонённая заявка", "отклонённые заявки", "отклонённых заявок")} в прошлом`,
+      positive: false,
+    });
+  }
+
+  // Дисциплину оцениваем, только когда платежей набралось хотя бы три:
+  // одна задержка из двух платежей ещё ничего не говорит о клиенте
+  if (punctuality && punctuality.total >= 3) {
+    const rate = punctuality.onTime / punctuality.total;
+    const text = `Вовремя ${punctuality.onTime} из ${punctuality.total} ${ruPlural(punctuality.total, "платежа", "платежей", "платежей")}`;
+    if (rate >= 0.9) {
+      score += 10;
+      reasons.push({ text, positive: true });
+    } else if (rate >= 0.7) {
+      score -= 5;
+      reasons.push({ text, positive: false });
+    } else {
+      score -= 15;
+      reasons.push({ text, positive: false });
+    }
+  }
+  if (punctuality && punctuality.maxLateDays > 30) {
+    score -= 10;
+    reasons.push({
+      text: `Была задержка платежа на ${punctuality.maxLateDays} ${ruPlural(punctuality.maxLateDays, "день", "дня", "дней")}`,
       positive: false,
     });
   }
@@ -349,6 +378,8 @@ export interface Client {
   blacklistReason?: string;
   /** Случайный токен для /pay/<token> — один на клиента, покрывает все его сделки. */
   portalToken: string;
+  /** Лимит, заданный администратором вручную; нет — считается автоматически (lib/credit.ts). */
+  creditLimit?: number;
 }
 
 export const clientById = (clients: Client[], id: string) =>

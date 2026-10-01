@@ -137,6 +137,8 @@ interface Snapshot {
   savedFilters: SavedFilter[];
   cashOpeningBalance: number;
   hiddenNavItems: string[];
+  /** Базовый лимит клиента без истории; 0 — автоматические лимиты выключены. */
+  clientDefaultLimit: number;
 }
 
 const EMPTY: Snapshot = {
@@ -154,6 +156,7 @@ const EMPTY: Snapshot = {
   savedFilters: [],
   cashOpeningBalance: 0,
   hiddenNavItems: [],
+  clientDefaultLimit: 0,
 };
 
 export interface NewDealInput {
@@ -170,6 +173,8 @@ export interface NewDealInput {
   city?: string;
   guarantorIds?: string[];
   downPayment?: number;
+  /** Менеджер подтвердил оформление сверх лимита клиента — пишется в журнал. */
+  overLimit?: boolean;
 }
 
 export interface NewClientInput {
@@ -280,6 +285,8 @@ interface DataContextValue extends Snapshot {
   updateEmployee: (id: number, input: UpdateEmployeeInput) => Promise<void>;
   setEmployeeActive: (id: number, active: boolean) => Promise<void>;
   setHiddenNavItems: (hrefs: string[]) => Promise<void>;
+  setClientDefaultLimit: (limit: number) => Promise<void>;
+  setClientCreditLimit: (clientId: string, limit: number | null) => Promise<void>;
   logout: () => Promise<void>;
   addClient: (input: NewClientInput) => Promise<Client>;
   setClientBlacklisted: (
@@ -353,8 +360,9 @@ async function api<T>(path: string, body?: unknown, method?: string): Promise<T>
   return res.json() as Promise<T>;
 }
 
-interface BootstrapResponse extends Omit<Snapshot, "cashOpeningBalance" | "hiddenNavItems"> {
-  settings: { cashOpeningBalance: number; hiddenNavItems: string[] };
+interface BootstrapResponse
+  extends Omit<Snapshot, "cashOpeningBalance" | "hiddenNavItems" | "clientDefaultLimit"> {
+  settings: { cashOpeningBalance: number; hiddenNavItems: string[]; clientDefaultLimit?: number };
 }
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
@@ -381,6 +389,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       savedFilters: data.savedFilters,
       cashOpeningBalance: data.settings.cashOpeningBalance,
       hiddenNavItems: data.settings.hiddenNavItems,
+      clientDefaultLimit: data.settings.clientDefaultLimit ?? 0,
     });
   }, []);
 
@@ -422,6 +431,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         description: input.description,
         category: input.category,
         city: input.city,
+        overLimit: input.overLimit,
         guarantorIds: input.guarantorIds,
         downPayment: input.downPayment,
       });
@@ -674,6 +684,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const setClientDefaultLimit = useCallback(
+    async (limit: number) => {
+      await api("/api/settings/credit", { defaultLimit: limit }, "PATCH");
+      await load();
+    },
+    [load]
+  );
+
+  const setClientCreditLimit = useCallback(
+    async (clientId: string, limit: number | null) => {
+      await api(`/api/clients/${encodeURIComponent(clientId)}/limit`, { limit }, "PATCH");
+      await load();
+    },
+    [load]
+  );
+
   const bulkUpdateDeals = useCallback(
     async (
       ids: string[],
@@ -738,6 +764,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updateEmployee,
       setEmployeeActive,
       setHiddenNavItems,
+      setClientDefaultLimit,
+      setClientCreditLimit,
       bulkUpdateDeals,
       saveFilter,
       deleteFilter,
@@ -749,7 +777,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,
      addEmployee, updateEmployee, setEmployeeActive, setHiddenNavItems,
-     bulkUpdateDeals, saveFilter, deleteFilter, logout, refresh]
+     setClientDefaultLimit, setClientCreditLimit, bulkUpdateDeals, saveFilter, deleteFilter, logout, refresh]
   );
 
   // Пока состояние не загружено, страницы не рендерим: иначе каждая из них

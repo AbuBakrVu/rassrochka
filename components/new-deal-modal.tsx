@@ -35,6 +35,7 @@ import { todayIso } from "@/lib/derive";
 import { useData } from "@/lib/store";
 import { cashBalance } from "@/lib/cash";
 import NewClientModal from "@/components/new-client-modal";
+import { ClientCreditSummary, isOverLimit, useClientCredit } from "@/components/client-credit";
 
 const steps = [
   { key: "product", title: "Товар", icon: Package },
@@ -172,6 +173,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState<Client | null>(null);
   const [guarantors, setGuarantors] = useState<{ id: string; name: string }[]>([]);
+  const [overLimitAck, setOverLimitAck] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -215,10 +217,13 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
 
   const firstDate = firstPayment || (dealDate ? addMonth(dealDate) : "");
 
+  const credit = useClientCredit(client);
+  const overLimit = isOverLimit(credit, Math.round(calc.financed));
+
   const stepReady = [
     name.trim() !== "" && category !== "" && city !== "",
     calc.base > 0 && months > 0 && dealDate !== "" && manager !== null,
-    client !== null,
+    client !== null && (!overLimit || overLimitAck),
     true,
   ];
 
@@ -255,6 +260,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
         city,
         guarantorIds: guarantors.map((g) => g.id),
         downPayment: calc.downSum > 0 ? Math.round(calc.downSum) : undefined,
+        overLimit: overLimit || undefined,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось создать сделку");
@@ -711,7 +717,10 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                           </p>
                         </div>
                         <button
-                          onClick={() => setClient(null)}
+                          onClick={() => {
+                            setClient(null);
+                            setOverLimitAck(false);
+                          }}
                           className="text-sm font-medium text-brand-deep hover:underline"
                         >
                           Заменить
@@ -728,6 +737,22 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                           )}
                         </div>
                       </div>
+                    )}
+                    {credit && (
+                      <ClientCreditSummary credit={credit} amount={Math.round(calc.financed)} />
+                    )}
+                    {overLimit && (
+                      <label className="mt-2 flex items-start gap-2.5 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={overLimitAck}
+                          onChange={(e) => setOverLimitAck(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 accent-[var(--color-brand)]"
+                        />
+                        <span>
+                          Оформить сверх лимита — отметка попадёт в журнал действий
+                        </span>
+                      </label>
                     )}
                     {!client && (
                       <>
@@ -1036,7 +1061,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                 : [
                     "Заполните название, категорию и город",
                     "Укажите закупочную цену и срок",
-                    "Выберите клиента",
+                    overLimit ? "Подтвердите оформление сверх лимита" : "Выберите клиента",
                     "",
                   ][step]
             )}
