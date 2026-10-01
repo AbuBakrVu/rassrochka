@@ -34,7 +34,7 @@ export function PageHeader({
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          <p className="mt-0.5 truncate text-sm text-mute">{subtitle}</p>
+          <p className="mt-0.5 line-clamp-2 text-sm text-mute sm:truncate">{subtitle}</p>
         </div>
         {searchPlaceholder && (
           <button
@@ -221,5 +221,43 @@ export function EmptyState({
 export function Skeleton({ className = "" }: { className?: string }) {
   return (
     <div className={`animate-pulse rounded-[10px] bg-line/60 ${className}`} />
+  );
+}
+
+/** Кольцо прогресса с подписью в центре — доля оплаченного графика и т.п. */
+export function ProgressRing({
+  pct,
+  size = 88,
+  stroke = 9,
+  tone = "brand",
+  children,
+}: {
+  pct: number;
+  size?: number;
+  stroke?: number;
+  tone?: "brand" | "good" | "danger";
+  children?: React.ReactNode;
+}) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const color =
+    tone === "danger" ? "var(--color-danger)" : tone === "good" ? "var(--color-good)" : "var(--color-brand)";
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox={`0 0 ${size} ${size}`} className="h-full w-full -rotate-90" aria-hidden>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-line)" strokeWidth={stroke} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={`${(c * Math.min(Math.max(pct, 0), 100)) / 100} ${c}`}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">{children}</div>
+    </div>
   );
 }

@@ -20,10 +20,10 @@ import {
   SearchX,
   ReceiptText,
 } from "lucide-react";
-import { Card, Badge, EmptyState } from "@/components/ui";
+import { Card, Badge, EmptyState, ProgressRing } from "@/components/ui";
 import DealActions from "@/components/deal-actions";
 import { useData, type Employee } from "@/lib/store";
-import { clientById, fmt, stages, paidCount, purchasePrice, type Deal } from "@/lib/data";
+import { clientById, fmt, stages, paidCount, purchasePrice, ruPlural, type Deal } from "@/lib/data";
 import { scheduleForDeal, money, longDate } from "@/lib/schedule";
 import { dealEvents } from "@/lib/events";
 import { reminderStageFor, pickReminderTemplate, buildReminderText } from "@/lib/reminders";
@@ -31,6 +31,7 @@ import { todayIso } from "@/lib/status";
 import CopyLinkButton from "@/components/copy-link";
 import DealPrint, { type PrintMode } from "@/components/deal-print";
 import { paymentTitle, receiptMessage, receiptPath } from "@/lib/receipts";
+import { computeProfit } from "@/lib/profit";
 
 export default function DealDetail({ id }: { id: string }) {
   const {
@@ -94,6 +95,16 @@ export default function DealDetail({ id }: { id: string }) {
   const finished = deal.stage === "closed" || deal.stage === "rejected";
   const openedLabel = longDate(new Date(deal.openedAt));
   const nextPayment = schedule.find((p) => p.status !== "paid");
+  const today = todayIso();
+  const daysToNext = nextPayment
+    ? Math.round(
+        (Date.parse(`${nextPayment.iso}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000
+      )
+    : null;
+  const paidPct = Math.round((paid / deal.months) * 100);
+  // Окупаемость по реальным записям кассы — та же модель, что на
+  // Аналитика → Доходность (lib/profit.ts)
+  const profit = computeProfit([deal], cash, [], []).deals[0];
 
   // Платёж в кассе по каждому оплаченному взносу — для квитанции.
   // Отменённые платежи (у которых есть запись-отмена) пропускаем.
@@ -199,13 +210,22 @@ export default function DealDetail({ id }: { id: string }) {
     }
   };
 
+  const countdown =
+    daysToNext === null
+      ? null
+      : daysToNext < 0
+        ? { text: `просрочка ${-daysToNext} ${ruPlural(-daysToNext, "день", "дня", "дней")}`, cls: "bg-danger-soft text-danger" }
+        : daysToNext === 0
+          ? { text: "сегодня", cls: "bg-warn-soft text-warn" }
+          : { text: `через ${daysToNext} ${ruPlural(daysToNext, "день", "дня", "дней")}`, cls: "bg-brand-soft text-brand-deep" };
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-8">
       {/* Хлебные крошки */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Link
           href="/deals"
-          className="flex items-center gap-1.5 rounded-[10px] border border-line bg-surface px-3.5 py-2 text-sm text-mute hover:text-ink"
+          className="flex items-center gap-1.5 rounded-full border border-line/70 bg-surface/85 px-4 py-2 text-sm text-mute shadow-card backdrop-blur-xl hover:text-ink"
         >
           <ArrowLeft size={15} aria-hidden /> Все сделки
         </Link>
@@ -214,124 +234,166 @@ export default function DealDetail({ id }: { id: string }) {
         </span>
       </div>
 
-      {/* Паспорт сделки */}
-      <Card className="p-5 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-4">
-            <span className="hidden h-14 w-14 shrink-0 items-center justify-center rounded-[14px] bg-brand-soft text-brand sm:flex">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_340px]">
+        {/* Паспорт сделки */}
+        <Card className="p-5 sm:p-6">
+          <div className="flex flex-wrap items-start gap-4">
+            <span className="hidden h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-brand-soft text-brand sm:flex">
               <Package size={24} aria-hidden />
             </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
-                  Сделка {deal.id}
-                </h1>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-mute">Сделка {deal.id}</span>
                 <Badge tone={deal.statusTone}>{deal.status}</Badge>
               </div>
+              <h1 className="mt-0.5 text-xl font-semibold tracking-tight sm:text-2xl">
+                {deal.product}
+              </h1>
               <p className="mt-1 text-sm text-mute">
-                {deal.product} · {fmt(deal.amount)} на {deal.months} мес ·
-                заключена {openedLabel} г.
+                <Link href={`/clients/${deal.clientId}`} className="font-medium text-ink hover:text-brand">
+                  {deal.client}
+                </Link>{" "}
+                · {deal.months} мес · заключена {openedLabel} г.
               </p>
               {deal.description && (
                 <p className="mt-1.5 text-sm text-ink">{deal.description}</p>
               )}
             </div>
+            {!finished && (
+              <button
+                onClick={() => setEditOpen(true)}
+                className="flex items-center gap-1.5 rounded-full border border-line px-4 py-2 text-sm font-medium text-mute hover:border-brand hover:text-brand-deep"
+              >
+                <Pencil size={15} aria-hidden />
+                <span className="hidden sm:inline">Редактировать</span>
+                <span className="sr-only sm:hidden">Редактировать сделку</span>
+              </button>
+            )}
           </div>
-          {!finished && (
-            <button
-              onClick={() => setEditOpen(true)}
-              className="flex items-center gap-1.5 rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
-            >
-              <Pencil size={15} aria-hidden /> Редактировать
-            </button>
-          )}
-        </div>
 
-        {/* Ключевые цифры */}
-        <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-5 sm:grid-cols-4">
-          {[
-            ["Сумма сделки", fmt(deal.amount), ""],
-            ["Месячный платёж", money(monthly), ""],
-            ["Оплачено", money(paidSum), "text-good"],
-            ["Остаток", money(remaining), ""],
-          ].map(([label, value, cls]) => (
-            <div key={label}>
-              <p className="text-sm text-mute">{label}</p>
-              <p className={`mt-0.5 text-lg font-semibold tracking-tight ${cls}`}>
-                {value}
+          <div className="mt-5 flex flex-col gap-5 border-t border-line pt-5 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-4">
+              <ProgressRing pct={paidPct} tone={deal.stage === "closed" ? "good" : "brand"}>
+                <span className="text-lg font-semibold tracking-tight">{paidPct}%</span>
+              </ProgressRing>
+              <div className="sm:hidden">
+                <p className="font-medium">
+                  {paid} из {deal.months} платежей
+                </p>
+                <p className="text-sm text-mute">оплачено по графику</p>
+              </div>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+                {[
+                  ["Сумма сделки", fmt(deal.amount), ""],
+                  ["Месячный платёж", money(monthly), ""],
+                  ["Оплачено", money(paidSum), "text-good"],
+                  ["Остаток", money(remaining), ""],
+                ].map(([label, value, cls]) => (
+                  <div key={label}>
+                    <p className="text-sm text-mute">{label}</p>
+                    <p className={`mt-0.5 text-lg font-semibold tracking-tight ${cls}`}>
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div
+                className="mt-4 flex gap-1"
+                role="progressbar"
+                aria-valuenow={paid}
+                aria-valuemin={0}
+                aria-valuemax={deal.months}
+                aria-label={`Оплачено ${paid} из ${deal.months} платежей`}
+              >
+                {schedule.map((p) => (
+                  <span
+                    key={p.n}
+                    title={`${p.n}. ${p.date} — ${money(p.amount)}`}
+                    className={`h-2 flex-1 rounded-full ${
+                      p.status === "paid"
+                        ? "bg-brand"
+                        : active && p.iso < today
+                          ? "bg-danger"
+                          : "bg-line"
+                    }`}
+                  />
+                ))}
+              </div>
+              <p className="mt-1.5 hidden text-xs text-mute sm:block">
+                {paid} из {deal.months} платежей
               </p>
             </div>
-          ))}
-        </div>
+          </div>
+        </Card>
 
-        {/* Сегментный прогресс */}
-        <div className="mt-5">
-          <div className="mb-2 flex items-baseline justify-between">
-            <p className="text-sm font-medium">
-              {paid} из {deal.months} платежей
+        {/* Следующий шаг — только пока по сделке есть что делать */}
+        {finished ? (
+          <Card className="flex flex-col items-start gap-3 p-5 sm:p-6">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-canvas text-mute">
+              <ShieldCheck size={20} aria-hidden />
+            </span>
+            <p className="font-semibold">
+              {deal.stage === "closed" ? "Сделка закрыта" : "Заявка отклонена"}
             </p>
             <p className="text-sm text-mute">
-              {Math.round((paid / deal.months) * 100)}% графика
+              {deal.stage === "closed"
+                ? `Все ${deal.months} платежей внесены, задолженности нет.`
+                : `${deal.nextStep}.`}
             </p>
-          </div>
-          <div
-            className="flex gap-1"
-            role="progressbar"
-            aria-valuenow={paid}
-            aria-valuemin={0}
-            aria-valuemax={deal.months}
-            aria-label="Прогресс платежей"
-          >
-            {schedule.map((p) => (
-              <span
-                key={p.n}
-                className={`h-2 flex-1 rounded-full ${
-                  p.status === "paid" ? "bg-brand" : "bg-line"
-                }`}
+          </Card>
+        ) : (
+          <Card className="flex flex-col p-5 sm:p-6">
+            <div className="flex items-center gap-2">
+              <CalendarDays
+                size={16}
+                className={daysToNext !== null && daysToNext < 0 ? "text-danger" : "text-brand"}
+                aria-hidden
               />
-            ))}
-          </div>
-        </div>
-      </Card>
-
-      {/* Следующий шаг — только пока по сделке есть что делать */}
-      {finished ? (
-        <div className="mt-4 flex flex-wrap items-center gap-4 rounded-card border border-line bg-surface px-5 py-4">
-          <ShieldCheck size={18} className="shrink-0 text-mute" aria-hidden />
-          <p className="text-sm text-mute">
-            {deal.stage === "closed"
-              ? `Сделка закрыта: все ${deal.months} платежей внесены, задолженности нет.`
-              : `Заявка отклонена. ${deal.nextStep}.`}
-          </p>
-        </div>
-      ) : (
-        <div className="mt-4 flex flex-wrap items-center gap-4 rounded-card border border-line bg-brand-soft px-5 py-4">
-          <CalendarDays size={18} className="shrink-0 text-brand" aria-hidden />
-          <div className="min-w-0 flex-1 basis-52">
-            <p className="text-sm font-medium text-brand-deep">Следующий шаг</p>
-            <p className="text-sm text-ink">
-              {deal.urgent
-                ? deal.nextStep
-                : nextPayment
-                  ? `Платёж ${money(nextPayment.amount)} — ${nextPayment.date} г.`
-                  : deal.nextStep}
-            </p>
-          </div>
-          <DealActions
-            dealId={deal.id}
-            clientName={deal.client}
-            remaining={remaining}
-            monthly={monthly}
-            canRestructure={active}
-            primaryLabel={active ? "Принять платёж" : "Продолжить работу"}
-            onPrimary={active ? () => acceptPayment(deal.id) : undefined}
-            onRestructure={async (input) => {
-              await restructureDeal(deal.id, input);
-            }}
-            onCloseEarly={active ? async () => { await closeDeal(deal.id); } : undefined}
-          />
-        </div>
-      )}
+              <p className="text-sm font-medium text-mute">
+                {active && nextPayment ? "Следующий платёж" : "Следующий шаг"}
+              </p>
+            </div>
+            {active && nextPayment ? (
+              <>
+                <p className="mt-2 text-3xl font-semibold tracking-tight">
+                  {money(nextPayment.amount)}
+                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-mute">
+                    {nextPayment.n}-й из {deal.months} · {nextPayment.date}
+                  </span>
+                  {countdown && (
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${countdown.cls}`}>
+                      {countdown.text}
+                    </span>
+                  )}
+                </div>
+                {deal.urgent && <p className="mt-2 text-sm text-danger">{deal.nextStep}</p>}
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-ink">{deal.nextStep}</p>
+            )}
+            <div className="mt-auto pt-5">
+              <DealActions
+                layout="stack"
+                dealId={deal.id}
+                clientName={deal.client}
+                remaining={remaining}
+                monthly={monthly}
+                canRestructure={active}
+                primaryLabel={active ? "Принять платёж" : "Продолжить работу"}
+                onPrimary={active ? () => acceptPayment(deal.id) : undefined}
+                onRestructure={async (input) => {
+                  await restructureDeal(deal.id, input);
+                }}
+                onCloseEarly={active ? async () => { await closeDeal(deal.id); } : undefined}
+              />
+            </div>
+          </Card>
+        )}
+      </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1fr_340px]">
         {/* Левая колонка */}
@@ -340,33 +402,82 @@ export default function DealDetail({ id }: { id: string }) {
           <Card className="p-5 sm:p-6">
             <h2 className="font-semibold">Экономика сделки</h2>
             <p className="mb-3 text-sm text-mute">
-              Из чего складывается итоговая сумма
+              Из чего складывается итоговая сумма и когда вернутся вложенные деньги
             </p>
-            <dl className="divide-y divide-line text-sm">
-              {[
-                ["Закупочная цена", money(purchase)],
-                [`Наценка рассрочки · ${deal.markupPct}%`, `+${money(markup)}`],
-                ["Итоговая цена для клиента", fmt(deal.amount + (deal.downPayment ?? 0))],
-                ...(deal.downPayment
-                  ? [
-                      ["Первоначальный взнос", `−${money(deal.downPayment)}`],
-                      ["Сумма в рассрочку", fmt(deal.amount)],
-                    ]
-                  : []),
-              ].map(([k, v]) => (
-                <div key={k} className="flex items-center justify-between py-2.5">
-                  <dt className="text-mute">{k}</dt>
-                  <dd className="font-medium">{v}</dd>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_260px]">
+              <dl className="divide-y divide-line text-sm">
+                {[
+                  ["Закупочная цена", money(purchase)],
+                  [`Наценка рассрочки · ${deal.markupPct}%`, `+${money(markup)}`],
+                  ["Итоговая цена для клиента", fmt(deal.amount + (deal.downPayment ?? 0))],
+                  ...(deal.downPayment
+                    ? [
+                        ["Первоначальный взнос", `−${money(deal.downPayment)}`],
+                        ["Сумма в рассрочку", fmt(deal.amount)],
+                      ]
+                    : []),
+                ].map(([k, v]) => (
+                  <div key={k} className="flex items-center justify-between py-2.5">
+                    <dt className="text-mute">{k}</dt>
+                    <dd className="font-medium">{v}</dd>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between py-2.5">
+                  <dt className="font-medium">Ваша прибыль по сделке</dt>
+                  <dd className="font-semibold text-good">{money(markup)}</dd>
                 </div>
-              ))}
-              <div className="flex items-center justify-between py-2.5">
-                <dt className="font-medium">Ваша прибыль по сделке</dt>
-                <dd className="font-semibold text-good">{money(markup)}</dd>
+              </dl>
+              <div className="rounded-[16px] bg-canvas/70 p-4">
+                <p className="text-sm font-medium">Окупаемость</p>
+                {profit ? (
+                  <>
+                    <div className="mt-3 flex items-center gap-3">
+                      <ProgressRing
+                        pct={profit.purchase ? (Math.max(profit.collected, 0) / profit.purchase) * 100 : 100}
+                        size={64}
+                        stroke={7}
+                        tone={profit.paybackDate ? "good" : "brand"}
+                      >
+                        <span className="text-xs font-semibold">
+                          {Math.min(Math.round((Math.max(profit.collected, 0) / (profit.purchase || 1)) * 100), 100)}%
+                        </span>
+                      </ProgressRing>
+                      <p className="text-sm text-mute">
+                        {profit.paybackDate
+                          ? "Закупка вернулась, дальше — чистая прибыль"
+                          : `Вернулось ${money(Math.max(profit.collected, 0))} из ${money(profit.purchase)}`}
+                      </p>
+                    </div>
+                    <dl className="mt-3 flex flex-col gap-1.5 text-sm">
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-mute">Прибыль получена</dt>
+                        <dd className="font-medium text-good">{money(profit.earned)}</dd>
+                      </div>
+                      {profit.paybackDays !== null && (
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-mute">
+                            {profit.paybackDate ? "Окупилась за" : "Окупится за"}
+                          </dt>
+                          <dd className="font-medium">
+                            {Math.max(Math.round(profit.paybackDays / 30), 1)} мес.
+                            {profit.paybackPlanned && " по графику"}
+                          </dd>
+                        </div>
+                      )}
+                      {profit.coinvestorShare > 0 && (
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-mute">Доля соинвесторов</dt>
+                          <dd className="font-medium">{money(profit.coinvestorShare)}</dd>
+                        </div>
+                      )}
+                    </dl>
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm text-mute">
+                    Посчитается, когда сделка будет выдана.
+                  </p>
+                )}
               </div>
-            </dl>
-            <div className="mt-2 rounded-[10px] bg-canvas px-3.5 py-2.5 text-sm text-mute">
-              Получено уже {money(Math.round((markup * paid) / deal.months))} —{" "}
-              {Math.round((paid / deal.months) * 100)}% от потенциальной прибыли
             </div>
           </Card>
 
@@ -383,12 +494,71 @@ export default function DealDetail({ id }: { id: string }) {
                 onClick={() => acceptPayment(deal.id)}
                 disabled={paid >= deal.months}
                 title="Принять ближайший платёж по графику"
-                className="rounded-[10px] border border-line px-3.5 py-2 text-sm font-medium text-mute transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-full border border-line px-4 py-2 text-sm font-medium text-mute transition-colors hover:border-brand hover:text-brand-deep disabled:cursor-not-allowed disabled:opacity-50"
               >
                 + Добавить платёж
               </button>
             </div>
-            <div className="mt-4 overflow-x-auto">
+            {/* Телефон: список вместо широкой таблицы */}
+            <ul className="mt-4 divide-y divide-line border-t border-line sm:hidden">
+              {schedule.map((p) => {
+                const late = p.status !== "paid" && active && p.iso < today;
+                return (
+                  <li
+                    key={p.n}
+                    className={`flex items-center gap-3 px-5 py-3 ${
+                      p.status === "due" && p.n === paid + 1 ? "bg-brand-soft/40" : ""
+                    }`}
+                  >
+                    <span
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                        p.status === "paid"
+                          ? "bg-good-soft text-good"
+                          : late
+                            ? "bg-danger-soft text-danger"
+                            : "bg-canvas text-mute"
+                      }`}
+                    >
+                      {p.status === "paid" ? <Check size={14} aria-label="Оплачен" /> : p.n}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{money(p.amount)}</p>
+                      <p className={`text-xs ${late ? "text-danger" : "text-mute"}`}>
+                        {p.date}
+                        {late ? " · просрочен" : p.status === "paid" ? " · оплачен" : ""}
+                      </p>
+                    </div>
+                    {p.status === "paid" && receiptByInstallment.has(p.n) && client && (
+                      <button
+                        onClick={() => sendReceipt(p.n)}
+                        aria-label={`Отправить квитанцию за платёж ${p.n}`}
+                        className="rounded-full border border-line p-2 text-mute hover:text-brand-deep"
+                      >
+                        <ReceiptText size={15} aria-hidden />
+                      </button>
+                    )}
+                    {user.role === "admin" && p.status === "paid" && p.n === paid && (
+                      <button
+                        onClick={undoPayment}
+                        disabled={undoing}
+                        className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-mute hover:text-danger disabled:opacity-50"
+                      >
+                        Отменить
+                      </button>
+                    )}
+                    {p.status !== "paid" && p.n === paid + 1 && (
+                      <button
+                        onClick={() => acceptPayment(deal.id)}
+                        className="rounded-full bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep"
+                      >
+                        Оплачен
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="mt-4 hidden overflow-x-auto sm:block">
               <table className="w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-xs text-mute">
@@ -404,7 +574,7 @@ export default function DealDetail({ id }: { id: string }) {
                   {schedule.map((p) => (
                     <tr
                       key={p.n}
-                      className={p.status === "due" && p.n === paid + 1 ? "bg-brand-soft/40" : ""}
+                      className={p.status === "due" && p.n === paid + 1 ? "bg-brand-soft/40" : "hover:bg-canvas/50"}
                     >
                       <td className="px-5 py-3 text-mute sm:px-6">{p.n}</td>
                       <td className="px-3 py-3 whitespace-nowrap">{p.date} г.</td>
@@ -415,9 +585,13 @@ export default function DealDetail({ id }: { id: string }) {
                         {money(p.remaining)}
                       </td>
                       <td className="px-3 py-3">
-                        <Badge tone={p.status === "paid" ? "green" : "gray"}>
-                          {p.status === "paid" ? "Оплачен" : "Ожидается"}
-                        </Badge>
+                        {p.status === "paid" ? (
+                          <Badge tone="green">Оплачен</Badge>
+                        ) : active && p.iso < today ? (
+                          <Badge tone="red">Просрочен</Badge>
+                        ) : (
+                          <Badge tone="gray">Ожидается</Badge>
+                        )}
                       </td>
                       <td className="px-5 py-3 text-right whitespace-nowrap sm:px-6">
                         {p.status === "paid" && receiptByInstallment.has(p.n) && client && (
@@ -485,7 +659,7 @@ export default function DealDetail({ id }: { id: string }) {
                 <button
                   onClick={remind}
                   disabled={templates.length === 0 || !client}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
                 >
                   <MessageCircle size={16} aria-hidden />
                   Напомнить об оплате

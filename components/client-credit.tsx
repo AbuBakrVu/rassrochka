@@ -137,13 +137,15 @@ export function ClientCreditCard({ client }: { client: Client }) {
             <dd className="font-medium">{money(credit.used)}</dd>
           </div>
           <div className="text-right">
-            <dt className="text-mute">Доступно</dt>
+            <dt className="text-mute">
+              {credit.available !== null && credit.available < 0 ? "Превышен на" : "Доступно"}
+            </dt>
             <dd
               className={`font-medium ${
                 credit.available !== null && credit.available < 0 ? "text-danger" : "text-good"
               }`}
             >
-              {credit.available === null ? "—" : money(credit.available)}
+              {credit.available === null ? "—" : money(Math.abs(credit.available))}
             </dd>
           </div>
         </dl>

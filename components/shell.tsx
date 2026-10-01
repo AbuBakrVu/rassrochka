@@ -21,6 +21,8 @@ import {
   LogOut,
   ShieldAlert,
   ScrollText,
+  Search,
+  MoreHorizontal,
 } from "lucide-react";
 import CommandPalette from "@/components/command-palette";
 import ThemeToggle from "@/components/theme-toggle";
@@ -140,6 +142,57 @@ function DrawerNav({ pathname, onNavigate }: { pathname: string; onNavigate: () 
           </Link>
         );
       })}
+    </nav>
+  );
+}
+
+// Нижняя панель на телефоне: самые частые разделы под большим пальцем,
+// остальное — в шторке по кнопке «Ещё»
+const TAB_PRIORITY = ["/", "/deals", "/clients", "/payments", "/cash", "/analytics"];
+
+function MobileTabBar({ pathname, onMore }: { pathname: string; onMore: () => void }) {
+  const items = useNavItems();
+  const tabs = TAB_PRIORITY.map((href) => items.find((n) => n.href === href))
+    .filter((n): n is (typeof items)[number] => !!n)
+    .slice(0, 4);
+  const moreActive = !tabs.some((t) => isActive(t.href, pathname));
+
+  const cell =
+    "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-[16px] py-1.5 text-[11px] font-medium transition-colors";
+  return (
+    <nav
+      aria-label="Быстрые разделы"
+      className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 flex gap-1 rounded-[24px] bg-rail p-1.5 shadow-pop lg:hidden print:hidden"
+    >
+      {tabs.map(({ href, label, icon: Icon }) => {
+        const active = isActive(href, pathname);
+        return (
+          <Link
+            key={href}
+            href={href}
+            aria-current={active ? "page" : undefined}
+            className={`${cell} ${active ? "bg-canvas text-ink" : "text-rail-mute hover:text-rail-fg"}`}
+          >
+            <span
+              className={`flex h-7 w-7 items-center justify-center rounded-full ${
+                active ? "bg-brand text-on-brand" : ""
+              }`}
+            >
+              <Icon size={17} aria-hidden />
+            </span>
+            <span className="max-w-full truncate">{label}</span>
+          </Link>
+        );
+      })}
+      <button
+        onClick={onMore}
+        className={`${cell} ${moreActive ? "bg-canvas text-ink" : "text-rail-mute hover:text-rail-fg"}`}
+      >
+        <span className="flex h-7 w-7 items-center justify-center rounded-full">
+          <MoreHorizontal size={17} aria-hidden />
+        </span>
+        Ещё
+      </button>
     </nav>
   );
 }
@@ -323,10 +376,24 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             >
               <Menu size={20} />
             </button>
-            <span className="font-semibold">Nasiya</span>
+            <span className="flex items-center gap-2 font-semibold">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand text-on-brand">
+                <Zap size={14} aria-hidden />
+              </span>
+              Nasiya
+            </span>
+            <button
+              onClick={() => window.dispatchEvent(new Event("open-command-palette"))}
+              aria-label="Поиск"
+              className="ml-auto rounded-full p-2 text-mute hover:bg-canvas hover:text-ink"
+            >
+              <Search size={19} aria-hidden />
+            </button>
           </header>
-          <main className="min-w-0 flex-1">{children}</main>
+          {/* Снизу на телефоне — место под панель вкладок */}
+          <main className="min-w-0 flex-1 pb-24 lg:pb-0">{children}</main>
         </div>
+        <MobileTabBar pathname={pathname} onMore={() => setOpen(true)} />
         <CommandPalette />
       </div>
     </DataProvider>
