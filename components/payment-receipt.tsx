@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Printer, SearchX, Zap } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Printer, SearchX } from "lucide-react";
+import { BrandMark } from "@/components/branding";
 import { longDate, money } from "@/lib/schedule";
 import {
   PAYMENT_METHOD_TITLE,
@@ -112,9 +113,7 @@ export default function PaymentReceipt({ token, id }: { token: string; id: strin
         <article className="rounded-card border border-line bg-surface p-6 shadow-card print:border-black/20 print:shadow-none">
           <header className="flex items-start justify-between gap-3 border-b border-line pb-4">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-on-brand print:hidden">
-                <Zap size={17} aria-hidden />
-              </span>
+              <BrandMark className="h-10 w-10 rounded-[12px]" iconSize={17} />
               <div>
                 <p className="text-sm font-semibold tracking-tight">{data.companyName}</p>
                 <p className="text-xs text-mute">Квитанция об оплате</p>

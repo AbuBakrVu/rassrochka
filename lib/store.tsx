@@ -287,6 +287,11 @@ interface DataContextValue extends Snapshot {
   setHiddenNavItems: (hrefs: string[]) => Promise<void>;
   setClientDefaultLimit: (limit: number) => Promise<void>;
   setClientCreditLimit: (clientId: string, limit: number | null) => Promise<void>;
+  /** Настройки → Оформление: меняет только переданные поля, возвращает новое состояние. */
+  saveBranding: (input: {
+    color?: string | null;
+    logo?: string | null;
+  }) => Promise<{ color: string | null; logoVersion: string | null }>;
   logout: () => Promise<void>;
   addClient: (input: NewClientInput) => Promise<Client>;
   setClientBlacklisted: (
@@ -700,6 +705,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const saveBranding = useCallback(
+    (input: { color?: string | null; logo?: string | null }) =>
+      api<{ color: string | null; logoVersion: string | null }>(
+        "/api/settings/branding",
+        input,
+        "PATCH"
+      ),
+    []
+  );
+
   const bulkUpdateDeals = useCallback(
     async (
       ids: string[],
@@ -766,6 +781,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setHiddenNavItems,
       setClientDefaultLimit,
       setClientCreditLimit,
+      saveBranding,
       bulkUpdateDeals,
       saveFilter,
       deleteFilter,
@@ -777,7 +793,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,
      addEmployee, updateEmployee, setEmployeeActive, setHiddenNavItems,
-     setClientDefaultLimit, setClientCreditLimit, bulkUpdateDeals, saveFilter, deleteFilter, logout, refresh]
+     setClientDefaultLimit, setClientCreditLimit, saveBranding, bulkUpdateDeals, saveFilter, deleteFilter, logout, refresh]
   );
 
   // Пока состояние не загружено, страницы не рендерим: иначе каждая из них

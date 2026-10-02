@@ -56,6 +56,7 @@ const ACTION_LABEL: Record<string, string> = {
   "coinvestor.capital": "Капитал соинвестора",
   "settings.nav": "Разделы меню",
   "settings.credit": "Базовый лимит",
+  "settings.branding": "Оформление",
 };
 
 // Действия, на которые владельцу стоит смотреть в первую очередь

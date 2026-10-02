@@ -30,7 +30,8 @@ export type AuditAction =
   | "coinvestor.reinvest"
   | "coinvestor.capital"
   | "settings.nav"
-  | "settings.credit";
+  | "settings.credit"
+  | "settings.branding";
 
 export async function audit(
   dbName: string,

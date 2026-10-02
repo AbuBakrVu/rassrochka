@@ -17,7 +17,7 @@ const INFRA = [/^\/api\/health$/, /^\/api\/internal\//];
 
 // Открыты без входа: страница входа, кабинет заёмщика по ссылке и роуты,
 // которые сами разбираются с доступом
-const PUBLIC = [/^\/login$/, /^\/company$/, /^\/pay\//, /^\/api\/auth\//, /^\/api\/portal\//];
+const PUBLIC = [/^\/login$/, /^\/company$/, /^\/pay\//, /^\/api\/auth\//, /^\/api\/portal\//, /^\/api\/branding\//];
 
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;

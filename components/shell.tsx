@@ -17,7 +17,6 @@ import {
   Settings,
   Menu,
   X,
-  Zap,
   LogOut,
   ShieldAlert,
   ScrollText,
@@ -26,6 +25,7 @@ import {
 } from "lucide-react";
 import CommandPalette from "@/components/command-palette";
 import ThemeToggle from "@/components/theme-toggle";
+import { BrandMark, useBrandName } from "@/components/branding";
 import { DataProvider, useData } from "@/lib/store";
 
 export const nav: {
@@ -294,6 +294,7 @@ function DrawerFooter() {
 export default function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const brandName = useBrandName();
 
   // Страницы без CRM-оболочки и БЕЗ общего стора:
   //   /pay/<токен> — кабинет заёмщика, грузит только свою сделку через
@@ -324,13 +325,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         <aside className="group/rail fixed inset-y-3 left-3 z-40 hidden w-[76px] flex-col overflow-hidden rounded-[28px] bg-rail shadow-pop transition-[width] delay-0 duration-200 ease-out hover:w-60 hover:delay-150 has-[:focus-visible]:w-60 lg:flex [@media(max-height:760px)]:overflow-y-auto">
           <Link
             href="/"
-            aria-label="Nasiya — на главную"
+            aria-label={`${brandName} — на главную`}
             className="mx-4 mt-5 mb-4 flex h-11 shrink-0 items-center gap-3 rounded-full"
           >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-canvas text-brand">
-              <Zap size={18} aria-hidden />
-            </span>
-            <span className={`text-lg font-semibold tracking-tight text-rail-fg ${railLabel}`}>Nasiya</span>
+            <BrandMark tone="canvas" className="h-11 w-11 rounded-full" />
+            <span className={`truncate text-lg font-semibold tracking-tight text-rail-fg ${railLabel}`}>{brandName}</span>
           </Link>
           <RailNav pathname={pathname} />
           <RailFooter />
@@ -347,10 +346,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-surface shadow-pop">
               <div className="flex items-center justify-between px-5 py-4">
                 <div className="flex items-center gap-2.5">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-brand text-on-brand">
-                    <Zap size={16} aria-hidden />
-                  </span>
-                  <span className="font-semibold">Nasiya</span>
+                  <BrandMark className="h-8 w-8 rounded-[10px]" iconSize={16} />
+                  <span className="truncate font-semibold">{brandName}</span>
                 </div>
                 <button
                   onClick={() => setOpen(false)}
@@ -376,11 +373,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             >
               <Menu size={20} />
             </button>
-            <span className="flex items-center gap-2 font-semibold">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand text-on-brand">
-                <Zap size={14} aria-hidden />
-              </span>
-              Nasiya
+            <span className="flex min-w-0 items-center gap-2 font-semibold">
+              <BrandMark className="h-7 w-7 rounded-full" iconSize={14} />
+              <span className="truncate">{brandName}</span>
             </span>
             <button
               onClick={() => window.dispatchEvent(new Event("open-command-palette"))}

@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { Zap } from "lucide-react";
+import { BrandMark, useBrandName } from "@/components/branding";
 
 const field =
   "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 function LoginForm() {
   const router = useRouter();
+  const brandName = useBrandName();
   const params = useSearchParams();
   const next = params.get("next") || "/";
 
@@ -50,10 +51,8 @@ function LoginForm() {
   return (
     <form onSubmit={submit} className="w-full max-w-sm">
       <div className="mb-8 flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-on-brand">
-          <Zap size={18} aria-hidden />
-        </span>
-        <p className="font-semibold tracking-tight">Nasiya</p>
+        <BrandMark className="h-11 w-11 rounded-[12px]" />
+        <p className="font-semibold tracking-tight">{brandName}</p>
       </div>
 
       <h1 className="text-2xl font-semibold tracking-tight">Вход в систему</h1>

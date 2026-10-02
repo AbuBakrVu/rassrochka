@@ -1,9 +1,10 @@
 "use client";
 
+import { BrandMark, useBrandName } from "@/components/branding";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Zap,
   Check,
   Phone,
   MessageCircle,
@@ -72,14 +73,13 @@ function Centered({ children }: { children: React.ReactNode }) {
 }
 
 function Header({ subtitle, id }: { subtitle: string; id?: string }) {
+  const brandName = useBrandName();
   return (
     <header className="flex items-center justify-between">
       <div className="flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-on-brand">
-          <Zap size={17} aria-hidden />
-        </span>
+        <BrandMark className="h-10 w-10 rounded-[12px]" iconSize={17} />
         <div>
-          <p className="text-sm font-semibold tracking-tight">Nasiya</p>
+          <p className="text-sm font-semibold tracking-tight">{brandName}</p>
           <p className="text-xs text-mute">{subtitle}</p>
         </div>
       </div>
