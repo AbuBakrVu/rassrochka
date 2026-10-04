@@ -16,6 +16,7 @@ export type AuditAction =
   | "deal.close"
   | "deal.reject"
   | "deal.restructure"
+  | "deal.holiday"
   | "payment.accept"
   | "payment.undo"
   | "cash.adjustment"

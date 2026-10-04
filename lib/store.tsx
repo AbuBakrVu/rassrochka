@@ -281,6 +281,7 @@ interface DataContextValue extends Snapshot {
   setDealStage: (dealId: string, stage: "new" | "check" | "active") => Promise<Deal>;
   closeDeal: (dealId: string) => Promise<Deal>;
   rejectDeal: (dealId: string, reason: string) => Promise<Deal>;
+  holidayDeal: (dealId: string, months: number, reason: string) => Promise<Deal>;
   deleteDeal: (dealId: string) => Promise<void>;
   addEmployee: (input: NewEmployeeInput) => Promise<{ password: string }>;
   updateEmployee: (id: number, input: UpdateEmployeeInput) => Promise<void>;
@@ -503,6 +504,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const closeDeal = useCallback(
     async (dealId: string): Promise<Deal> => {
       const deal = await api<Deal>(`/api/deals/${encodeURIComponent(dealId)}/close`, {});
+      await load();
+      return deal;
+    },
+    [load]
+  );
+
+  const holidayDeal = useCallback(
+    async (dealId: string, months: number, reason: string): Promise<Deal> => {
+      const deal = await api<Deal>(`/api/deals/${encodeURIComponent(dealId)}/holiday`, { months, reason });
       await load();
       return deal;
     },
@@ -771,6 +781,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setDealStage,
       closeDeal,
       rejectDeal,
+      holidayDeal,
       deleteDeal,
       addClient,
       setClientBlacklisted,
@@ -802,7 +813,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       logout,
       refresh,
     }),
-    [state, addDeal, updateDeal, restructureDeal, reassignDeal, setDealStage, closeDeal, rejectDeal, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
+    [state, addDeal, updateDeal, restructureDeal, reassignDeal, setDealStage, closeDeal, rejectDeal, holidayDeal, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
      addCoinvestor, updateCoinvestor, setCoinvestorActive, deleteCoinvestor,
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,

@@ -25,7 +25,7 @@ import { Card, Badge, EmptyState, ProgressRing } from "@/components/ui";
 import DealActions from "@/components/deal-actions";
 import { useData, type Employee } from "@/lib/store";
 import { clientById, fmt, stages, paidCount, purchasePrice, ruPlural, type Deal } from "@/lib/data";
-import { scheduleForDeal, paidTotal, money, longDate } from "@/lib/schedule";
+import { scheduleForDeal, paidTotal, money, longDate, addMonthsIso } from "@/lib/schedule";
 import { dealEvents } from "@/lib/events";
 import { reminderStageFor, pickReminderTemplate, buildReminderText } from "@/lib/reminders";
 import { todayIso } from "@/lib/status";
@@ -33,13 +33,16 @@ import CopyLinkButton from "@/components/copy-link";
 import DealPrint, { type PrintMode } from "@/components/deal-print";
 import { paymentTitle, receiptMessage, receiptPath } from "@/lib/receipts";
 import { computeProfit } from "@/lib/profit";
+import PayoffCalculator from "@/components/payoff-calculator";
 
 export default function DealDetail({ id }: { id: string }) {
   const {
     deals, clients, paidPayments, events, templates, employees, user, cash,
     acceptPayment, undoLastPayment, sendReminder, updateDeal, restructureDeal,
-    closeDeal, reassignDeal, deleteDeal, setDealStage, rejectDeal,
+    closeDeal, reassignDeal, deleteDeal, setDealStage, rejectDeal, holidayDeal,
   } = useData();
+  const [holidayOpen, setHolidayOpen] = useState(false);
+  const [calcOpen, setCalcOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const router = useRouter();
@@ -427,6 +430,16 @@ export default function DealDetail({ id }: { id: string }) {
                 }}
                 onCloseEarly={active ? async () => { await closeDeal(deal.id); } : undefined}
               />
+              )}
+              {active && (
+                <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm">
+                  <button type="button" onClick={() => setCalcOpen(true)} className="font-medium text-brand hover:text-brand-deep">
+                    Досрочное погашение
+                  </button>
+                  <button type="button" onClick={() => setHolidayOpen(true)} className="font-medium text-brand hover:text-brand-deep">
+                    Отсрочка платежа
+                  </button>
+                </div>
               )}
             </div>
           </Card>
@@ -923,6 +936,36 @@ export default function DealDetail({ id }: { id: string }) {
           document.body
         )}
 
+      {calcOpen && (
+        <SimpleModal title="Досрочное погашение" subtitle={`${deal.client} · ${deal.id}`} onClose={() => setCalcOpen(false)}>
+          <PayoffCalculator
+            schedule={schedule}
+            onAccept={async (amount) => {
+              if (!confirm(`Принять платёж ${money(amount)} по сделке ${deal.id}?`)) return;
+              try {
+                await acceptPayment(deal.id, { amount });
+                setCalcOpen(false);
+              } catch (err) {
+                alert(err instanceof Error ? err.message : "Не удалось принять платёж");
+              }
+            }}
+          />
+        </SimpleModal>
+      )}
+
+      {holidayOpen && nextPayment && (
+        <HolidayModal
+          dealId={deal.id}
+          clientName={deal.client}
+          nextIso={nextPayment.iso}
+          onClose={() => setHolidayOpen(false)}
+          onSubmit={async (months, reason) => {
+            await holidayDeal(deal.id, months, reason);
+            setHolidayOpen(false);
+          }}
+        />
+      )}
+
       {rejectOpen && (
         <RejectModal
           dealId={deal.id}
@@ -1205,6 +1248,140 @@ function RejectModal({
             className="rounded-full bg-danger px-4 py-2.5 text-sm font-medium text-white shadow-card hover:opacity-90 disabled:opacity-50"
           >
             {saving ? "Сохраняем…" : "Отклонить"}
+          </button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function SimpleModal({
+  title,
+  subtitle,
+  onClose,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-label={title} className="relative w-full max-w-md rounded-t-card bg-surface shadow-pop sm:rounded-card">
+        <div className="border-b border-line px-5 py-4">
+          <h2 className="font-semibold tracking-tight">{title}</h2>
+          {subtitle && <p className="text-sm text-mute">{subtitle}</p>}
+        </div>
+        <div className="px-5 py-4">{children}</div>
+        <footer className="flex justify-end border-t border-line px-5 py-3">
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2 text-sm font-medium text-mute hover:text-ink">
+            Закрыть
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+const HOLIDAY_REASONS = ["Болезнь", "Потеря работы", "Задержка зарплаты", "Семейные обстоятельства"];
+
+function HolidayModal({
+  dealId,
+  clientName,
+  nextIso,
+  onClose,
+  onSubmit,
+}: {
+  dealId: string;
+  clientName: string;
+  nextIso: string;
+  onClose: () => void;
+  onSubmit: (months: number, reason: string) => Promise<void>;
+}) {
+  const [months, setMonths] = useState(1);
+  const [reason, setReason] = useState(HOLIDAY_REASONS[0]);
+  const [other, setOther] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const final = reason === "other" ? other.trim() : reason;
+  const shiftedTo = new Date(`${addMonthsIso(nextIso, months)}T00:00:00`).toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!final || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSubmit(months, final);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось оформить отсрочку");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
+      <form onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="holiday-title" className="relative w-full max-w-md rounded-t-card bg-surface shadow-pop sm:rounded-card">
+        <div className="border-b border-line px-5 py-4">
+          <h2 id="holiday-title" className="font-semibold tracking-tight">Отсрочка платежа · {dealId}</h2>
+          <p className="text-sm text-mute">{clientName}</p>
+        </div>
+        <div className="flex flex-col gap-4 px-5 py-4">
+          <div>
+            <p className="mb-2 text-sm font-medium">На сколько месяцев</p>
+            <div className="flex gap-2">
+              {[1, 2, 3].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMonths(m)}
+                  aria-pressed={months === m}
+                  className={`flex-1 rounded-full border px-3 py-2 text-sm font-medium ${
+                    months === m ? "border-brand bg-brand-soft text-brand-deep" : "border-line text-mute hover:text-ink"
+                  }`}
+                >
+                  {m} мес.
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-sm text-mute">
+              Все оставшиеся взносы сдвинутся на {months} мес., суммы не изменятся. Ближайший платёж — {shiftedTo}.
+            </p>
+          </div>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1 text-sm font-medium">Причина</legend>
+            {[...HOLIDAY_REASONS, "other"].map((r) => (
+              <label key={r} className="flex items-center gap-2.5 text-sm">
+                <input type="radio" name="holiday-reason" checked={reason === r} onChange={() => setReason(r)} className="h-4 w-4 accent-[var(--color-brand)]" />
+                {r === "other" ? "Другая" : r}
+              </label>
+            ))}
+            {reason === "other" && (
+              <input
+                autoFocus
+                value={other}
+                onChange={(e) => setOther(e.target.value)}
+                maxLength={200}
+                placeholder="Опишите причину"
+                className="mt-1 w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:bg-surface"
+              />
+            )}
+          </fieldset>
+        </div>
+        <footer className="flex items-center gap-3 border-t border-line px-5 py-4">
+          <p className="mr-auto text-sm text-danger" role="status" aria-live="polite">{error}</p>
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+            Отмена
+          </button>
+          <button type="submit" disabled={!final || saving} className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:opacity-50">
+            {saving ? "Сохраняем…" : "Оформить отсрочку"}
           </button>
         </footer>
       </form>

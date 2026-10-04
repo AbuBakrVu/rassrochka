@@ -1,6 +1,6 @@
 // Моковые данные CRM «Nasiya» — учёт рассрочек. Сегодня 5 августа 2026 г.
 
-import { scheduleForDeal } from "./schedule";
+import { scheduleForDeal, type PlanItem } from "./schedule";
 
 export const fmt = (n: number) =>
   new Intl.NumberFormat("ru-RU").format(n) + " ₽";
@@ -60,6 +60,8 @@ export interface Deal {
    * или переплата (lib/payments.ts). Учитывается в остатке долга.
    */
   credit?: number;
+  /** Сохранённый план графика (после реструктуризации, отсрочки или гибкого графика). */
+  plan?: PlanItem[];
   /** Свой шаблон напоминания на эту сделку — если не задан, используется общий по умолчанию. */
   reminderTemplateId?: string;
   /** Последняя стадия лесенки напоминаний, отправленная по текущему взносу — вместе с датой взноса не даёт слать её повторно. */

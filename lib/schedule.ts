@@ -50,15 +50,49 @@ export interface RestructureInfo {
   from: string;
 }
 
+/** Один взнос сохранённого плана (таблица deal_plan): дата и сумма. */
+export interface PlanItem {
+  iso: string;
+  amount: number;
+}
+
+/**
+ * Как устроен график сделки: по умолчанию он вычисляется из суммы и срока
+ * (плюс одна реструктуризация, RestructureInfo — сделки до хранимого
+ * плана), а после реструктуризации, отсрочки или гибкого графика берётся
+ * готовым из deal_plan — там каждый взнос со своей датой и суммой.
+ */
+export type ScheduleShape = RestructureInfo | { plan: PlanItem[] };
+
+const isPlan = (shape?: ScheduleShape): shape is { plan: PlanItem[] } =>
+  !!shape && "plan" in shape;
+
 // Первый платёж — через месяц после заключения, далее ежемесячно
 export function buildSchedule(
   amount: number,
   months: number,
   paid: number,
   openedAt = "2026-08-05",
-  restructure?: RestructureInfo
+  shape?: ScheduleShape
 ): Installment[] {
   const list: Installment[] = [];
+
+  if (isPlan(shape)) {
+    let remaining = amount;
+    shape.plan.forEach((p, i) => {
+      remaining = Math.round((remaining - p.amount) * 100) / 100;
+      list.push({
+        n: i + 1,
+        date: longDate(new Date(`${p.iso}T00:00:00`)),
+        iso: p.iso,
+        amount: p.amount,
+        remaining,
+        status: i < paid ? "paid" : "due",
+      });
+    });
+    return list;
+  }
+  const restructure = shape;
 
   if (!restructure) {
     const start = new Date(openedAt);
@@ -123,12 +157,17 @@ export function buildSchedule(
   return list;
 }
 
-/** Достаёт RestructureInfo из полей сделки — undefined, если не реструктурирована. */
+/**
+ * Форма графика из полей сделки: сохранённый план, если он есть, иначе
+ * старая одиночная реструктуризация; undefined — обычный равный график.
+ */
 export function restructureOf(deal: {
   originalMonths?: number | null;
   restructuredMonths?: number | null;
   restructuredFrom?: string | null;
-}): RestructureInfo | undefined {
+  plan?: PlanItem[] | null;
+}): ScheduleShape | undefined {
+  if (deal.plan && deal.plan.length > 0) return { plan: deal.plan };
   if (!deal.originalMonths || !deal.restructuredMonths || !deal.restructuredFrom) {
     return undefined;
   }
@@ -152,6 +191,7 @@ export function scheduleForDeal(
     originalMonths?: number | null;
     restructuredMonths?: number | null;
     restructuredFrom?: string | null;
+    plan?: PlanItem[] | null;
     credit?: number;
   },
   paid: number
@@ -169,3 +209,31 @@ export function scheduleForDeal(
 /** Сколько клиент уже внёс по графику: закрытые взносы плюс внесённое в счёт следующего. */
 export const paidTotal = (schedule: Installment[]) =>
   schedule.reduce((s, p) => s + (p.status === "paid" ? p.amount : (p.credited ?? 0)), 0);
+
+/** ГГГГ-ММ-ДД плюс n месяцев — тем же способом, что даты в buildSchedule. */
+export function addMonthsIso(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y, m - 1 + n, d);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/** Делит сумму на count ежемесячных взносов с первого числа firstIso; последний забирает остаток округления. */
+export function splitPlan(total: number, count: number, firstIso: string): PlanItem[] {
+  const monthly = Math.round(total / count);
+  const list: PlanItem[] = [];
+  let left = total;
+  for (let i = 0; i < count; i++) {
+    const amount = i === count - 1 ? Math.round(left * 100) / 100 : monthly;
+    left -= amount;
+    list.push({ iso: addMonthsIso(firstIso, i), amount });
+  }
+  return list;
+}
+
+/** План сделки в явном виде — сохранённый или вычисленный по старым правилам. */
+export function planOf(deal: Parameters<typeof scheduleForDeal>[0]): PlanItem[] {
+  return buildSchedule(deal.amount, deal.months, 0, deal.openedAt, restructureOf(deal)).map((p) => ({
+    iso: p.iso,
+    amount: p.amount,
+  }));
+}

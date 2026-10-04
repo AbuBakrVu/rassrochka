@@ -1,6 +1,7 @@
 "use client";
 
 import { BrandMark, useBrandName } from "@/components/branding";
+import PayoffCalculator from "@/components/payoff-calculator";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -292,6 +293,21 @@ function DealSchedule({
           })}
         </ol>
       </section>
+
+      {next && (
+        <details className="group rounded-card border border-line bg-surface shadow-card">
+          <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 font-semibold">
+            Досрочное погашение
+            <ChevronDown size={16} className="text-mute transition-transform group-open:rotate-180" aria-hidden />
+          </summary>
+          <div className="border-t border-line px-5 py-4">
+            <PayoffCalculator
+              schedule={schedule}
+              note="Внести платёж можно у вашего менеджера — контакты ниже."
+            />
+          </div>
+        </details>
+      )}
 
       <PaymentHistory token={token} deal={deal} />
     </>

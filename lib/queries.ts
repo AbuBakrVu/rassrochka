@@ -10,7 +10,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
 import { buildRoute, purchasePrice, stages, type Client, type Deal, type DealStage } from "./data";
-import { buildSchedule, monthNames, restructureOf } from "./schedule";
+import { addMonthsIso, buildSchedule, monthNames, planOf, restructureOf, splitPlan, type PlanItem } from "./schedule";
 import { allocatePayment, nextDue, stateFromPayments } from "./payments";
 import { computeClientStatus, computeDealStatus, isoDate, todayIso } from "./status";
 import type {
@@ -39,6 +39,7 @@ interface DealRow extends Record<string, unknown> {
   manager_id: number | null;
   paid_count: number;
   credit: number;
+  plan: PlanItem[] | null;
   next_step: string | null;
   deadline: string | null;
   reject_reason: string | null;
@@ -166,6 +167,7 @@ function toDeal(row: DealRow, today: string): Deal {
     originalMonths: row.original_months,
     restructuredMonths: row.restructured_months,
     restructuredFrom: row.restructured_from,
+    plan: row.plan,
   });
 
   const { status, statusTone, urgent } = computeDealStatus(
@@ -203,13 +205,14 @@ function toDeal(row: DealRow, today: string): Deal {
     managerId: row.manager_id,
     portalToken: row.portal_token,
     guarantors: row.guarantors ?? [],
-    ...(restructure
+    ...(row.original_months && row.restructured_months && row.restructured_from
       ? {
-          originalMonths: restructure.originalMonths,
-          restructuredMonths: restructure.restructuredMonths,
-          restructuredFrom: restructure.from,
+          originalMonths: row.original_months,
+          restructuredMonths: row.restructured_months,
+          restructuredFrom: row.restructured_from,
         }
       : {}),
+    ...(row.plan && row.plan.length > 0 ? { plan: row.plan.map((p) => ({ iso: p.iso, amount: Number(p.amount) })) } : {}),
     ...(row.description ? { description: row.description } : {}),
     ...(row.category ? { category: row.category } : {}),
     ...(row.city ? { city: row.city } : {}),
@@ -276,9 +279,16 @@ function toClient(row: ClientRow, deals: Deal[], today: string): Client {
 
 // ── Чтение ─────────────────────────────────────────────────────────────
 
+/**
+ * Сохранённый план графика сделки d (deal_plan) одной колонкой — json-массив
+ * {iso, amount} по порядку взносов или null, если график обычный.
+ */
+const PLAN_SQL = `(select json_agg(json_build_object('iso', pl.due_date, 'amount', pl.amount) order by pl.n)
+                   from deal_plan pl where pl.deal_id = d.id) as plan`;
+
 const DEALS_SELECT = `
   select d.id, d.client_id, c.name as client_name, d.product, d.amount,
-         d.months, d.markup_pct, d.opened_at, d.stage, d.paid_count, d.credit,
+         d.months, d.markup_pct, d.opened_at, d.stage, d.paid_count, d.credit, ${PLAN_SQL},
          d.next_step, d.deadline, d.reject_reason, d.portal_token,
          d.description, d.category, d.city,
          d.original_months, d.restructured_months, d.restructured_from,
@@ -791,6 +801,8 @@ export async function updateDeal(
         "update deals set amount = $2, months = $3, markup_pct = $4 where id = $1",
         [dealId, input.amount, input.months, input.markupPct]
       );
+      // Сохранённый план считался от старой суммы — дальше график обычный
+      await client.query("delete from deal_plan where deal_id = $1", [dealId]);
 
       // Закупка в кассе была посчитана от старой суммы/наценки — пересчитываем,
       // иначе касса разойдётся с фактической стоимостью сделки
@@ -980,12 +992,13 @@ export async function closeDealEarly(
       original_months: number | null;
       restructured_months: number | null;
       restructured_from: string | null;
+      plan: PlanItem[] | null;
       stage: DealStage;
       product: string;
       client_name: string;
     }>(
       `select d.amount, d.months, d.markup_pct, d.down_payment, d.paid_count, d.credit, d.opened_at,
-              d.original_months, d.restructured_months, d.restructured_from,
+              d.original_months, d.restructured_months, d.restructured_from, ${PLAN_SQL},
               d.stage, d.product, c.name as client_name
        from deals d join clients c on c.id = d.client_id
        where d.id = $1
@@ -1002,6 +1015,7 @@ export async function closeDealEarly(
       originalMonths: deal.original_months,
       restructuredMonths: deal.restructured_months,
       restructuredFrom: deal.restructured_from,
+      plan: deal.plan,
     });
     const schedule = buildSchedule(
       deal.amount,
@@ -1132,12 +1146,68 @@ export interface RestructureDealInput {
   comment?: string;
 }
 
+/** Текущий план графика сделки в явном виде — сохранённый или вычисленный по старым правилам. */
+async function loadPlan(client: PoolClient, dealId: string): Promise<{
+  plan: PlanItem[];
+  paid: number;
+  amount: number;
+  stage: DealStage;
+  months: number;
+}> {
+  const { rows } = await client.query<{
+    amount: number;
+    months: number;
+    paid_count: number;
+    stage: DealStage;
+    opened_at: string;
+    original_months: number | null;
+    restructured_months: number | null;
+    restructured_from: string | null;
+    plan: PlanItem[] | null;
+  }>(
+    `select d.amount, d.months, d.paid_count, d.stage, d.opened_at,
+            d.original_months, d.restructured_months, d.restructured_from, ${PLAN_SQL}
+     from deals d where d.id = $1 and d.deleted_at is null for update of d`,
+    [dealId]
+  );
+  const deal = rows[0];
+  if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+  return {
+    plan: planOf({
+      amount: deal.amount,
+      months: deal.months,
+      openedAt: deal.opened_at,
+      originalMonths: deal.original_months,
+      restructuredMonths: deal.restructured_months,
+      restructuredFrom: deal.restructured_from,
+      plan: deal.plan,
+    }),
+    paid: deal.paid_count,
+    amount: deal.amount,
+    stage: deal.stage,
+    months: deal.months,
+  };
+}
+
+/** Сохраняет план графика целиком; deals.months — по числу взносов. */
+async function savePlan(client: PoolClient, dealId: string, plan: PlanItem[]): Promise<void> {
+  await client.query("delete from deal_plan where deal_id = $1", [dealId]);
+  await client.query(
+    `insert into deal_plan (deal_id, n, due_date, amount)
+     select $1, t.n, t.d::date, t.a
+     from unnest($2::int[], $3::text[], $4::numeric[]) as t(n, d, a)`,
+    [dealId, plan.map((_, i) => i + 1), plan.map((p) => p.iso), plan.map((p) => p.amount)]
+  );
+  await client.query("update deals set months = $2 where id = $1", [dealId, plan.length]);
+}
+
 /**
- * Реструктуризация: остаток долга на сегодня размазывается по новому
- * графику из input.months месяцев начиная с input.from. Уже оплаченные
- * взносы не трогаются — deals.months становится paid_count + input.months,
- * а original_months хранит прежнее значение, чтобы buildSchedule мог
- * корректно восстановить суммы взносов, оплаченных ещё по старому графику.
+ * Реструктуризация: остаток долга (сумма неоплаченных взносов) заново
+ * делится на input.months ежемесячных взносов с даты input.from. Уже
+ * оплаченные взносы остаются в плане с их настоящими суммами и датами —
+ * поэтому реструктуризировать можно сколько угодно раз. Раньше хранилось
+ * только «сколько месяцев было до», и вторая реструктуризация
+ * пересчитывала суммы оплаченных взносов неверно.
  */
 export async function restructureDeal(
   dbName: string,
@@ -1145,24 +1215,20 @@ export async function restructureDeal(
   input: RestructureDealInput
 ): Promise<Deal> {
   await transaction(dbName, async (client) => {
-    const { rows } = await client.query<{
-      months: number;
-      paid_count: number;
-      stage: DealStage;
-    }>(
-      "select months, paid_count, stage from deals where id = $1 for update",
-      [dealId]
-    );
-    const deal = rows[0];
-    if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+    const deal = await loadPlan(client, dealId);
     if (deal.stage !== "active") throw new Error("NOT_ACTIVE");
 
-    const newTotalMonths = deal.paid_count + input.months;
+    const kept = deal.plan.slice(0, deal.paid);
+    const left = Math.round((deal.amount - kept.reduce((s, p) => s + p.amount, 0)) * 100) / 100;
+    if (left <= 0) throw new Error("NOTHING_LEFT");
+    await savePlan(client, dealId, [...kept, ...splitPlan(left, input.months, input.from)]);
+
+    // Поля старой схемы — только для подписи «график изменён» в интерфейсе,
+    // сам график теперь берётся из плана
     await client.query(
-      `update deals
-       set months = $2, original_months = $3, restructured_months = $4, restructured_from = $5
+      `update deals set original_months = $2, restructured_months = $3, restructured_from = $4
        where id = $1`,
-      [dealId, newTotalMonths, deal.months, input.months, input.from]
+      [dealId, deal.months, input.months, input.from]
     );
 
     await client.query(
@@ -1178,6 +1244,41 @@ export async function restructureDeal(
   const updated = await loadDeal(dbName, dealId);
   if (!updated) throw new Error(`Сделка ${dealId} не найдена`);
   return updated;
+}
+
+/**
+ * Отсрочка платежа: все ещё не оплаченные взносы сдвигаются на input.months
+ * месяцев вперёд, суммы не меняются — клиент просто платит позже, срок
+ * сделки удлиняется. Уже внесённое в счёт ближайшего взноса (credit)
+ * остаётся при нём.
+ */
+export async function holidayDeal(
+  dbName: string,
+  dealId: string,
+  input: { months: number; reason: string }
+): Promise<{ deal: Deal; from: string; to: string }> {
+  const moved = await transaction(dbName, async (client) => {
+    const deal = await loadPlan(client, dealId);
+    if (deal.stage !== "active") throw new Error("NOT_ACTIVE");
+    if (deal.paid >= deal.plan.length) throw new Error("NOTHING_LEFT");
+
+    const from = deal.plan[deal.paid].iso;
+    const plan = deal.plan.map((p, i) =>
+      i < deal.paid ? p : { iso: addMonthsIso(p.iso, input.months), amount: p.amount }
+    );
+    await savePlan(client, dealId, plan);
+    const to = plan[deal.paid].iso;
+
+    await client.query("insert into deal_events (deal_id, text) values ($1, $2)", [
+      dealId,
+      `Отсрочка на ${input.months} мес.: ближайший взнос перенесён с ${from} на ${to} · ${input.reason}`,
+    ]);
+    return { from, to };
+  });
+
+  const updated = await loadDeal(dbName, dealId);
+  if (!updated) throw new Error(`Сделка ${dealId} не найдена`);
+  return { deal: updated, ...moved };
 }
 
 /**
@@ -1235,10 +1336,11 @@ export async function acceptPayment(
       original_months: number | null;
       restructured_months: number | null;
       restructured_from: string | null;
+      plan: PlanItem[] | null;
     }>(
       `select d.id, d.amount, d.months, d.markup_pct, d.down_payment, d.paid_count, d.credit,
               d.stage, d.opened_at, d.product, c.name as client_name,
-              d.original_months, d.restructured_months, d.restructured_from
+              d.original_months, d.restructured_months, d.restructured_from, ${PLAN_SQL}
        from deals d join clients c on c.id = d.client_id
        where d.id = $1 and d.deleted_at is null
        for update of d`,
@@ -1256,6 +1358,7 @@ export async function acceptPayment(
       originalMonths: deal.original_months,
       restructuredMonths: deal.restructured_months,
       restructuredFrom: deal.restructured_from,
+      plan: deal.plan,
     });
     // Суммы по графику не зависят от paid — берём весь график один раз
     const amounts = buildSchedule(deal.amount, deal.months, deal.months, deal.opened_at, restructure)
@@ -1378,11 +1481,12 @@ export async function undoLastPayment(
       original_months: number | null;
       restructured_months: number | null;
       restructured_from: string | null;
+      plan: PlanItem[] | null;
       product: string;
       client_name: string;
     }>(
       `select d.amount, d.months, d.paid_count, d.credit, d.opened_at,
-              d.original_months, d.restructured_months, d.restructured_from,
+              d.original_months, d.restructured_months, d.restructured_from, ${PLAN_SQL},
               d.product, c.name as client_name
        from deals d join clients c on c.id = d.client_id
        where d.id = $1 and d.deleted_at is null
@@ -1428,6 +1532,7 @@ export async function undoLastPayment(
       originalMonths: deal.original_months,
       restructuredMonths: deal.restructured_months,
       restructuredFrom: deal.restructured_from,
+      plan: deal.plan,
     });
     const amounts = buildSchedule(deal.amount, deal.months, deal.months, deal.opened_at, restructure)
       .map((p) => p.amount);
@@ -1918,6 +2023,7 @@ export async function loadPortalDeal(
     opened_at: string;
     paid_count: number;
     credit: number;
+    plan: PlanItem[] | null;
     stage: DealStage;
     manager_name: string | null;
     manager_phone: string | null;
@@ -1927,7 +2033,7 @@ export async function loadPortalDeal(
   }>(
     dbName,
     `select d.id, c.name as client_name, d.product, d.amount, d.months,
-            d.opened_at, d.paid_count, d.credit, d.stage,
+            d.opened_at, d.paid_count, d.credit, ${PLAN_SQL}, d.stage,
             u.name as manager_name, u.phone as manager_phone,
             d.original_months, d.restructured_months, d.restructured_from
      from deals d
@@ -1938,12 +2044,6 @@ export async function loadPortalDeal(
   );
 
   if (!row) return undefined;
-
-  const restructure = restructureOf({
-    originalMonths: row.original_months,
-    restructuredMonths: row.restructured_months,
-    restructuredFrom: row.restructured_from,
-  });
   const payments = await loadPortalPayments(dbName, [row.id]);
 
   return {
@@ -1959,12 +2059,15 @@ export async function loadPortalDeal(
     credit: row.stage === "closed" ? 0 : Number(row.credit),
     managerName: row.manager_name ?? "менеджер",
     managerPhone: row.manager_phone,
-    ...(restructure
+    ...(row.original_months && row.restructured_months && row.restructured_from
       ? {
-          originalMonths: restructure.originalMonths,
-          restructuredMonths: restructure.restructuredMonths,
-          restructuredFrom: restructure.from,
+          originalMonths: row.original_months,
+          restructuredMonths: row.restructured_months,
+          restructuredFrom: row.restructured_from,
         }
+      : {}),
+    ...(row.plan && row.plan.length > 0
+      ? { plan: row.plan.map((p) => ({ iso: p.iso, amount: Number(p.amount) })) }
       : {}),
   };
 }
@@ -2017,6 +2120,7 @@ export async function loadPortalClient(
     opened_at: string;
     paid_count: number;
     credit: number;
+    plan: PlanItem[] | null;
     stage: DealStage;
     manager_name: string | null;
     manager_phone: string | null;
@@ -2025,7 +2129,7 @@ export async function loadPortalClient(
     restructured_from: string | null;
   }>(
     dbName,
-    `select d.id, d.product, d.amount, d.months, d.opened_at, d.paid_count, d.credit,
+    `select d.id, d.product, d.amount, d.months, d.opened_at, d.paid_count, d.credit, ${PLAN_SQL},
             d.stage, u.name as manager_name, u.phone as manager_phone,
             d.original_months, d.restructured_months, d.restructured_from
      from deals d
@@ -2045,11 +2149,6 @@ export async function loadPortalClient(
     managerName: rows[0].manager_name ?? "менеджер",
     managerPhone: rows[0].manager_phone,
     deals: rows.map((row) => {
-      const restructure = restructureOf({
-        originalMonths: row.original_months,
-        restructuredMonths: row.restructured_months,
-        restructuredFrom: row.restructured_from,
-      });
       return {
         id: row.id,
         payments: payments.get(row.id) ?? [],
@@ -2060,12 +2159,15 @@ export async function loadPortalClient(
         paid: row.stage === "closed" ? row.months : row.paid_count,
         credit: row.stage === "closed" ? 0 : Number(row.credit),
         stage: row.stage,
-        ...(restructure
+        ...(row.original_months && row.restructured_months && row.restructured_from
           ? {
-              originalMonths: restructure.originalMonths,
-              restructuredMonths: restructure.restructuredMonths,
-              restructuredFrom: restructure.from,
+              originalMonths: row.original_months,
+              restructuredMonths: row.restructured_months,
+              restructuredFrom: row.restructured_from,
             }
+          : {}),
+        ...(row.plan && row.plan.length > 0
+          ? { plan: row.plan.map((p) => ({ iso: p.iso, amount: Number(p.amount) })) }
           : {}),
       };
     }),
@@ -2179,11 +2281,12 @@ export async function loadPortalReceipt(
     original_months: number | null;
     restructured_months: number | null;
     restructured_from: string | null;
+    plan: PlanItem[] | null;
     manager_name: string | null;
   }>(
     dbName,
     `select v.*, c.name as client_name, d.product, d.amount as deal_amount, d.months,
-            d.opened_at, d.original_months, d.restructured_months, d.restructured_from,
+            d.opened_at, d.original_months, d.restructured_months, d.restructured_from, ${PLAN_SQL},
             u.name as manager_name
      from (${VALID_PAYMENTS_SQL} and p.id = $2) v
      join deals d on d.id = v.deal_id
@@ -2207,6 +2310,7 @@ export async function loadPortalReceipt(
       originalMonths: row.original_months,
       restructuredMonths: row.restructured_months,
       restructuredFrom: row.restructured_from,
+      plan: row.plan,
     })
   );
   const remainingAfter =

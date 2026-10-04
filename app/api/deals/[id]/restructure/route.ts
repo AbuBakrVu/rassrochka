@@ -25,6 +25,9 @@ export async function POST(
         );
         return deal;
       } catch (err) {
+        if (err instanceof Error && err.message === "NOTHING_LEFT") {
+          throw new BadRequestError("По сделке не осталось долга — менять график нечего");
+        }
         if (err instanceof Error && err.message === "NOT_ACTIVE") {
           throw new BadRequestError("Реструктурировать можно только активную сделку");
         }

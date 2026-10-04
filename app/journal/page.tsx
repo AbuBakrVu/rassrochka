@@ -42,6 +42,7 @@ const ACTION_LABEL: Record<string, string> = {
   "deal.close": "Досрочное закрытие",
   "deal.reject": "Отказ по заявке",
   "deal.restructure": "Изменение графика",
+  "deal.holiday": "Отсрочка платежа",
   "payment.accept": "Приём платежа",
   "payment.undo": "Отмена платежа",
   "cash.adjustment": "Ручная операция",
