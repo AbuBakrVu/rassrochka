@@ -20,6 +20,7 @@ import {
 import { PageHeader, Card, EmptyState } from "@/components/ui";
 import { money, longDate } from "@/lib/schedule";
 import { useData, type CashKind } from "@/lib/store";
+import { can } from "@/lib/permissions";
 import { cashSummary } from "@/lib/cash";
 import { todayIso } from "@/lib/derive";
 import { downloadCsv } from "@/lib/csv";
@@ -97,7 +98,7 @@ const input =
   "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 function AdjustmentModal({ onClose }: { onClose: () => void }) {
-  const { addCashAdjustment } = useData();
+  const { addCashAdjustment, writeBranchId } = useData();
   const [direction, setDirection] = useState<"in" | "out">("in");
   const [amount, setAmount] = useState("");
   const [title, setTitle] = useState("");
@@ -109,6 +110,7 @@ function AdjustmentModal({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     if (!ready) return;
     addCashAdjustment({
+      branchId: writeBranchId,
       amount: direction === "in" ? Number(amount) : -Number(amount),
       title: title.trim(),
       date,
@@ -241,9 +243,9 @@ function AdjustmentModal({ onClose }: { onClose: () => void }) {
 
 export default function CashPage() {
   const { cash, cashOpeningBalance, deals, paidPayments, coinvestors, user } = useData();
-  // Ручные внесения и изъятия — у администратора и бухгалтера (так же
-  // проверяет сервер, app/api/cash/route.ts)
-  const canAdjust = user.role === "admin" || user.role === "accountant";
+  // Ручные внесения и изъятия — по праву «cash.edit» (так же проверяет
+  // сервер, app/api/cash/route.ts)
+  const canAdjust = can(user, "cash.edit");
   const [filter, setFilter] = useState<(typeof filters)[number]["key"]>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");

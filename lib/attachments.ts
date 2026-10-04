@@ -95,14 +95,24 @@ export async function saveAttachment(
 export async function loadAttachment(
   dbName: string,
   id: string
-): Promise<{ data: Buffer; contentType: string; name: string; kind: AttachmentKind } | null> {
+): Promise<{
+  data: Buffer; contentType: string; name: string; kind: AttachmentKind; clientId?: string; dealId?: string;
+} | null> {
   if (!/^\d{1,18}$/.test(id)) return null;
-  const row = await queryOne<{ data: Buffer; content_type: string; name: string; kind: AttachmentKind }>(
+  const row = await queryOne<{
+    data: Buffer; content_type: string; name: string; kind: AttachmentKind;
+    client_id: string | null; deal_id: string | null;
+  }>(
     dbName,
-    "select data, content_type, name, kind from attachments where id = $1",
+    "select data, content_type, name, kind, client_id, deal_id from attachments where id = $1",
     [id]
   );
-  return row ? { data: row.data, contentType: row.content_type, name: row.name, kind: row.kind } : null;
+  return row
+    ? {
+        data: row.data, contentType: row.content_type, name: row.name, kind: row.kind,
+        clientId: row.client_id ?? undefined, dealId: row.deal_id ?? undefined,
+      }
+    : null;
 }
 
 /** Удаляет файл; возвращает, что удалили (для журнала), или null. */

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FileText, ImagePlus, Trash2, Loader2, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui";
 import { useData, type Attachment } from "@/lib/store";
+import { can } from "@/lib/permissions";
 
 // Файлы клиента (паспорт, документы) или сделки (фото товара): превью,
 // открытие в новой вкладке, загрузка и удаление. Содержимое отдаёт
@@ -35,8 +36,8 @@ export default function AttachmentsCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Бухгалтеру файлы не приходят и не открываются (паспортные данные)
-  if (user.role === "accountant") return null;
+  // Без права на персональные данные файлы не приходят и не открываются
+  if (!can(user, "clients.personal")) return null;
 
   const files = attachments.filter(
     (a) => (clientId ? a.clientId === clientId : a.dealId === dealId) && kinds.some((k) => k.kind === a.kind)

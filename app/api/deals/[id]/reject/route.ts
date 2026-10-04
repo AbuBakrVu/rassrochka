@@ -24,6 +24,6 @@ export async function POST(
         throw err;
       }
     },
-    { roles: ["admin", "manager"] }
+    { perm: "deals.edit", dealId: id }
   );
 }

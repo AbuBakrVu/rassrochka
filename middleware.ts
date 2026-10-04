@@ -18,8 +18,8 @@ const INFRA = [/^\/api\/health$/, /^\/api\/internal\//];
 // Открыты без входа: страница входа, кабинет заёмщика по ссылке, онлайн-
 // заявка и роуты, которые сами разбираются с доступом
 const PUBLIC = [
-  /^\/login$/, /^\/company$/, /^\/pay\//, /^\/apply$/,
-  /^\/api\/auth\//, /^\/api\/portal\//, /^\/api\/branding\//, /^\/api\/public\//,
+  /^\/login$/, /^\/company$/, /^\/pay\//, /^\/investor\//, /^\/apply$/,
+  /^\/api\/auth\//, /^\/api\/portal\//, /^\/api\/investor\//, /^\/api\/branding\//, /^\/api\/public\//,
 ];
 
 export function middleware(request: NextRequest) {

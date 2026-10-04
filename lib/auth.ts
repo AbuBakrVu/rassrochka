@@ -9,6 +9,7 @@ import "server-only";
 import { hash, verify } from "@node-rs/argon2";
 import { randomBytes } from "node:crypto";
 import { query, queryOne, transaction } from "./db";
+import { permissionsFor, type Permission, type RoleKind } from "./permissions";
 
 export { SESSION_COOKIE } from "./auth-shared";
 
@@ -19,7 +20,12 @@ export interface SessionUser {
   email: string;
   name: string;
   initials: string;
-  role: "admin" | "manager" | "accountant";
+  role: RoleKind;
+  /** Своя роль — её название; у встроенных пусто. */
+  roleName?: string;
+  permissions: Permission[];
+  /** Филиал сотрудника; null — видит все филиалы. */
+  branchId: number | null;
   mustChangePassword: boolean;
 }
 
@@ -53,9 +59,12 @@ interface UserRow extends Record<string, unknown> {
   email: string;
   name: string;
   initials: string;
-  role: "admin" | "manager" | "accountant";
+  role: RoleKind;
   password_hash: string;
   must_change_password: boolean;
+  branch_id: number | null;
+  role_name: string | null;
+  role_permissions: string[] | null;
 }
 
 const toSessionUser = (row: UserRow): SessionUser => ({
@@ -64,8 +73,15 @@ const toSessionUser = (row: UserRow): SessionUser => ({
   name: row.name,
   initials: row.initials,
   role: row.role,
+  ...(row.role === "custom" && row.role_name ? { roleName: row.role_name } : {}),
+  permissions: permissionsFor(row.role, row.role_permissions),
+  // Администратор всегда видит всю компанию
+  branchId: row.role === "admin" ? null : row.branch_id,
   mustChangePassword: row.must_change_password,
 });
+
+const USER_COLUMNS = `u.id, u.email, u.name, u.initials, u.role, u.password_hash,
+  u.must_change_password, u.branch_id, r.name as role_name, r.permissions as role_permissions`;
 
 /**
  * Проверяет пару почта/пароль. Возвращает undefined и при неизвестной почте,
@@ -78,8 +94,9 @@ export async function verifyCredentials(
 ): Promise<SessionUser | undefined> {
   const row = await queryOne<UserRow>(
     dbName,
-    `select id, email, name, initials, role, password_hash, must_change_password
-     from users where email = $1 and active`,
+    `select ${USER_COLUMNS}
+     from users u left join roles r on r.id = u.role_id
+     where u.email = $1 and u.active`,
     [email]
   );
 
@@ -124,9 +141,9 @@ export async function findSessionUser(
 
   const row = await queryOne<UserRow>(
     dbName,
-    `select u.id, u.email, u.name, u.initials, u.role, u.password_hash,
-            u.must_change_password
+    `select ${USER_COLUMNS}
      from sessions s join users u on u.id = s.user_id
+     left join roles r on r.id = u.role_id
      where s.token = $1 and s.expires_at > now() and u.active`,
     [token]
   );

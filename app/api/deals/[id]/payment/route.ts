@@ -64,6 +64,6 @@ export async function POST(
         throw err;
       }
     },
-    { roles: ["admin", "manager"] }
+    { perm: "payments.accept", dealId: id }
   );
 }

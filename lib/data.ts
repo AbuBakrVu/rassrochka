@@ -44,6 +44,8 @@ export interface Deal {
   urgent?: boolean;
   manager: string; // инициалы для показа на карточках, напр. "АС"
   managerId?: number | null; // связь с users.id: инициалы не уникальны
+  /** Филиал сделки (branches.id). */
+  branchId?: number;
   markupPct: number; // реальная наценка сделки в %, введённая при создании
   portalToken: string; // случайный токен для /pay/<token> — из deals.portal_token
   description?: string;
@@ -57,6 +59,8 @@ export interface Deal {
   downPayment?: number;
   /** Сделка пришла онлайн-заявкой со страницы /apply. */
   online?: boolean;
+  /** Сделка перенесена импортом из Excel — прошлые платежи в кассе не проводились. */
+  imported?: boolean;
   /**
    * Внесено в счёт следующего, ещё не закрытого взноса — частичная оплата
    * или переплата (lib/payments.ts). Учитывается в остатке долга.
@@ -390,6 +394,8 @@ export interface Client {
   blacklistReason?: string;
   /** Случайный токен для /pay/<token> — один на клиента, покрывает все его сделки. */
   portalToken: string;
+  /** Филиал, где клиент заведён (branches.id). */
+  branchId?: number;
   /** Лимит, заданный администратором вручную; нет — считается автоматически (lib/credit.ts). */
   creditLimit?: number;
   /** Согласие на обработку персональных данных (152-ФЗ): когда и как получено. */

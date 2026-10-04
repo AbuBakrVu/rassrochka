@@ -3,11 +3,12 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, SearchX, Download } from "lucide-react";
+import { Search, SearchX, Download, FileSpreadsheet } from "lucide-react";
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui";
 import { dealsOfClient, dealState, paidCount, type Client } from "@/lib/data";
 import { scheduleForDeal, paidTotal, money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
+import { can } from "@/lib/permissions";
 import { downloadCsv } from "@/lib/csv";
 import SavedFilters from "@/components/saved-filters";
 import { computeClientCredit } from "@/lib/credit";
@@ -33,7 +34,7 @@ const filters = [
 
 export default function ClientsPage() {
   const router = useRouter();
-  const { clients, deals, paidPayments, employees, cash, clientDefaultLimit } = useData();
+  const { clients, deals, paidPayments, employees, cash, clientDefaultLimit, user } = useData();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<(typeof filters)[number]["key"]>("all");
   // Менеджер — у клиента нет своего ответственного, фильтр оставляет тех,
@@ -106,6 +107,16 @@ export default function ClientsPage() {
         title="Клиенты"
         subtitle="Реестр клиентов и статусы по сделкам"
         cta="+ Добавить"
+        actions={
+          can(user, "clients.edit") && (
+            <Link
+              href="/import"
+              className="flex h-10 items-center gap-2 rounded-full bg-surface px-4 text-sm font-medium text-ink shadow-card hover:text-brand-deep"
+            >
+              <FileSpreadsheet size={15} aria-hidden /> Импорт из Excel
+            </Link>
+          )
+        }
       />
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-8">
         <div className="mb-4 flex flex-wrap items-center gap-3">

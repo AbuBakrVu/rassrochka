@@ -7,7 +7,9 @@ import NewDealModal from "@/components/new-deal-modal";
 import AcceptPaymentModal from "@/components/accept-payment-modal";
 import NotificationsMenu from "@/components/notifications-menu";
 import { useData } from "@/lib/store";
+import { can } from "@/lib/permissions";
 import {
+  MapPin,
   Search,
   Inbox,
   UserPlus,
@@ -32,8 +34,9 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   const { user } = useData();
-  // Бухгалтер сделки и клиентов не заводит — кнопка «Добавить» ему ни к чему
-  const showCta = !!cta && user.role !== "accountant";
+  // «Добавить» — только если сотруднику доступно хоть одно из его действий
+  const showCta =
+    !!cta && (can(user, "deals.edit") || can(user, "clients.edit") || can(user, "payments.accept"));
   return (
     // Шапка как в референсе: сверху строка поиска и управление (уведомления,
     // «Добавить», аватар), ниже — крупный тонкий заголовок и действия
@@ -49,6 +52,7 @@ export function PageHeader({
           <kbd className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] font-medium">⌘K</kbd>
         </button>
         <div className="ml-auto flex items-center gap-2.5">
+          <BranchSwitcher />
           {showCta && <CtaMenu label={cta.replace(/^\+\s*/, "")} />}
           <NotificationsMenu />
           <span
@@ -65,14 +69,54 @@ export function PageHeader({
           <p className="mt-1 line-clamp-2 text-sm text-mute sm:truncate">{subtitle}</p>
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-        {/* На телефоне поиска и меню в шапке нет — «Добавить» остаётся здесь */}
-        {showCta && (
-          <div className="lg:hidden">
-            <CtaMenu label={cta.replace(/^\+\s*/, "")} />
-          </div>
-        )}
+        {/* На телефоне поиска и меню в шапке нет — филиал и «Добавить» остаются здесь */}
+        <div className="flex items-center gap-2 lg:hidden">
+          <BranchSwitcher />
+          {showCta && <CtaMenu label={cta.replace(/^\+\s*/, "")} />}
+        </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Филиал, данные которого показаны во всех разделах. Сотрудник с филиалом
+ * видит только свой — ему показываем подпись без выбора. Пока филиал один,
+ * не показываем ничего.
+ */
+function BranchSwitcher() {
+  const { user, branches, branchView, setBranchView, multiBranch } = useData();
+  if (!multiBranch) return null;
+
+  const chip = "flex h-11 items-center gap-2 rounded-full bg-surface px-4 text-sm font-medium text-ink shadow-card";
+  if (user.branchId !== null) {
+    return (
+      <span className={chip} title="Ваш филиал">
+        <MapPin size={15} className="text-brand" aria-hidden />
+        {branches.find((b) => b.id === user.branchId)?.name ?? "Филиал"}
+      </span>
+    );
+  }
+
+  return (
+    <label className={`${chip} relative pr-9`}>
+      <MapPin size={15} className="shrink-0 text-brand" aria-hidden />
+      <span className="sr-only">Филиал</span>
+      <select
+        value={branchView}
+        onChange={(e) => setBranchView(e.target.value === "all" ? "all" : Number(e.target.value))}
+        className="max-w-40 cursor-pointer appearance-none truncate bg-transparent outline-none"
+      >
+        <option value="all">Все филиалы</option>
+        {branches.map((b) => (
+          <option key={b.id} value={b.id}>
+            {b.name}
+            {b.active ? "" : " (закрыт)"}
+          </option>
+        ))}
+      </select>
+      <ChevronDown size={15} className="pointer-events-none absolute right-3.5 text-mute" aria-hidden />
+    </label>
   );
 }
 
@@ -151,19 +195,20 @@ function CtaMenu({ label }: { label: string }) {
     };
   }, [open]);
 
+  const { user } = useData();
   const items = [
-    { icon: FilePlus2, label: "Создать сделку", action: () => setModal("deal") },
-    {
+    can(user, "deals.edit") && { icon: FilePlus2, label: "Создать сделку", action: () => setModal("deal") },
+    can(user, "clients.edit") && {
       icon: UserPlus,
       label: "Создать клиента",
       action: () => setModal("client"),
     },
-    {
+    can(user, "payments.accept") && {
       icon: HandCoins,
       label: "Принять платёж",
       action: () => setModal("payment"),
     },
-  ];
+  ].filter((i) => !!i);
 
   return (
     <div ref={wrap} className="relative">

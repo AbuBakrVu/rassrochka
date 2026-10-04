@@ -27,6 +27,6 @@ export async function POST(
       );
       return { ok: true };
     },
-    { roles: ["admin", "manager"] }
+    { perm: "deals.edit", dealId: id }
   );
 }

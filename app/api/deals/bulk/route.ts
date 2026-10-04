@@ -8,6 +8,7 @@ import { ForbiddenError } from "@/lib/auth";
 import { reassignDeal, setDealStage } from "@/lib/queries";
 import { stages } from "@/lib/data";
 import { audit, employeeName } from "@/lib/audit";
+import { assertDealInScope } from "@/lib/scope";
 
 const STAGES = ["new", "check", "active"] as const;
 type Stage = (typeof STAGES)[number];
@@ -50,11 +51,15 @@ export async function POST(request: Request) {
       const failed: { id: string; error: string }[] = [];
       for (const id of ids) {
         try {
+          await assertDealInScope(tenant.dbName, user, id);
           await run(id);
           ok.push(id);
         } catch (err) {
           const code = err instanceof Error ? err.message : "";
-          failed.push({ id, error: ERRORS[code] ?? "не удалось изменить" });
+          failed.push({
+            id,
+            error: err instanceof ForbiddenError ? "сделка другого филиала" : (ERRORS[code] ?? "не удалось изменить"),
+          });
         }
       }
 
@@ -66,6 +71,6 @@ export async function POST(request: Request) {
       }
       return { ok, failed };
     },
-    { roles: ["admin", "manager"] }
+    { perm: "deals.edit" }
   );
 }

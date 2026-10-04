@@ -28,13 +28,13 @@ import CommandPalette from "@/components/command-palette";
 import ThemeToggle from "@/components/theme-toggle";
 import { BrandMark, useBrandName } from "@/components/branding";
 import { DataProvider, useData } from "@/lib/store";
+import { canOpen, homeFor } from "@/lib/permissions";
 
+/** Разделы меню. Кому какой виден — по правам (lib/permissions.ts, SECTION_PERMISSION). */
 export const nav: {
   href: string;
   label: string;
   icon: typeof LayoutGrid;
-  /** Пункт виден только администратору компании. */
-  adminOnly?: boolean;
 }[] = [
   { href: "/", label: "Главная", icon: LayoutGrid },
   { href: "/analytics", label: "Аналитика", icon: BarChart3 },
@@ -43,31 +43,21 @@ export const nav: {
   { href: "/payments", label: "Платежи", icon: CalendarDays },
   { href: "/collections", label: "Просрочки", icon: PhoneCall },
   { href: "/mailings", label: "Рассылки", icon: Send },
-  { href: "/coinvestors", label: "Соинвесторы", icon: Handshake, adminOnly: true },
+  { href: "/coinvestors", label: "Соинвесторы", icon: Handshake },
   { href: "/cash", label: "Финансы", icon: Wallet },
   { href: "/registry", label: "Реестр клиентов", icon: BookUser },
   { href: "/blacklist", label: "Чёрный список", icon: ShieldAlert },
   { href: "/employees", label: "Сотрудники", icon: UserCog },
-  { href: "/journal", label: "Журнал действий", icon: ScrollText, adminOnly: true },
+  { href: "/journal", label: "Журнал действий", icon: ScrollText },
   { href: "/settings", label: "Настройки", icon: Settings },
 ];
 
-// Бухгалтер видит только кассу и аналитику — остальные разделы ему видеть
-// незачем (он не ведёт клиентов и сделки). /settings/password — исключение,
-// его должен уметь открыть кто угодно, чтобы сменить обязательный первый
-// пароль. Список используем и для сайдбара, и для редиректа с чужих страниц.
-const ACCOUNTANT_ALLOWED = ["/cash", "/analytics"];
-
-function allowedForAccountant(pathname: string): boolean {
-  if (pathname === "/settings/password") return true;
-  return ACCOUNTANT_ALLOWED.some((href) => pathname.startsWith(href));
-}
-
+// Меню и переход по прямой ссылке решаются одним правилом — canOpen. Настройки
+// открыты всем: там смена пароля, обязательная при первом входе.
 function useNavItems() {
   const { user, hiddenNavItems } = useData();
   return nav
-    .filter((n) => user.role !== "accountant" || allowedForAccountant(n.href))
-    .filter((n) => !n.adminOnly || user.role === "admin")
+    .filter((n) => canOpen(user, n.href))
     .filter((n) => !hiddenNavItems.includes(n.href));
 }
 
@@ -196,17 +186,16 @@ function MobileTabBar({ pathname, onMore }: { pathname: string; onMore: () => vo
   );
 }
 
-/** Если бухгалтер каким-то путём (прямая ссылка, старая закладка) попал на
- *  чужую страницу — молча уводим на кассу, а не показываем 403. */
-function AccountantGate({ pathname }: { pathname: string }) {
+/** Если сотрудник каким-то путём (прямая ссылка, старая закладка) попал на
+ *  закрытый ему раздел — молча уводим в первый доступный, а не показываем 403. */
+function SectionGate({ pathname }: { pathname: string }) {
   const { user } = useData();
   const router = useRouter();
+  const allowed = canOpen(user, pathname);
 
   useEffect(() => {
-    if (user.role === "accountant" && !allowedForAccountant(pathname)) {
-      router.replace("/cash");
-    }
-  }, [user.role, pathname, router]);
+    if (!allowed) router.replace(homeFor(user));
+  }, [allowed, user, router]);
 
   return null;
 }
@@ -285,6 +274,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   //     тянул бы в браузер все сделки и всех клиентов компании.
   //   /login — на нём сессии ещё нет, и DataProvider ушёл бы в петлю:
   //     bootstrap → 401 → редирект на /login → снова bootstrap.
+  //   /investor/<токен> — кабинет соинвестора, так же только свои суммы.
   //   /apply — онлайн-заявка для клиентов, без входа и без стора.
   //   /company — вообще не про компанию: корневой домен, где вводят адрес
   //     своей компании. Без этой строки сюда всё равно рисовался бы
@@ -292,6 +282,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   // Слэш в "/pay/" обязателен: без него сюда попадал и раздел /payments.
   if (
     pathname.startsWith("/pay/") ||
+    pathname.startsWith("/investor/") ||
     pathname === "/login" ||
     pathname === "/apply" ||
     pathname === "/company"
@@ -301,7 +292,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <DataProvider>
-      <AccountantGate pathname={pathname} />
+      <SectionGate pathname={pathname} />
       <div className="flex min-h-screen print:hidden">
         {/* Десктопное меню — тёмная полоса иконок, при наведении раскрывается
             поверх контента (контент не сдвигается). Небольшая задержка на

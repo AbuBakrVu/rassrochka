@@ -20,16 +20,22 @@ import {
 import type { Deal, Client, ReminderStage } from "./data";
 import type { DealEvent } from "./events";
 import type { ContactLog, ContactOutcome } from "./collections";
+import type { Permission, RoleKind } from "./permissions";
 
 export interface CurrentUser {
   id: number;
   name: string;
   initials: string;
   email: string;
-  role: string;
+  role: RoleKind;
+  /** Название своей роли (role = "custom"). */
+  roleName?: string;
+  permissions: Permission[];
+  /** Филиал сотрудника; null — видит все филиалы. */
+  branchId: number | null;
 }
 
-export type EmployeeRole = "admin" | "manager" | "accountant";
+export type EmployeeRole = RoleKind;
 
 export interface Employee {
   id: number;
@@ -38,8 +44,23 @@ export interface Employee {
   email: string;
   phone: string;
   role: EmployeeRole;
+  roleId?: number;
+  branchId?: number;
   since: string;
   active: boolean;
+}
+
+export interface Branch {
+  id: number;
+  name: string;
+  address?: string;
+  active: boolean;
+}
+
+export interface CustomRole {
+  id: number;
+  name: string;
+  permissions: Permission[];
 }
 
 // Стартовый остаток кассы раньше был константой CASH_OPENING_BALANCE,
@@ -67,6 +88,8 @@ export interface CashTx {
   installmentNumber?: number;
   /** Запись-отмена: id отменённого ею платежа. */
   reversesId?: string;
+  /** Филиал; нет — общая касса компании (деньги соинвесторов). */
+  branchId?: number;
 }
 
 export interface Coinvestor {
@@ -74,6 +97,11 @@ export interface Coinvestor {
   name: string;
   phone: string;
   profitSharePct: number;
+  /** profit_share — доля от маржи каждого взноса, fixed — % в месяц на капитал. */
+  accrualMode: "profit_share" | "fixed";
+  monthlyRatePct: number;
+  /** Токен личной ссылки /investor/<токен>. */
+  portalToken: string;
   startedAt: string;
   active: boolean;
   /** Текущий вложенный капитал — сумма журнала coinvestorCapitalTx. */
@@ -126,6 +154,8 @@ export interface MessageTemplate {
 interface Snapshot {
   user: CurrentUser;
   employees: Employee[];
+  branches: Branch[];
+  roles: CustomRole[];
   deals: Deal[];
   clients: Client[];
   paidPayments: Record<string, number>;
@@ -146,8 +176,10 @@ interface Snapshot {
 }
 
 const EMPTY: Snapshot = {
-  user: { id: 0, name: "", initials: "", email: "", role: "manager" },
+  user: { id: 0, name: "", initials: "", email: "", role: "manager", permissions: [], branchId: null },
   employees: [],
+  branches: [],
+  roles: [],
   deals: [],
   clients: [],
   paidPayments: {},
@@ -181,6 +213,8 @@ export interface NewDealInput {
   downPayment?: number;
   /** Менеджер подтвердил оформление сверх лимита клиента — пишется в журнал. */
   overLimit?: boolean;
+  /** Филиал сделки; не указан — филиал клиента. */
+  branchId?: number;
 }
 
 export interface NewClientInput {
@@ -198,6 +232,7 @@ export interface NewClientInput {
   inn?: string;
   /** Клиент подписал согласие на обработку персональных данных. */
   consent?: boolean;
+  branchId?: number;
 }
 
 /** Файл клиента или сделки (без содержимого — оно по /api/attachments/<id>). */
@@ -233,6 +268,8 @@ export interface CashAdjustmentInput {
   amount: number;
   title: string;
   date: string;
+  /** Касса филиала; не указан — общая касса компании. */
+  branchId?: number;
 }
 
 export interface AcceptPaymentOptions {
@@ -248,18 +285,26 @@ export interface NewEmployeeInput {
   email: string;
   phone: string;
   role: EmployeeRole;
+  /** Обязателен при role = "custom". */
+  roleId?: number;
+  /** null — все филиалы. */
+  branchId: number | null;
 }
 
 export interface UpdateEmployeeInput {
   name: string;
   phone: string;
   role: EmployeeRole;
+  roleId?: number;
+  branchId: number | null;
 }
 
 export interface NewCoinvestorInput {
   name: string;
   phone: string;
+  accrualMode: "profit_share" | "fixed";
   profitSharePct: number;
+  monthlyRatePct: number;
   startedAt: string;
   openingCapital?: number;
 }
@@ -267,7 +312,9 @@ export interface NewCoinvestorInput {
 export interface UpdateCoinvestorInput {
   name: string;
   phone: string;
+  accrualMode: "profit_share" | "fixed";
   profitSharePct: number;
+  monthlyRatePct: number;
 }
 
 export interface CoinvestorPayoutInput {
@@ -293,7 +340,30 @@ export interface TemplateInput {
   stage?: ReminderStage | null;
 }
 
+/** Филиал, данные которого сейчас показаны: "all" — все доступные. */
+export type BranchView = number | "all";
+
+export interface ImportResult {
+  clientsCreated: number;
+  clientsMatched: number;
+  dealsCreated: number;
+  skipped: { line: number; errors: string[] }[];
+}
+
 interface DataContextValue extends Snapshot {
+  /** Какой филиал показан. Сотрудник с филиалом всегда видит только свой. */
+  branchView: BranchView;
+  setBranchView: (view: BranchView) => void;
+  /** Больше одного филиала — показывать выбор филиала и подписи. */
+  multiBranch: boolean;
+  /** Филиал для новых записей: выбранный в переключателе или свой. */
+  writeBranchId: number | undefined;
+  saveBranch: (input: { id?: number; name: string; address?: string; active?: boolean }) => Promise<void>;
+  saveRole: (input: { id?: number; name: string; permissions: Permission[] }) => Promise<void>;
+  deleteRole: (id: number) => Promise<void>;
+  regenerateCoinvestorLink: (id: string) => Promise<string>;
+  setCollectionTarget: (month: string, managerId: number, amount: number | null) => Promise<void>;
+  importRows: (input: { rows: { line: number; values: Record<string, unknown> }[]; branchId?: number }) => Promise<ImportResult>;
   addDeal: (input: NewDealInput) => Promise<Deal>;
   updateDeal: (dealId: string, input: UpdateDealInput) => Promise<Deal>;
   restructureDeal: (dealId: string, input: RestructureDealInput) => Promise<Deal>;
@@ -420,6 +490,47 @@ async function api<T>(path: string, body?: unknown, method?: string): Promise<T>
   return res.json() as Promise<T>;
 }
 
+const BRANCH_VIEW_KEY = "nasiya:branch-view";
+
+function readBranchView(): BranchView {
+  try {
+    const v = localStorage.getItem(BRANCH_VIEW_KEY);
+    return v && /^\d+$/.test(v) ? Number(v) : "all";
+  } catch {
+    return "all";
+  }
+}
+
+/**
+ * Срез данных одного филиала — для сотрудника без своего филиала, который
+ * выбрал конкретный в переключателе. Сервер уже отдал всё, что ему можно;
+ * здесь только показываем часть, поэтому все страницы фильтруются разом.
+ */
+function sliceByBranch(state: Snapshot, branchId: number): Snapshot {
+  const deals = state.deals.filter((d) => d.branchId === branchId);
+  const dealIds = new Set(deals.map((d) => d.id));
+  const clientIds = new Set<string>();
+  for (const d of deals) {
+    clientIds.add(d.clientId);
+    for (const g of d.guarantors) clientIds.add(g.id);
+  }
+  const clients = state.clients.filter((c) => c.branchId === branchId || clientIds.has(c.id));
+  const visibleClients = new Set(clients.map((c) => c.id));
+  return {
+    ...state,
+    deals,
+    clients,
+    cash: state.cash.filter((t) => t.branchId === branchId),
+    events: state.events.filter((e) => dealIds.has(e.dealId)),
+    contacts: state.contacts.filter((c) => dealIds.has(c.dealId)),
+    attachments: state.attachments.filter((a) =>
+      a.clientId ? visibleClients.has(a.clientId) : a.dealId ? dealIds.has(a.dealId) : false
+    ),
+    // Стартовый остаток — общий на компанию, у филиала только его движение
+    cashOpeningBalance: 0,
+  };
+}
+
 interface BootstrapResponse
   extends Omit<Snapshot, "cashOpeningBalance" | "hiddenNavItems" | "clientDefaultLimit"> {
   settings: { cashOpeningBalance: number; hiddenNavItems: string[]; clientDefaultLimit?: number };
@@ -431,12 +542,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     "loading" | "ready" | "failed" | "no-tenant"
   >("loading");
   const [error, setError] = useState<string | null>(null);
+  const [branchView, setBranchViewState] = useState<BranchView>("all");
+
+  const setBranchView = useCallback((view: BranchView) => {
+    setBranchViewState(view);
+    try {
+      localStorage.setItem(BRANCH_VIEW_KEY, String(view));
+    } catch {
+      // Приватный режим — выбор просто не запомнится
+    }
+  }, []);
 
   const load = useCallback(async () => {
     const data = await api<BootstrapResponse>("/api/bootstrap");
     setState({
       user: data.user,
       employees: data.employees,
+      branches: data.branches ?? [],
+      roles: data.roles ?? [],
       deals: data.deals,
       clients: data.clients,
       paidPayments: data.paidPayments,
@@ -462,7 +585,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     // меняется после ответа сервера, а не синхронно при отрисовке
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load()
-      .then(() => !cancelled && setStatus("ready"))
+      .then(() => {
+        if (cancelled) return;
+        setBranchViewState(readBranchView());
+        setStatus("ready");
+      })
       .catch((err: Error) => {
         if (cancelled) return;
         setError(err.message);
@@ -499,6 +626,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         overLimit: input.overLimit,
         guarantorIds: input.guarantorIds,
         downPayment: input.downPayment,
+        branchId: input.branchId,
       });
       await load();
       return deal;
@@ -881,14 +1009,93 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const saveBranch = useCallback(
+    async (input: { id?: number; name: string; address?: string; active?: boolean }) => {
+      if (input.id) await api(`/api/branches/${input.id}`, input, "PATCH");
+      else await api("/api/branches", input);
+      await load();
+    },
+    [load]
+  );
+
+  const saveRole = useCallback(
+    async (input: { id?: number; name: string; permissions: Permission[] }) => {
+      if (input.id) await api(`/api/roles/${input.id}`, input, "PATCH");
+      else await api("/api/roles", input);
+      await load();
+    },
+    [load]
+  );
+
+  const deleteRole = useCallback(
+    async (id: number) => {
+      await api(`/api/roles/${id}`, undefined, "DELETE");
+      await load();
+    },
+    [load]
+  );
+
+  const regenerateCoinvestorLink = useCallback(
+    async (id: string) => {
+      const res = await api<{ portalToken: string }>(`/api/coinvestors/${encodeURIComponent(id)}/token`, {});
+      await load();
+      return res.portalToken;
+    },
+    [load]
+  );
+
+  const setCollectionTarget = useCallback(
+    async (month: string, managerId: number, amount: number | null) => {
+      await api("/api/collection-plan/targets", { month, managerId, amount }, "PUT");
+    },
+    []
+  );
+
+  const importRows = useCallback(
+    async (input: { rows: { line: number; values: Record<string, unknown> }[]; branchId?: number }) => {
+      const result = await api<ImportResult>("/api/import", input);
+      await load();
+      return result;
+    },
+    [load]
+  );
+
   const logout = useCallback(async () => {
     await api("/api/auth/logout", {});
     window.location.href = "/login";
   }, []);
 
+  // Сотрудник с филиалом видит только его — сервер уже отдал срез, а
+  // выбор в переключателе для него не действует
+  const activeBranches = state.branches.filter((b) => b.active);
+  const multiBranch = state.branches.length > 1;
+  const effectiveView: BranchView =
+    state.user.branchId !== null
+      ? state.user.branchId
+      : branchView !== "all" && state.branches.some((b) => b.id === branchView)
+        ? branchView
+        : "all";
+  const visible = useMemo(
+    () => (state.user.branchId === null && effectiveView !== "all" ? sliceByBranch(state, effectiveView) : state),
+    [state, effectiveView]
+  );
+  const writeBranchId =
+    state.user.branchId ??
+    (effectiveView !== "all" ? effectiveView : activeBranches.length === 1 ? activeBranches[0].id : undefined);
+
   const value = useMemo<DataContextValue>(
     () => ({
-      ...state,
+      ...visible,
+      branchView: effectiveView,
+      setBranchView,
+      multiBranch,
+      writeBranchId,
+      saveBranch,
+      saveRole,
+      deleteRole,
+      regenerateCoinvestorLink,
+      setCollectionTarget,
+      importRows,
       addDeal,
       updateDeal,
       restructureDeal,
@@ -932,7 +1139,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       logout,
       refresh,
     }),
-    [state, addDeal, updateDeal, restructureDeal, reassignDeal, setDealStage, closeDeal, rejectDeal, holidayDeal, addContact, uploadAttachment, deleteAttachment, setClientConsent, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
+    [visible, effectiveView, setBranchView, multiBranch, writeBranchId, saveBranch, saveRole, deleteRole,
+     regenerateCoinvestorLink, setCollectionTarget, importRows, addDeal, updateDeal, restructureDeal, reassignDeal, setDealStage, closeDeal, rejectDeal, holidayDeal, addContact, uploadAttachment, deleteAttachment, setClientConsent, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
      addCoinvestor, updateCoinvestor, setCoinvestorActive, deleteCoinvestor,
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,

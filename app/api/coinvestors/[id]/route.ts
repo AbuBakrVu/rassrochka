@@ -1,6 +1,7 @@
-import { BadRequestError, handle, num, optionalStr, str } from "@/app/api/_lib/handler";
+import { BadRequestError, handle, optionalStr, str } from "@/app/api/_lib/handler";
 import { deleteCoinvestor, setCoinvestorActive, updateCoinvestor } from "@/lib/queries";
 import { audit } from "@/lib/audit";
+import { accrualInput, accrualSummary } from "../accrual";
 
 export async function PATCH(
   request: Request,
@@ -24,16 +25,16 @@ export async function PATCH(
       const input = {
         name: str(body, "name", { max: 120 }),
         phone: optionalStr(body, "phone"),
-        profitSharePct: num(body, "profitSharePct", { min: 0, max: 100 }),
+        ...accrualInput(body),
       };
       const updated = await updateCoinvestor(tenant.dbName, id, input);
       await audit(
         tenant.dbName, user.id, "coinvestor.update", id,
-        `Изменены данные соинвестора ${id} · ${input.name}, доля ${input.profitSharePct}%`
+        `Изменены данные соинвестора ${id} · ${input.name}, ${accrualSummary(input)}`
       );
       return updated;
     },
-    { adminOnly: true }
+    { perm: "coinvestors" }
   );
 }
 
@@ -59,6 +60,6 @@ export async function DELETE(
       }
       return { ok: true };
     },
-    { adminOnly: true }
+    { perm: "coinvestors" }
   );
 }

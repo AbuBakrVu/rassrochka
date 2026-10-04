@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Download, ScrollText, Search, ShieldAlert } from "lucide-react";
 import { PageHeader, Card, EmptyState } from "@/components/ui";
 import { useData } from "@/lib/store";
+import { can } from "@/lib/permissions";
 import { downloadCsv } from "@/lib/csv";
 import { todayIso } from "@/lib/status";
 
@@ -65,10 +66,14 @@ const ACTION_LABEL: Record<string, string> = {
   "settings.credit": "Базовый лимит",
   "settings.branding": "Оформление",
   "settings.apply": "Онлайн-заявка",
+  "settings.branches": "Филиалы",
+  "settings.roles": "Роли и права",
+  "plan.target": "План сборов",
+  "import.run": "Импорт из Excel",
 };
 
 // Действия, на которые владельцу стоит смотреть в первую очередь
-const RISKY = new Set(["deal.delete", "payment.undo", "cash.adjustment", "deal.close", "coinvestor.payout"]);
+const RISKY = new Set(["deal.delete", "payment.undo", "cash.adjustment", "deal.close", "coinvestor.payout", "import.run"]);
 
 function entityHref(id: string | null): string | null {
   if (!id) return null;
@@ -103,7 +108,7 @@ export default function JournalPage() {
     return () => clearTimeout(t);
   }, [query]);
 
-  const isAdmin = user.role === "admin";
+  const isAdmin = can(user, "journal");
 
   useEffect(() => {
     if (!isAdmin) return;

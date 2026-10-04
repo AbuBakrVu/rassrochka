@@ -38,7 +38,11 @@ export type AuditAction =
   | "settings.nav"
   | "settings.credit"
   | "settings.branding"
-  | "settings.apply";
+  | "settings.apply"
+  | "settings.branches"
+  | "settings.roles"
+  | "plan.target"
+  | "import.run";
 
 export async function audit(
   dbName: string,

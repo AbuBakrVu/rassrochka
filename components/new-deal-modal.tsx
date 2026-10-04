@@ -171,8 +171,13 @@ export default function NewDealModal({
   // По умолчанию ответственный — тот, кто создаёт сделку; выбор вручную
   // хранится отдельно и перекрывает умолчание (без эффекта, который
   // дописывал бы состояние после первой отрисовки)
-  const { user } = useData();
+  const { user, branches, multiBranch, writeBranchId } = useData();
   const [pickedManager, setManager] = useState<number | null>(null);
+  // Филиал сделки: у сотрудника с филиалом — всегда свой (сервер не даст
+  // другой); у остальных — выбранный в шапке, а «Все филиалы» значит
+  // «как у клиента»
+  const [branchId, setBranchId] = useState<number | undefined>(writeBranchId);
+  const pickBranch = multiBranch && user.branchId === null;
   const manager =
     pickedManager ??
     (managers.some((m) => m.id === user.id) ? user.id : (managers[0]?.id ?? null));
@@ -271,6 +276,7 @@ export default function NewDealModal({
         guarantorIds: guarantors.map((g) => g.id),
         downPayment: calc.downSum > 0 ? Math.round(calc.downSum) : undefined,
         overLimit: overLimit || undefined,
+        branchId,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось создать сделку");
@@ -664,6 +670,26 @@ export default function NewDealModal({
                       {months ? `, всего ${months} платежей` : ""}.
                     </p>
                   </div>
+
+                  {pickBranch && (
+                    <div>
+                      <Label>Филиал</Label>
+                      <select
+                        value={branchId ?? ""}
+                        onChange={(e) => setBranchId(e.target.value ? Number(e.target.value) : undefined)}
+                        className="w-full rounded-[16px] border border-line bg-canvas px-4 py-3 text-sm outline-none focus:border-brand"
+                      >
+                        <option value="">Как у клиента</option>
+                        {branches
+                          .filter((b) => b.active)
+                          .map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <Label>Касса</Label>

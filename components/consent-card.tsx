@@ -6,6 +6,7 @@ import { FileSignature, Printer, CheckCircle2, AlertTriangle } from "lucide-reac
 import { Card } from "@/components/ui";
 import { useBrandName } from "@/components/branding";
 import { useData } from "@/lib/store";
+import { can } from "@/lib/permissions";
 import type { Client } from "@/lib/data";
 
 // Согласие на обработку персональных данных (152-ФЗ): отметка в карточке
@@ -26,7 +27,7 @@ export default function ConsentCard({ client }: { client: Client }) {
     return () => window.removeEventListener("afterprint", reset);
   }, []);
 
-  if (user.role === "accountant") return null;
+  if (!can(user, "clients.personal")) return null;
 
   const toggle = async (given: boolean) => {
     if (!given && !confirm("Снять отметку о согласии? Например, если клиент отозвал согласие.")) return;

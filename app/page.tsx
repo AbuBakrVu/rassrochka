@@ -20,6 +20,7 @@ import AcceptPaymentModal from "@/components/accept-payment-modal";
 import { ruPlural, type RouteKind } from "@/lib/data";
 import { money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
+import { can } from "@/lib/permissions";
 import { cashBalance } from "@/lib/cash";
 import { computeActive, computeDashboard, todayIso } from "@/lib/derive";
 
@@ -342,7 +343,7 @@ export default function Home() {
   const monthPrefix = today.slice(0, 7);
   const [modal, setModal] = useState<"deal" | "client" | "payment" | null>(null);
   const [payDealId, setPayDealId] = useState<string | undefined>(undefined);
-  const canCreate = user.role !== "accountant";
+  const canCreate = can(user, "deals.edit");
 
   const active = computeActive(deals, paidPayments);
   const unpaid = active.flatMap((c) =>

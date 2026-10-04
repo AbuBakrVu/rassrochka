@@ -13,13 +13,12 @@ import {
   findSessionUser,
   type SessionUser,
 } from "@/lib/auth";
+import { can, type Permission } from "@/lib/permissions";
+import { assertClientInScope, assertDealInScope } from "@/lib/scope";
 
-export class BadRequestError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "BadRequestError";
-  }
-}
+import { BadRequestError } from "@/lib/errors";
+
+export { BadRequestError };
 
 type Handler<T> = (ctx: {
   tenant: Tenant;
@@ -31,11 +30,21 @@ interface Options {
   /** Роут только для администратора компании. */
   adminOnly?: boolean;
   /**
-   * Роль-бухгалтер видит только кассу и аналитику (см. components/shell.tsx) —
-   * этим списком отсекаем её и от прямых вызовов остального API, а не только
-   * от пунктов меню. Пусто/не указано — доступно всем ролям.
+   * Право, без которого роут закрыт (lib/permissions.ts). Меню прячет
+   * разделы, а этот флаг отсекает и прямые вызовы API в обход интерфейса.
+   * Не указано — доступно любому вошедшему сотруднику.
    */
-  roles?: readonly SessionUser["role"][];
+  perm?: Permission;
+  /** Сделка/клиент запроса — должны быть в филиале сотрудника (lib/scope.ts). */
+  dealId?: string;
+  clientId?: string;
+}
+
+async function checkAccess(dbName: string, user: SessionUser, options: Options): Promise<void> {
+  if (options.adminOnly && user.role !== "admin") throw new ForbiddenError();
+  if (options.perm && !can(user, options.perm)) throw new ForbiddenError();
+  if (options.dealId) await assertDealInScope(dbName, user, options.dealId);
+  if (options.clientId) await assertClientInScope(dbName, user, options.clientId);
 }
 
 /**
@@ -50,8 +59,7 @@ export async function sessionFor(
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const user = await findSessionUser(tenant.dbName, token);
   if (!user) throw new UnauthorizedError();
-  if (options.adminOnly && user.role !== "admin") throw new ForbiddenError();
-  if (options.roles && !options.roles.includes(user.role)) throw new ForbiddenError();
+  await checkAccess(tenant.dbName, user, options);
   return { tenant, user };
 }
 
@@ -68,8 +76,7 @@ export async function handle<T>(
     const token = (await cookies()).get(SESSION_COOKIE)?.value;
     const user = await findSessionUser(tenant.dbName, token);
     if (!user) throw new UnauthorizedError();
-    if (options.adminOnly && user.role !== "admin") throw new ForbiddenError();
-    if (options.roles && !options.roles.includes(user.role)) throw new ForbiddenError();
+    await checkAccess(tenant.dbName, user, options);
 
     // Тело читаем как текст: у части запросов его нет вовсе (например,
     // «принять платёж» — всё нужное уже в пути), и request.json() на

@@ -6,6 +6,7 @@ import { AlertTriangle, CheckSquare, Search, Square, X } from "lucide-react";
 import { PageHeader, Badge } from "@/components/ui";
 import { stages, paidCount, type Deal, type DealStage } from "@/lib/data";
 import { money } from "@/lib/schedule";
+import { can } from "@/lib/permissions";
 import { useData, type BulkResult } from "@/lib/store";
 import SavedFilters from "@/components/saved-filters";
 
@@ -33,6 +34,8 @@ const months = (n: number) => {
 
 export default function DealsPage() {
   const { deals, employees, user, paidPayments, setDealStage, bulkUpdateDeals } = useData();
+  // Этапы двигает и массово меняет только тот, кто ведёт сделки
+  const canEdit = can(user, "deals.edit");
   const [managerId, setManagerId] = useState<number | "all">("all");
   const [query, setQuery] = useState("");
   const [overdueOnly, setOverdueOnly] = useState(false);
@@ -181,6 +184,7 @@ export default function DealsPage() {
               </option>
             ))}
           </select>
+          {canEdit && (
           <button
             onClick={() => (selecting ? stopSelecting() : setSelecting(true))}
             aria-pressed={selecting}
@@ -193,6 +197,7 @@ export default function DealsPage() {
             <CheckSquare size={15} aria-hidden />
             {selecting ? "Готово" : "Выбрать"}
           </button>
+          )}
         </div>
 
         <div className="mb-4 empty:hidden">
@@ -310,7 +315,7 @@ export default function DealsPage() {
                         <Link
                           key={d.id}
                           href={`/deals/${d.id}`}
-                          draggable={!selecting}
+                          draggable={canEdit && !selecting}
                           onClick={(e) => {
                             if (!selecting) return;
                             e.preventDefault();

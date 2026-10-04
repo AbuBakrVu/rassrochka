@@ -76,7 +76,7 @@ export default function NewClientModal({
   onClose: () => void;
   onCreated?: (client: Client) => void;
 }) {
-  const { addClient, clients } = useData();
+  const { addClient, clients, writeBranchId } = useData();
   const router = useRouter();
   const [form, setForm] = useState({
     lastName: "",
@@ -132,6 +132,7 @@ export default function NewClientModal({
     let created;
     try {
       created = await addClient({
+        branchId: writeBranchId,
         lastName: form.lastName.trim(),
         firstName: form.firstName.trim(),
         middleName: form.middleName.trim() || undefined,
