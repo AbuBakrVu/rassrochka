@@ -19,6 +19,7 @@ export async function POST(request: Request) {
         registrationAddress: optionalStr(body, "registrationAddress") || undefined,
         livingAddress: optionalStr(body, "livingAddress") || undefined,
         inn: optionalStr(body, "inn") || undefined,
+        consent: (body as { consent?: unknown }).consent === true,
       });
       await audit(tenant.dbName, user.id, "client.create", client.id, `Добавлен клиент ${client.id} · ${client.name}`);
       return client;

@@ -18,7 +18,7 @@ function sweep(now: number) {
 }
 
 /** true — можно пробовать войти, false — превышен лимит попыток. */
-export function checkRateLimit(key: string): boolean {
+export function checkRateLimit(key: string, max = MAX_ATTEMPTS): boolean {
   const now = Date.now();
   sweep(now);
 
@@ -27,7 +27,7 @@ export function checkRateLimit(key: string): boolean {
     hits.set(key, { count: 1, resetAt: now + WINDOW_MS });
     return true;
   }
-  if (entry.count >= MAX_ATTEMPTS) return false;
+  if (entry.count >= max) return false;
   entry.count += 1;
   return true;
 }

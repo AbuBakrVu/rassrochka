@@ -349,6 +349,7 @@ export default function DealsPage() {
                               </p>
                             </div>
                             <Badge tone={d.statusTone}>{d.status}</Badge>
+                            {d.online && d.stage === "new" && <Badge tone="blue">С сайта</Badge>}
                           </div>
 
                           <div className="mt-3 flex items-baseline justify-between gap-2">

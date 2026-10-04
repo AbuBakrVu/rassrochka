@@ -138,6 +138,7 @@ interface Snapshot {
   savedFilters: SavedFilter[];
   /** Журнал звонков по просрочкам (страница «Просрочки»). */
   contacts: ContactLog[];
+  attachments: Attachment[];
   cashOpeningBalance: number;
   hiddenNavItems: string[];
   /** Базовый лимит клиента без истории; 0 — автоматические лимиты выключены. */
@@ -158,6 +159,7 @@ const EMPTY: Snapshot = {
   templates: [],
   savedFilters: [],
   contacts: [],
+  attachments: [],
   cashOpeningBalance: 0,
   hiddenNavItems: [],
   clientDefaultLimit: 0,
@@ -194,6 +196,20 @@ export interface NewClientInput {
   registrationAddress?: string;
   livingAddress?: string;
   inn?: string;
+  /** Клиент подписал согласие на обработку персональных данных. */
+  consent?: boolean;
+}
+
+/** Файл клиента или сделки (без содержимого — оно по /api/attachments/<id>). */
+export interface Attachment {
+  id: string;
+  clientId?: string;
+  dealId?: string;
+  kind: "passport" | "document" | "product" | "other";
+  name: string;
+  contentType: string;
+  size: number;
+  at: string;
 }
 
 export interface UpdateDealInput {
@@ -286,6 +302,14 @@ interface DataContextValue extends Snapshot {
   closeDeal: (dealId: string) => Promise<Deal>;
   rejectDeal: (dealId: string, reason: string) => Promise<Deal>;
   holidayDeal: (dealId: string, months: number, reason: string) => Promise<Deal>;
+  uploadAttachment: (input: {
+    clientId?: string;
+    dealId?: string;
+    kind: Attachment["kind"];
+    files: File[];
+  }) => Promise<void>;
+  deleteAttachment: (id: string) => Promise<void>;
+  setClientConsent: (clientId: string, given: boolean) => Promise<void>;
   addContact: (
     dealId: string,
     input: { outcome: ContactOutcome; dueDate?: string; amount?: number; note?: string }
@@ -346,6 +370,27 @@ const DataContext = createContext<DataContextValue | null>(null);
 
 // ── Обращение к API ────────────────────────────────────────────────────
 
+/**
+ * Фото с телефона весят 5–10 МБ: уменьшаем до 2000 пикселей по длинной
+ * стороне и пересохраняем в JPEG. PDF и небольшие картинки — как есть.
+ */
+async function shrinkImage(file: File): Promise<Blob> {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size <= 1_500_000) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.85));
+    return blob && blob.size < file.size ? blob : file;
+  } catch {
+    return file;
+  }
+}
+
 async function api<T>(path: string, body?: unknown, method?: string): Promise<T> {
   const res = await fetch(path, {
     method: method ?? (body === undefined ? "GET" : "POST"),
@@ -403,6 +448,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       templates: data.templates,
       savedFilters: data.savedFilters,
       contacts: data.contacts ?? [],
+      attachments: data.attachments ?? [],
       cashOpeningBalance: data.settings.cashOpeningBalance,
       hiddenNavItems: data.settings.hiddenNavItems,
       clientDefaultLimit: data.settings.clientDefaultLimit ?? 0,
@@ -524,6 +570,55 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const deal = await api<Deal>(`/api/deals/${encodeURIComponent(dealId)}/holiday`, { months, reason });
       await load();
       return deal;
+    },
+    [load]
+  );
+
+  const uploadAttachment = useCallback(
+    async (input: { clientId?: string; dealId?: string; kind: Attachment["kind"]; files: File[] }) => {
+      // Файлы по одному: каждый до 5 МБ, а общий запрос не упирается в
+      // лимит тела. Ошибки собираем и показываем разом — удачные файлы
+      // остаются загруженными.
+      const failed: string[] = [];
+      for (const file of input.files) {
+        try {
+          const blob = await shrinkImage(file);
+          if (blob.size > 5 * 1024 * 1024) throw new Error("больше 5 МБ");
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(new Error("не удалось прочитать"));
+            reader.readAsDataURL(blob);
+          });
+          await api("/api/attachments", {
+            clientId: input.clientId,
+            dealId: input.dealId,
+            kind: input.kind,
+            name: blob === file ? file.name : file.name.replace(/\.[^.]+$/, "") + ".jpg",
+            dataUrl,
+          });
+        } catch (err) {
+          failed.push(`«${file.name}»: ${err instanceof Error ? err.message : "ошибка"}`);
+        }
+      }
+      await load();
+      if (failed.length) throw new Error(`Не загружено: ${failed.join("; ")}`);
+    },
+    [load]
+  );
+
+  const deleteAttachment = useCallback(
+    async (id: string) => {
+      await api(`/api/attachments/${encodeURIComponent(id)}`, undefined, "DELETE");
+      await load();
+    },
+    [load]
+  );
+
+  const setClientConsent = useCallback(
+    async (clientId: string, given: boolean) => {
+      await api(`/api/clients/${encodeURIComponent(clientId)}/consent`, { given }, "PATCH");
+      await load();
     },
     [load]
   );
@@ -803,6 +898,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       rejectDeal,
       holidayDeal,
       addContact,
+      uploadAttachment,
+      deleteAttachment,
+      setClientConsent,
       deleteDeal,
       addClient,
       setClientBlacklisted,
@@ -834,7 +932,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       logout,
       refresh,
     }),
-    [state, addDeal, updateDeal, restructureDeal, reassignDeal, setDealStage, closeDeal, rejectDeal, holidayDeal, addContact, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
+    [state, addDeal, updateDeal, restructureDeal, reassignDeal, setDealStage, closeDeal, rejectDeal, holidayDeal, addContact, uploadAttachment, deleteAttachment, setClientConsent, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
      addCoinvestor, updateCoinvestor, setCoinvestorActive, deleteCoinvestor,
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,

@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X } from "lucide-react";
+import Link from "next/link";
+import { X, Users } from "lucide-react";
 import { useData } from "@/lib/store";
 import type { Client } from "@/lib/data";
+import { findDuplicates } from "@/lib/duplicates";
 
 // Маска +7 (999) 999-99-99
 function maskPhone(raw: string) {
@@ -74,7 +76,7 @@ export default function NewClientModal({
   onClose: () => void;
   onCreated?: (client: Client) => void;
 }) {
-  const { addClient } = useData();
+  const { addClient, clients } = useData();
   const router = useRouter();
   const [form, setForm] = useState({
     lastName: "",
@@ -90,6 +92,7 @@ export default function NewClientModal({
     livingAddress: "",
     inn: "",
   });
+  const [consent, setConsent] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +113,10 @@ export default function NewClientModal({
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((f) => ({ ...f, [k]: v }));
+
+  // Такой клиент уже есть? Предупреждаем, но не запрещаем: бывает, что
+  // номер сменил владельца или паспорт введён с ошибкой
+  const duplicates = findDuplicates(clients, form);
 
   const ready =
     form.lastName.trim() !== "" &&
@@ -137,6 +144,7 @@ export default function NewClientModal({
         registrationAddress: form.registrationAddress.trim() || undefined,
         livingAddress: form.livingAddress.trim() || undefined,
         inn: form.inn.trim() || undefined,
+        consent,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить");
@@ -304,7 +312,58 @@ export default function NewClientModal({
               />
             </Field>
           </Section>
+
+          <label className="flex items-start gap-3 rounded-[12px] border border-line bg-canvas px-4 py-3 text-sm">
+            <input
+              type="checkbox"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-brand)]"
+            />
+            <span>
+              <span className="font-medium">Клиент подписал согласие на обработку персональных данных</span>
+              <span className="block text-mute">
+                Бланк можно распечатать в карточке клиента после сохранения и отметить там же.
+              </span>
+            </span>
+          </label>
         </div>
+
+        {duplicates.length > 0 && (
+          <div className="border-t border-warn/30 bg-warn-soft px-6 py-3 text-sm" role="alert">
+            <p className="flex items-center gap-2 font-medium text-warn">
+              <Users size={15} aria-hidden /> Похоже, такой клиент уже есть
+            </p>
+            <ul className="mt-1.5 flex flex-col gap-1">
+              {duplicates.slice(0, 3).map(({ client: c, reasons }) => (
+                <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span>
+                    {c.name} · {c.id}
+                    <span className="text-mute">
+                      {" "}— совпадает {reasons.map((r) => (r === "phone" ? "телефон" : "паспорт")).join(" и ")}
+                    </span>
+                  </span>
+                  {onCreated ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onCreated(c);
+                        onClose();
+                      }}
+                      className="font-medium text-brand hover:underline"
+                    >
+                      Выбрать его
+                    </button>
+                  ) : (
+                    <Link href={`/clients/${c.id}`} onClick={onClose} className="font-medium text-brand hover:underline">
+                      Открыть карточку
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <footer className="flex flex-wrap items-center justify-end gap-3 border-t border-line px-6 py-4">
           <p
@@ -336,7 +395,13 @@ export default function NewClientModal({
             disabled={!ready || saved || saving}
             className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
-            {saved ? "Клиент создан" : saving ? "Сохраняем…" : "Создать клиента"}
+            {saved
+              ? "Клиент создан"
+              : saving
+                ? "Сохраняем…"
+                : duplicates.length > 0
+                  ? "Всё равно создать"
+                  : "Создать клиента"}
           </button>
         </footer>
       </form>

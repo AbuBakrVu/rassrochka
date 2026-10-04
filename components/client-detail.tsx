@@ -15,11 +15,16 @@ import {
   ShieldAlert,
   ShieldOff,
   SearchX,
+  IdCard,
+  Plus,
 } from "lucide-react";
 import { Card, Badge, EmptyState, ProgressRing } from "@/components/ui";
 import ClientDeals, { type DealCardData } from "@/components/client-deals";
 import CopyLinkButton from "@/components/copy-link";
 import { ClientCreditCard } from "@/components/client-credit";
+import AttachmentsCard from "@/components/attachments-card";
+import ConsentCard from "@/components/consent-card";
+import NewDealModal from "@/components/new-deal-modal";
 import { useData } from "@/lib/store";
 import {
   clientById,
@@ -44,10 +49,11 @@ const initials = (name: string) =>
     .join("");
 
 export default function ClientDetail({ id }: { id: string }) {
-  const { clients, deals, paidPayments, setClientBlacklisted } = useData();
+  const { clients, deals, paidPayments, setClientBlacklisted, user } = useData();
   const router = useRouter();
   const client = clientById(clients, id);
   const [blacklistOpen, setBlacklistOpen] = useState(false);
+  const [dealOpen, setDealOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const removeFromBlacklist = async () => {
@@ -204,6 +210,15 @@ export default function ClientDetail({ id }: { id: string }) {
                 В чёрный список
               </button>
             )}
+            {user.role !== "accountant" && (
+              <button
+                onClick={() => setDealOpen(true)}
+                className="flex items-center gap-2 rounded-full border border-line px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand"
+              >
+                <Plus size={16} aria-hidden />
+                Новая сделка
+              </button>
+            )}
             <button
               onClick={() =>
                 window.open(
@@ -291,6 +306,20 @@ export default function ClientDetail({ id }: { id: string }) {
         <div className="flex flex-col gap-4">
           <ClientCreditCard client={client} />
 
+          <ConsentCard client={client} />
+
+          <AttachmentsCard
+            title="Документы клиента"
+            icon={IdCard}
+            clientId={client.id}
+            kinds={[
+              { kind: "passport", label: "Паспорт" },
+              { kind: "document", label: "Документ" },
+              { kind: "other", label: "Другое" },
+            ]}
+            hint="Фото паспорта (разворот и прописка), справки, подписанное согласие."
+          />
+
           <Card className="p-5">
             <h2 className="mb-1 font-semibold">История платежей</h2>
             {history.length === 0 ? (
@@ -375,6 +404,8 @@ export default function ClientDetail({ id }: { id: string }) {
           </Card>
         </div>
       </div>
+
+      {dealOpen && <NewDealModal initialClient={client} onClose={() => setDealOpen(false)} />}
 
       {blacklistOpen && (
         <BlacklistModal

@@ -44,12 +44,15 @@ const ACTION_LABEL: Record<string, string> = {
   "deal.restructure": "Изменение графика",
   "deal.holiday": "Отсрочка платежа",
   "deal.contact": "Звонок по просрочке",
+  "deal.online": "Онлайн-заявка",
   "payment.accept": "Приём платежа",
   "payment.undo": "Отмена платежа",
   "cash.adjustment": "Ручная операция",
   "client.create": "Новый клиент",
   "client.blacklist": "Чёрный список",
   "client.limit": "Лимит клиента",
+  "client.document": "Документы клиента",
+  "client.consent": "Согласие на обработку ПДн",
   "employee.create": "Новый сотрудник",
   "employee.update": "Правка сотрудника",
   "coinvestor.create": "Новый соинвестор",
@@ -61,6 +64,7 @@ const ACTION_LABEL: Record<string, string> = {
   "settings.nav": "Разделы меню",
   "settings.credit": "Базовый лимит",
   "settings.branding": "Оформление",
+  "settings.apply": "Онлайн-заявка",
 };
 
 // Действия, на которые владельцу стоит смотреть в первую очередь

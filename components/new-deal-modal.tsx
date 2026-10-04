@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   X,
@@ -136,8 +136,15 @@ function StepHead({
   );
 }
 
-export default function NewDealModal({ onClose }: { onClose: () => void }) {
-  const { clients, cash, cashOpeningBalance, employees, addDeal } = useData();
+export default function NewDealModal({
+  onClose,
+  initialClient,
+}: {
+  onClose: () => void;
+  /** «Новая сделка» из карточки клиента — клиент уже выбран. */
+  initialClient?: Client;
+}) {
+  const { clients, cash, cashOpeningBalance, employees, addDeal, uploadAttachment } = useData();
   // Ответственным можно назначить только действующего сотрудника
   const managers = employees.filter((e) => e.active);
   const cashNow = cashBalance(cashOpeningBalance, cash);
@@ -152,7 +159,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [city, setCity] = useState("");
-  const [photos, setPhotos] = useState<{ url: string; name: string }[]>([]);
+  const [photos, setPhotos] = useState<{ url: string; name: string; file: File }[]>([]);
 
   const [price, setPrice] = useState("");
   const [markup, setMarkup] = useState("15");
@@ -171,7 +178,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
     (managers.some((m) => m.id === user.id) ? user.id : (managers[0]?.id ?? null));
 
   const [clientQuery, setClientQuery] = useState("");
-  const [client, setClient] = useState<Client | null>(null);
+  const [client, setClient] = useState<Client | null>(initialClient ?? null);
   const [guarantors, setGuarantors] = useState<{ id: string; name: string }[]>([]);
   const [overLimitAck, setOverLimitAck] = useState(false);
 
@@ -187,10 +194,13 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
     };
   }, [onClose, clientFormOpen]);
 
-  useEffect(
-    () => () => photos.forEach((p) => URL.revokeObjectURL(p.url)),
-    [photos]
-  );
+  // Превью живут, пока открыт мастер: освобождаем их при закрытии (а не при
+  // каждом изменении списка — иначе гасли бы превью уже добавленных фото)
+  const photosRef = useRef(photos);
+  useEffect(() => {
+    photosRef.current = photos;
+  }, [photos]);
+  useEffect(() => () => photosRef.current.forEach((p) => URL.revokeObjectURL(p.url)), []);
 
   const calc = useMemo(() => {
     const base = Number(price) || 0;
@@ -235,7 +245,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
     if (!files) return;
     const next = Array.from(files)
       .slice(0, 8 - photos.length)
-      .map((f) => ({ url: URL.createObjectURL(f), name: f.name }));
+      .map((f) => ({ url: URL.createObjectURL(f), name: f.name, file: f }));
     setPhotos((p) => [...p, ...next]);
   };
 
@@ -266,6 +276,15 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
       setError(err instanceof Error ? err.message : "Не удалось создать сделку");
       setSaving(false);
       return;
+    }
+    // Фото товара — к созданной сделке. Сделка уже есть, поэтому сбой
+    // загрузки не отменяет её: фото можно добавить в карточке сделки.
+    if (photos.length > 0) {
+      try {
+        await uploadAttachment({ dealId: deal.id, kind: "product", files: photos.map((p) => p.file) });
+      } catch (err) {
+        alert(`Сделка создана, но часть фото не загрузилась — добавьте их в карточке сделки. ${err instanceof Error ? err.message : ""}`);
+      }
     }
     setCreated(true);
     setTimeout(() => {
@@ -466,9 +485,10 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                             className="h-full w-full object-cover"
                           />
                           <button
-                            onClick={() =>
-                              setPhotos((s) => s.filter((_, j) => j !== i))
-                            }
+                            onClick={() => {
+                              URL.revokeObjectURL(p.url);
+                              setPhotos((s) => s.filter((_, j) => j !== i));
+                            }}
                             aria-label={`Удалить фото ${p.name}`}
                             className="absolute top-1 right-1 rounded-lg bg-surface/90 p-1 text-danger opacity-0 group-hover:opacity-100 focus:opacity-100"
                           >
@@ -482,7 +502,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                           <span className="text-[11px]">Добавить</span>
                           <input
                             type="file"
-                            accept="image/*"
+                            accept="image/jpeg,image/png,image/webp"
                             multiple
                             className="sr-only"
                             onChange={(e) => addPhotos(e.target.files)}

@@ -55,6 +55,8 @@ export interface Deal {
   restructuredMonths?: number;
   restructuredFrom?: string;
   downPayment?: number;
+  /** Сделка пришла онлайн-заявкой со страницы /apply. */
+  online?: boolean;
   /**
    * Внесено в счёт следующего, ещё не закрытого взноса — частичная оплата
    * или переплата (lib/payments.ts). Учитывается в остатке долга.
@@ -390,6 +392,9 @@ export interface Client {
   portalToken: string;
   /** Лимит, заданный администратором вручную; нет — считается автоматически (lib/credit.ts). */
   creditLimit?: number;
+  /** Согласие на обработку персональных данных (152-ФЗ): когда и как получено. */
+  consentAt?: string;
+  consentSource?: "paper" | "online";
 }
 
 export const clientById = (clients: Client[], id: string) =>

@@ -6,6 +6,7 @@ import { PageHeader, Card } from "@/components/ui";
 import { useData } from "@/lib/store";
 import { nav } from "@/components/shell";
 import BrandingSettings from "@/components/branding-settings";
+import ApplySettingsCard from "@/components/apply-settings";
 
 // "/settings" сюда не входит — иначе можно было бы случайно скрыть сам
 // пункт, которым управляется видимость остальных, и остаться без доступа.
@@ -15,6 +16,7 @@ const TABS = [
   { key: "branding", label: "Оформление" },
   { key: "nav", label: "Разделы меню" },
   { key: "credit", label: "Лимиты клиентов" },
+  { key: "apply", label: "Онлайн-заявка" },
 ] as const;
 
 type Tab = (typeof TABS)[number]["key"];
@@ -161,10 +163,11 @@ export default function SettingsPage() {
             </Card>
           )}
           {tab === "credit" && <CreditLimitCard />}
+          {tab === "apply" && <ApplySettingsCard />}
 
           <p className="mt-4 flex items-center gap-2 text-xs text-mute">
             <Settings size={13} aria-hidden />
-            Параметры графиков платежей, штрафов и интеграций — в разработке.
+            Параметры графиков платежей и интеграций — в разработке.
           </p>
         </div>
       )}

@@ -304,6 +304,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   //     тянул бы в браузер все сделки и всех клиентов компании.
   //   /login — на нём сессии ещё нет, и DataProvider ушёл бы в петлю:
   //     bootstrap → 401 → редирект на /login → снова bootstrap.
+  //   /apply — онлайн-заявка для клиентов, без входа и без стора.
   //   /company — вообще не про компанию: корневой домен, где вводят адрес
   //     своей компании. Без этой строки сюда всё равно рисовался бы
   //     сайдбар CRM компании (баг, найденный вручную в браузере).
@@ -311,6 +312,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   if (
     pathname.startsWith("/pay/") ||
     pathname === "/login" ||
+    pathname === "/apply" ||
     pathname === "/company"
   ) {
     return <>{children}</>;

@@ -20,6 +20,7 @@ import {
   SearchX,
   ReceiptText,
   XCircle,
+  Camera,
 } from "lucide-react";
 import { Card, Badge, EmptyState, ProgressRing } from "@/components/ui";
 import DealActions from "@/components/deal-actions";
@@ -36,6 +37,7 @@ import { computeProfit } from "@/lib/profit";
 import PayoffCalculator from "@/components/payoff-calculator";
 import ContactModal from "@/components/contact-modal";
 import { OUTCOME_LABEL } from "@/lib/collections";
+import AttachmentsCard from "@/components/attachments-card";
 
 export default function DealDetail({ id }: { id: string }) {
   const {
@@ -262,6 +264,7 @@ export default function DealDetail({ id }: { id: string }) {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-mute">Сделка {deal.id}</span>
                 <Badge tone={deal.statusTone}>{deal.status}</Badge>
+                {deal.online && deal.stage === "new" && <Badge tone="blue">С сайта</Badge>}
               </div>
               <h1 className="mt-0.5 text-xl font-semibold tracking-tight sm:text-2xl">
                 {deal.product}
@@ -802,6 +805,14 @@ export default function DealDetail({ id }: { id: string }) {
             </Card>
           )}
 
+          <AttachmentsCard
+            title="Фото товара"
+            icon={Camera}
+            dealId={deal.id}
+            kinds={[{ kind: "product", label: "Товар" }]}
+            hint="Фото товара при выдаче: пригодится, если возникнет спор о комплектации или состоянии."
+          />
+
           <Card className="p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold">Поручители</h2>
@@ -868,6 +879,7 @@ export default function DealDetail({ id }: { id: string }) {
                       }}
                       className="rounded-[8px] border border-line bg-canvas px-2 py-1 text-sm outline-none focus:border-brand"
                     >
+                      {!deal.managerId && <option value="">Не назначен</option>}
                       {employees.filter((e) => e.active).map((e) => (
                         <option key={e.id} value={e.id}>{e.name}</option>
                       ))}

@@ -18,12 +18,15 @@ export type AuditAction =
   | "deal.restructure"
   | "deal.holiday"
   | "deal.contact"
+  | "deal.online"
   | "payment.accept"
   | "payment.undo"
   | "cash.adjustment"
   | "client.create"
   | "client.blacklist"
   | "client.limit"
+  | "client.document"
+  | "client.consent"
   | "employee.create"
   | "employee.update"
   | "coinvestor.create"
@@ -34,11 +37,13 @@ export type AuditAction =
   | "coinvestor.capital"
   | "settings.nav"
   | "settings.credit"
-  | "settings.branding";
+  | "settings.branding"
+  | "settings.apply";
 
 export async function audit(
   dbName: string,
-  userId: number,
+  /** null — действие без сотрудника (онлайн-заявка клиента). */
+  userId: number | null,
   action: AuditAction,
   entityId: string | null,
   details: string
@@ -123,7 +128,7 @@ export async function loadAudit(
     id: String(r.id),
     at: r.occurred_at.toISOString(),
     userId: r.user_id,
-    userName: r.user_name ?? "Удалённый сотрудник",
+    userName: r.user_name ?? (r.user_id === null && r.action === "deal.online" ? "Клиент с сайта" : "Удалённый сотрудник"),
     action: r.action,
     entityId: r.entity_id,
     details: r.details,

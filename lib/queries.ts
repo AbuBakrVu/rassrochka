@@ -13,6 +13,9 @@ import { buildRoute, purchasePrice, stages, type Client, type Deal, type DealSta
 import { addMonthsIso, buildSchedule, monthNames, planOf, restructureOf, splitPlan, type PlanItem } from "./schedule";
 import { allocatePayment, nextDue, stateFromPayments } from "./payments";
 import { OUTCOME_LABEL, type ContactLog, type ContactOutcome } from "./collections";
+import { listAttachments, type Attachment } from "./attachments";
+import { computeClientCredit } from "./credit";
+import { applyQuote, normalizeApplySettings, type ApplySettings } from "./apply";
 import { computeClientStatus, computeDealStatus, isoDate, todayIso } from "./status";
 import type {
   CashTx,
@@ -56,6 +59,7 @@ interface DealRow extends Record<string, unknown> {
   reminder_template_id: number | null;
   last_reminder_stage: string | null;
   last_reminder_due_date: string | null;
+  source: string;
 }
 
 interface ClientRow extends Record<string, unknown> {
@@ -78,6 +82,8 @@ interface ClientRow extends Record<string, unknown> {
   blacklist_reason: string | null;
   portal_token: string;
   credit_limit: number | null;
+  consent_at?: Date | null;
+  consent_source?: "paper" | "online" | null;
 }
 
 interface CashRow extends Record<string, unknown> {
@@ -218,6 +224,7 @@ function toDeal(row: DealRow, today: string): Deal {
     ...(row.category ? { category: row.category } : {}),
     ...(row.city ? { city: row.city } : {}),
     ...(row.down_payment ? { downPayment: row.down_payment } : {}),
+    ...(row.source === "online" ? { online: true } : {}),
     ...(Number(row.credit) > 0 ? { credit: Number(row.credit) } : {}),
     ...(row.reminder_template_id ? { reminderTemplateId: String(row.reminder_template_id) } : {}),
     ...(row.last_reminder_stage
@@ -226,6 +233,21 @@ function toDeal(row: DealRow, today: string): Deal {
     ...(row.last_reminder_due_date ? { lastReminderDueDate: row.last_reminder_due_date } : {}),
     ...(row.deadline ? { deadline: shortDate(row.deadline) } : {}),
     ...(urgent ? { urgent: true } : {}),
+  };
+}
+
+function toCashTx(r: CashRow): CashTx {
+  return {
+    id: String(r.id),
+    kind: r.kind,
+    amount: r.amount,
+    date: r.occurred_at,
+    title: r.title,
+    ...(r.deal_id ? { dealId: r.deal_id } : {}),
+    ...(r.coinvestor_id ? { coinvestorId: r.coinvestor_id } : {}),
+    ...(r.note ? { note: r.note } : {}),
+    ...(r.installment_number !== null ? { installmentNumber: r.installment_number } : {}),
+    ...(r.reverses_id !== null ? { reversesId: String(r.reverses_id) } : {}),
   };
 }
 
@@ -275,6 +297,8 @@ function toClient(row: ClientRow, deals: Deal[], today: string): Client {
     ...(row.credit_limit !== null && row.credit_limit !== undefined
       ? { creditLimit: Number(row.credit_limit) }
       : {}),
+    ...(row.consent_at ? { consentAt: row.consent_at.toISOString() } : {}),
+    ...(row.consent_source ? { consentSource: row.consent_source } : {}),
   };
 }
 
@@ -293,7 +317,7 @@ const DEALS_SELECT = `
          d.next_step, d.deadline, d.reject_reason, d.portal_token,
          d.description, d.category, d.city,
          d.original_months, d.restructured_months, d.restructured_from,
-         d.down_payment, d.reminder_template_id,
+         d.down_payment, d.reminder_template_id, d.source,
          d.last_reminder_stage, d.last_reminder_due_date,
          d.manager_id, u.initials as manager_initials,
          (
@@ -336,6 +360,7 @@ export interface Bootstrap {
   templates: MessageTemplate[];
   savedFilters: SavedFilter[];
   contacts: ContactLog[];
+  attachments: Attachment[];
   settings: { cashOpeningBalance: number; hiddenNavItems: string[]; clientDefaultLimit: number };
 }
 
@@ -503,7 +528,7 @@ export async function loadBootstrap(
 
   const [
     dealRows, clientRows, cashRows, eventRows, settingRows, userRows,
-    coinvestorRows, capitalRows, profitRows, templateRows, savedFilters, contactRows,
+    coinvestorRows, capitalRows, profitRows, templateRows, savedFilters, contactRows, attachments,
   ] =
     await Promise.all([
       query<DealRow>(dbName, DEALS_SQL),
@@ -536,6 +561,7 @@ export async function loadBootstrap(
         dbName,
         "select * from contact_log order by created_at desc limit 5000"
       ).catch(() => [] as ContactRow[]),
+      listAttachments(dbName),
     ]);
 
   // Данные по ролям. Меню прячет разделы, но в браузер приходит всё, что
@@ -576,18 +602,7 @@ export async function loadBootstrap(
       return seesPersonalData ? client : withoutPersonalData(client);
     }),
     paidPayments,
-    cash: cashRows.map((r) => ({
-      id: String(r.id),
-      kind: r.kind,
-      amount: r.amount,
-      date: r.occurred_at,
-      title: r.title,
-      ...(r.deal_id ? { dealId: r.deal_id } : {}),
-      ...(r.coinvestor_id ? { coinvestorId: r.coinvestor_id } : {}),
-      ...(r.note ? { note: r.note } : {}),
-      ...(r.installment_number !== null ? { installmentNumber: r.installment_number } : {}),
-      ...(r.reverses_id !== null ? { reversesId: String(r.reverses_id) } : {}),
-    })),
+    cash: cashRows.map(toCashTx),
     events: eventRows.map((r) => ({
       id: String(r.id),
       dealId: r.deal_id,
@@ -602,6 +617,8 @@ export async function loadBootstrap(
     templates: templateRows.map(toTemplate),
     savedFilters,
     contacts: currentUser.role === "accountant" ? [] : contactRows.map(toContact),
+    // Фото паспорта и документы — персональные данные, бухгалтеру не нужны
+    attachments: seesPersonalData ? attachments : [],
     settings: {
       cashOpeningBalance: Number(opening?.value ?? 0),
       hiddenNavItems: Array.isArray(hiddenNav?.value) ? (hiddenNav.value as string[]) : [],
@@ -641,6 +658,9 @@ export interface NewClientInput {
   registrationAddress?: string;
   livingAddress?: string;
   inn?: string;
+  /** Клиент подписал согласие на обработку ПДн. */
+  consent?: boolean;
+  consentSource?: "paper" | "online";
 }
 
 export async function createClient(
@@ -655,8 +675,9 @@ export async function createClient(
     `insert into clients (
        name, phone, middle_name, birth_date, passport_series, passport_number,
        passport_issued_by, passport_issued_at, registration_address,
-       living_address, inn
-     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       living_address, inn, consent_at, consent_source
+     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+               case when $12::boolean then now() end, case when $12::boolean then $13 end)
      returning *`,
     [
       name,
@@ -670,10 +691,29 @@ export async function createClient(
       input.registrationAddress || null,
       input.livingAddress || null,
       input.inn || null,
+      input.consent === true,
+      input.consentSource ?? "paper",
     ]
   );
   if (!row) throw new Error("Клиент не создан");
   return toClient(row, [], todayIso());
+}
+
+/** Отметка о согласии на обработку ПДн; given=false снимает её. */
+export async function setClientConsent(
+  dbName: string,
+  clientId: string,
+  given: boolean,
+  source: "paper" | "online" = "paper"
+): Promise<void> {
+  const row = await queryOne<{ id: string }>(
+    dbName,
+    given
+      ? "update clients set consent_at = now(), consent_source = $2 where id = $1 returning id"
+      : "update clients set consent_at = null, consent_source = null where id = $1 returning id",
+    given ? [clientId, source] : [clientId]
+  );
+  if (!row) throw new Error(`Клиент ${clientId} не найден`);
 }
 
 /** Ручной лимит клиента; null возвращает автоматический расчёт. */
@@ -688,6 +728,108 @@ export async function setClientCreditLimit(
     [clientId, limit]
   );
   if (!row) throw new Error(`Клиент ${clientId} не найден`);
+}
+
+// ── Онлайн-заявка (/apply) ──────────────────────────────────────────────
+
+export async function loadApplySettings(dbName: string): Promise<ApplySettings> {
+  const row = await queryOne<{ value: unknown }>(dbName, "select value from settings where key = 'apply'");
+  return normalizeApplySettings(row?.value);
+}
+
+export async function saveApplySettings(dbName: string, settings: ApplySettings): Promise<void> {
+  await query(
+    dbName,
+    `insert into settings (key, value) values ('apply', $1::jsonb)
+     on conflict (key) do update set value = excluded.value`,
+    [JSON.stringify(normalizeApplySettings(settings))]
+  );
+}
+
+export async function loadPortalShowLimit(dbName: string): Promise<boolean> {
+  const row = await queryOne<{ value: unknown }>(dbName, "select value from settings where key = 'portal_show_limit'");
+  return row?.value === true;
+}
+
+export async function savePortalShowLimit(dbName: string, show: boolean): Promise<void> {
+  await query(
+    dbName,
+    `insert into settings (key, value) values ('portal_show_limit', $1::jsonb)
+     on conflict (key) do update set value = excluded.value`,
+    [JSON.stringify(show)]
+  );
+}
+
+/**
+ * Заявка с сайта: клиент ищется по телефону (последние 10 цифр), новый
+ * заводится сам — с отметкой о согласии на обработку ПДн, которое он дал
+ * галочкой. Сделка — «Новая», без ответственного: её разбирает менеджер.
+ * Суммы пересчитываются здесь по настройкам компании, цифрам из формы не
+ * верим.
+ */
+export async function createOnlineApplication(
+  dbName: string,
+  input: { name: string; phone: string; product: string; price: number; months: number; down: number; comment?: string },
+  settings: ApplySettings
+): Promise<{ dealId: string; clientId: string; newClient: boolean }> {
+  const quote = applyQuote(settings, input.price, input.months, input.down);
+  const phoneDigits = input.phone.replace(/\D/g, "").slice(-10);
+  return transaction(dbName, async (client) => {
+    const { rows: found } = await client.query<{ id: string; consent_at: Date | null }>(
+      `select id, consent_at from clients
+       where right(regexp_replace(phone, '\\D', '', 'g'), 10) = $1
+       order by created_at limit 1`,
+      [phoneDigits]
+    );
+    let clientId: string;
+    const newClient = found.length === 0;
+    if (newClient) {
+      const { rows } = await client.query<{ id: string }>(
+        `insert into clients (name, phone, consent_at, consent_source)
+         values ($1, $2, now(), 'online') returning id`,
+        [input.name, input.phone]
+      );
+      clientId = rows[0].id;
+    } else {
+      clientId = found[0].id;
+      if (!found[0].consent_at) {
+        await client.query(
+          "update clients set consent_at = now(), consent_source = 'online' where id = $1",
+          [clientId]
+        );
+      }
+    }
+
+    const { rows } = await client.query<{ id: string }>(
+      `insert into deals (client_id, product, amount, months, markup_pct, opened_at,
+                          stage, description, down_payment, source, next_step)
+       values ($1, $2, $3, $4, $5, $6, 'new', $7, $8, 'online', $9)
+       returning id`,
+      [
+        clientId,
+        input.product,
+        quote.financed,
+        input.months,
+        settings.markupPct,
+        todayIso(),
+        input.comment || null,
+        quote.down || null,
+        newClient
+          ? "Онлайн-заявка: позвонить, проверить паспорт, назначить ответственного"
+          : "Онлайн-заявка постоянного клиента: позвонить и назначить ответственного",
+      ]
+    );
+    const dealId = rows[0].id;
+    await client.query(
+      "insert into deal_events (deal_id, text, user_id) values ($1, $2, null)",
+      [
+        dealId,
+        `Онлайн-заявка с сайта · товар за ${input.price.toLocaleString("ru-RU")} ₽, ${input.months} мес.` +
+          (newClient ? " · новый клиент" : ""),
+      ]
+    );
+    return { dealId, clientId, newClient };
+  });
 }
 
 export async function setClientDefaultLimit(dbName: string, limit: number): Promise<void> {
@@ -2237,6 +2379,51 @@ export async function loadPortalClient(
       };
     }),
   };
+}
+
+/**
+ * Предодобренный лимит для кабинета клиента: сколько ещё можно взять в
+ * рассрочку по правилам lib/credit.ts. Показываем только хорошим клиентам —
+ * без просрочки, не в чёрном списке, с низким или средним риском — и только
+ * если администратор не выключил это в настройках (portal_show_limit).
+ */
+export async function loadPortalOffer(
+  dbName: string,
+  token: string
+): Promise<{ available: number; applyEnabled: boolean } | null> {
+  const settings = await query<{ key: string; value: unknown }>(
+    dbName,
+    "select key, value from settings where key in ('portal_show_limit', 'client_default_limit', 'apply')"
+  );
+  const get = (k: string) => settings.find((s) => s.key === k)?.value;
+  // До миграции 023 ключа нет — тогда не показываем
+  if (get("portal_show_limit") !== true) return null;
+
+  const clientRow = await queryOne<ClientRow>(dbName, "select * from clients where portal_token = $1", [token]);
+  if (!clientRow) return null;
+  const today = todayIso();
+  // Риск считается по сделкам клиента, поэтому берём только их
+  const [dealRows, cashRows] = await Promise.all([
+    query<DealRow>(dbName, `${DEALS_SELECT} and d.client_id = $1 order by d.created_at desc`, [clientRow.id]),
+    query<CashRow>(
+      dbName,
+      `select t.* from cash_tx t join deals d on d.id = t.deal_id
+       where d.client_id = $1 order by t.occurred_at, t.id`,
+      [clientRow.id]
+    ),
+  ]);
+  const deals = dealRows.map((r) => toDeal(r, today));
+  const paidPayments: Record<string, number> = {};
+  for (const row of dealRows) paidPayments[row.id] = row.paid_count;
+  const client = toClient(clientRow, deals, today);
+  if (client.status === "overdue") return null;
+
+  const credit = computeClientCredit(client, deals, paidPayments, cashRows.map(toCashTx), Number(get("client_default_limit") ?? 0));
+  if (credit.available === null || credit.source === "blacklist" || credit.risk.tone === "red") return null;
+  const available = Math.floor(credit.available / 1000) * 1000;
+  if (available < 5000) return null;
+  const apply = get("apply") as { enabled?: boolean } | undefined;
+  return { available, applyEnabled: apply?.enabled === true };
 }
 
 // ── Квитанции ──────────────────────────────────────────────────────────

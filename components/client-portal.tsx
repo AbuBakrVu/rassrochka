@@ -14,6 +14,7 @@ import {
   SearchX,
   ChevronDown,
   ReceiptText,
+  Sparkles,
 } from "lucide-react";
 import { fmt } from "@/lib/data";
 import { scheduleForDeal, paidTotal, longDate, money, type Installment } from "@/lib/schedule";
@@ -59,6 +60,8 @@ interface ClientResponse {
   managerName: string;
   managerPhone: string | null;
   deals: (PortalDealShape & { stage: "active" | "closed" | string })[];
+  /** Предодобренный лимит на новую покупку (lib/queries.ts, loadPortalOffer). */
+  offer?: { available: number; applyEnabled: boolean } | null;
 }
 
 type PortalResponse = SingleDealResponse | ClientResponse;
@@ -469,6 +472,28 @@ function ClientView({ data, token }: { data: ClientResponse; token: string }) {
             <DealCard key={deal.id} deal={deal} token={token} />
           ))}
         </div>
+      )}
+
+      {data.offer && (
+        <section className="rounded-card border border-brand/30 bg-brand-soft p-5 shadow-card">
+          <p className="flex items-center gap-2 text-sm font-medium text-brand-deep">
+            <Sparkles size={16} aria-hidden /> Вам предварительно одобрено
+          </p>
+          <p className="mt-1 text-[28px] font-semibold tracking-tight">до {money(data.offer.available)}</p>
+          <p className="text-sm text-mute">
+            на новую покупку в рассрочку — без повторной проверки документов.
+          </p>
+          {data.offer.applyEnabled ? (
+            <Link
+              href="/apply"
+              className="mt-3 inline-flex rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
+            >
+              Посчитать платёж и оставить заявку
+            </Link>
+          ) : (
+            <p className="mt-2 text-sm">Напишите менеджеру, что хотите оформить ещё одну покупку.</p>
+          )}
+        </section>
       )}
 
       <ContactSection managerName={data.managerName} managerPhone={data.managerPhone} />
