@@ -9,7 +9,7 @@ import { computeReminderQueue, type ReminderQueueItem } from "@/lib/reminders";
 import { todayIso } from "@/lib/status";
 
 const field =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 const PLACEHOLDERS = ["{имя}", "{сумма}", "{товар}", "{дата}"];
 
@@ -76,7 +76,7 @@ function ReminderQueue() {
             <button
               onClick={() => send(item)}
               disabled={sendingKey === item.dealId + item.stage}
-              className="flex shrink-0 items-center gap-1.5 rounded-[10px] bg-brand px-3.5 py-2 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:opacity-50"
+              className="flex shrink-0 items-center gap-1.5 rounded-full bg-brand px-3.5 py-2 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:opacity-50"
             >
               <Send size={14} aria-hidden />
               Отправить
@@ -148,7 +148,7 @@ export default function MailingsPage() {
           <div className="mb-4 flex justify-end">
             <button
               onClick={() => setModal("new")}
-              className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+              className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
             >
               + Создать шаблон
             </button>
@@ -185,7 +185,7 @@ export default function MailingsPage() {
                           onClick={() => makeDefault(t)}
                           disabled={busy === t.id}
                           title="Сделать основным"
-                          className="rounded-[8px] border border-line p-1.5 text-mute transition-colors hover:border-brand/40 hover:text-ink disabled:opacity-50"
+                          className="rounded-[16px] border border-line p-1.5 text-mute transition-colors hover:border-brand/40 hover:text-ink disabled:opacity-50"
                         >
                           <Star size={14} aria-hidden />
                         </button>
@@ -193,7 +193,7 @@ export default function MailingsPage() {
                       <button
                         onClick={() => setModal(t)}
                         title="Редактировать"
-                        className="rounded-[8px] border border-line p-1.5 text-mute transition-colors hover:border-brand/40 hover:text-ink"
+                        className="rounded-[16px] border border-line p-1.5 text-mute transition-colors hover:border-brand/40 hover:text-ink"
                       >
                         <Pencil size={14} aria-hidden />
                       </button>
@@ -201,7 +201,7 @@ export default function MailingsPage() {
                         onClick={() => remove(t)}
                         disabled={busy === t.id}
                         title="Удалить"
-                        className="rounded-[8px] border border-line p-1.5 text-mute transition-colors hover:border-danger/40 hover:text-danger disabled:opacity-50"
+                        className="rounded-[16px] border border-line p-1.5 text-mute transition-colors hover:border-danger/40 hover:text-danger disabled:opacity-50"
                       >
                         <Trash2 size={14} aria-hidden />
                       </button>
@@ -270,7 +270,7 @@ function TemplateModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <form
         onSubmit={submit}
         role="dialog"
@@ -323,13 +323,13 @@ function TemplateModal({
           <p className="mr-auto text-sm" role="status" aria-live="polite">
             {error ? <span className="text-danger">{error}</span> : saving ? "Сохраняем…" : ""}
           </p>
-          <button type="button" onClick={onClose} className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
             Отмена
           </button>
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Сохранить
           </button>

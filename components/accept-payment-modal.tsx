@@ -11,18 +11,22 @@ import {
   CreditCard,
   Landmark,
   CalendarDays,
+  ReceiptText,
 } from "lucide-react";
 import { clientById, paidCount, dealState, ruPlural, type Deal } from "@/lib/data";
-import { scheduleForDeal } from "@/lib/schedule";
+import { scheduleForDeal, paidTotal } from "@/lib/schedule";
+import { allocatePayment } from "@/lib/payments";
 import { todayIso } from "@/lib/derive";
 import { useData } from "@/lib/store";
 import { Badge } from "@/components/ui";
+import { money as moneyFmt } from "@/lib/schedule";
+import { paymentTitle, receiptPath } from "@/lib/receipts";
 
 const money = (n: number) =>
   new Intl.NumberFormat("ru-RU").format(Math.round(n)) + " ₽";
 
 const input =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 const methods = [
   { key: "cash", label: "Наличные", icon: Banknote },
@@ -41,17 +45,22 @@ const digits = (s: string) => s.replace(/\D/g, "");
 
 export default function AcceptPaymentModal({
   onClose,
+  initialDealId,
 }: {
   onClose: () => void;
+  /** Сделка уже выбрана — например, из «Ближайших оплат» на главной. */
+  initialDealId?: string;
 }) {
-  const { deals, clients, paidPayments, acceptPayment } = useData();
+  const { deals, clients, paidPayments, acceptPayment, cash } = useData();
   const [query, setQuery] = useState("");
-  const [deal, setDeal] = useState<Deal | null>(null);
+  const [deal, setDeal] = useState<Deal | null>(() => deals.find((d) => d.id === initialDealId) ?? null);
   const [amountInput, setAmountInput] = useState("");
   const [method, setMethod] =
     useState<(typeof methods)[number]["key"]>("cash");
   const [date, setDate] = useState(todayIso());
   const [saved, setSaved] = useState(false);
+  // Последний id в кассе до проведения — всё, что новее, записал этот платёж
+  const [cashIdBefore, setCashIdBefore] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -71,8 +80,9 @@ export default function AcceptPaymentModal({
     const q = query.trim().toLowerCase();
     const qd = digits(query);
     return deals
-      // Платёж можно принять только по действующей или готовящейся сделке
-      .filter((d) => dealState(d) === "active" || dealState(d) === "pending")
+      // Платёж принимается только по выданной сделке — заявку сначала
+      // одобряют переводом в «Активна» (там же проводится закупка)
+      .filter((d) => dealState(d) === "active")
       .map((d) => {
         const client = clientById(clients, d.clientId);
         const paid = paidCount(d, paidPayments);
@@ -80,9 +90,7 @@ export default function AcceptPaymentModal({
         // реструктуризации взносы могут отличаться от простого деления
         const schedule = scheduleForDeal(d, paid);
         const next = schedule.find((p) => p.status === "due");
-        const paidSum = schedule
-          .filter((p) => p.status === "paid")
-          .reduce((s, p) => s + p.amount, 0);
+        const paidSum = paidTotal(schedule);
         return {
           deal: d,
           phone: client?.phone ?? "",
@@ -113,6 +121,14 @@ export default function AcceptPaymentModal({
       })
     : null;
 
+  // Сделка пришла готовой — подставляем сумму ближайшего взноса один раз,
+  // во время отрисовки (без эффекта, который дописывал бы состояние позже)
+  const [prefilled, setPrefilled] = useState(!initialDealId);
+  if (!prefilled && selected) {
+    setPrefilled(true);
+    setAmountInput(String(Math.round(selected.nextAmount)));
+  }
+
   const pick = (d: Deal) => {
     setDeal(d);
     const row = rows.find((r) => r.deal.id === d.id);
@@ -120,22 +136,20 @@ export default function AcceptPaymentModal({
   };
 
   const amount = Number(amountInput.replace(/\s/g, ""));
-  const amountValid =
-    selected !== null && Number.isFinite(amount) && amount >= selected.nextAmount - 0.5;
-
-  // Сколько взносов подряд закроет введённая сумма — та же логика, что на
-  // сервере (lib/queries.ts, acceptPayment), только для подсказки в интерфейсе
-  const coveredCount = (() => {
-    if (!selected || !amountValid) return 1;
-    let cash = amount;
-    let n = 0;
-    const due = selected.schedule.filter((p) => p.status === "due");
-    while (n < due.length && cash >= due[n].amount - 0.5) {
-      cash -= due[n].amount;
-      n++;
-    }
-    return Math.max(n, 1);
-  })();
+  // Тот же расчёт, что на сервере (lib/payments.ts): сколько взносов
+  // закроет сумма и сколько останется в счёт следующего. В графике
+  // ближайший взнос уже уменьшен на внесённое ранее, поэтому credit = 0
+  const allocation = selected
+    ? allocatePayment(
+        selected.schedule.filter((p) => p.status === "due").map((p) => p.amount),
+        0,
+        0,
+        Number.isFinite(amount) ? amount : 0
+      )
+    : null;
+  const amountValid = allocation?.ok === true;
+  const coveredCount = allocation?.ok ? allocation.paid : 0;
+  const leftover = allocation?.ok ? allocation.credit : 0;
 
   const ready = date !== "" && amountValid;
 
@@ -144,19 +158,58 @@ export default function AcceptPaymentModal({
     if (!ready || !deal) return;
     setError(null);
     try {
+      setCashIdBefore(cash.reduce((max, t) => Math.max(max, Number(t.id)), 0));
       await acceptPayment(deal.id, { date, method, amount });
       setSaved(true);
-      setTimeout(onClose, 1300);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось принять платёж");
     }
+  };
+
+  // После проведения — предложить отправить клиенту квитанцию. Переплата
+  // пишет в кассу по записи на каждый закрытый взнос — ссылка на каждую.
+  const newPayments =
+    saved && deal && cashIdBefore !== null
+      ? cash.filter(
+          (t) =>
+            t.dealId === deal.id &&
+            t.kind === "payment" &&
+            t.amount > 0 &&
+            t.installmentNumber &&
+            !t.reversesId &&
+            Number(t.id) > cashIdBefore
+        )
+      : [];
+  const payer = deal ? clientById(clients, deal.clientId) : undefined;
+
+  const sendReceipt = () => {
+    if (!deal || !payer || newPayments.length === 0) return;
+    const firstName = payer.name.split(" ")[1] ?? payer.name;
+    const total = newPayments.reduce((s, t) => s + t.amount, 0);
+    const url = (id: string) => `${window.location.origin}${receiptPath(payer.portalToken, id)}`;
+    const receipts =
+      newPayments.length === 1
+        ? `Квитанция: ${url(newPayments[0].id)}`
+        : "Квитанции:\n" +
+          newPayments
+            .map((t) => `${paymentTitle(t.title.startsWith("Частичная оплата") ? "partial" : "installment", t.installmentNumber, deal.months)} — ${url(t.id)}`)
+            .join("\n");
+    const text =
+      `${firstName}, здравствуйте! Платёж ${moneyFmt(total)} по рассрочке «${deal.product}» получен. Спасибо!\n\n` +
+      receipts;
+    window.open(
+      `https://wa.me/${payer.phone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+    onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
       <button
         aria-label="Закрыть окно"
-        className="absolute inset-0 bg-ink/30"
+        className="absolute inset-0 bg-scrim"
         onClick={onClose}
       />
       <div
@@ -171,7 +224,7 @@ export default function AcceptPaymentModal({
               <button
                 onClick={() => setDeal(null)}
                 aria-label="Назад к поиску"
-                className="rounded-[10px] p-1.5 text-mute hover:bg-canvas hover:text-ink"
+                className="rounded-[16px] p-1.5 text-mute hover:bg-canvas hover:text-ink"
               >
                 <ArrowLeft size={17} />
               </button>
@@ -193,7 +246,7 @@ export default function AcceptPaymentModal({
           <button
             onClick={onClose}
             aria-label="Закрыть"
-            className="rounded-[10px] p-2 text-mute hover:bg-canvas hover:text-ink"
+            className="rounded-full p-2 text-mute hover:bg-canvas hover:text-ink"
           >
             <X size={18} />
           </button>
@@ -274,8 +327,8 @@ export default function AcceptPaymentModal({
           /* Шаг 2 — платёж */
           <form onSubmit={submit} className="flex min-h-0 flex-col">
             <div className="flex flex-col gap-5 overflow-y-auto px-6 py-5">
-              <div className="flex items-center gap-3 rounded-[12px] bg-canvas px-4 py-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white">
+              <div className="flex items-center gap-3 rounded-[16px] bg-canvas px-4 py-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-semibold text-on-brand">
                   {initials(selected!.deal.client)}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -308,20 +361,26 @@ export default function AcceptPaymentModal({
                 </div>
                 {!amountValid ? (
                   <p className="mt-1.5 text-xs text-danger">
-                    Меньше очередного взноса ({money(selected!.nextAmount)}) внести
-                    нельзя
+                    {allocation && !allocation.ok && allocation.error === "TOO_HIGH"
+                      ? `Больше остатка долга — можно принять не больше ${money(allocation.max)}`
+                      : "Введите сумму больше нуля"}
                   </p>
-                ) : coveredCount > 1 ? (
+                ) : coveredCount === 0 ? (
                   <p className="mt-1.5 text-xs text-mute">
-                    Этой суммы хватит на {coveredCount}{" "}
-                    {ruPlural(coveredCount, "взнос", "взноса", "взносов")} вперёд
-                    — график сам продвинется на {coveredCount}.
+                    Частичная оплата: взнос закроется, когда клиент доплатит{" "}
+                    {money(Math.max(selected!.nextAmount - amount, 0))}.
+                  </p>
+                ) : coveredCount > 1 || leftover > 0 ? (
+                  <p className="mt-1.5 text-xs text-mute">
+                    Закроет {coveredCount}{" "}
+                    {ruPlural(coveredCount, "взнос", "взноса", "взносов")}
+                    {leftover > 0 && `, ещё ${money(leftover)} пойдёт в счёт следующего`}.
                   </p>
                 ) : (
                   <p className="mt-1.5 text-xs text-mute">
-                    По умолчанию — очередной взнос по графику. Если клиент
-                    заплатил больше, впишите фактическую сумму — лишнее закроет
-                    следующие взносы.
+                    По умолчанию — очередной взнос по графику. Впишите
+                    фактическую сумму: меньше — частичная оплата, больше —
+                    закроет и следующие взносы.
                   </p>
                 )}
               </div>
@@ -337,7 +396,7 @@ export default function AcceptPaymentModal({
                       type="button"
                       onClick={() => setMethod(key)}
                       aria-pressed={method === key}
-                      className={`flex items-center justify-center gap-2 rounded-[10px] border px-3 py-2.5 text-sm transition-colors ${
+                      className={`flex items-center justify-center gap-2 rounded-full border px-3 py-2.5 text-sm transition-colors ${
                         method === key
                           ? "border-brand bg-brand-soft font-medium text-brand-deep"
                           : "border-line bg-canvas text-mute hover:text-ink"
@@ -366,7 +425,7 @@ export default function AcceptPaymentModal({
                 />
               </label>
 
-              <div className="flex items-center gap-2.5 rounded-[12px] bg-brand-soft px-4 py-3 text-sm">
+              <div className="flex items-center gap-2.5 rounded-[16px] bg-brand-soft px-4 py-3 text-sm">
                 <CalendarDays
                   size={16}
                   className="shrink-0 text-brand"
@@ -388,7 +447,7 @@ export default function AcceptPaymentModal({
                 {error
                   ? error
                   : saved
-                    ? "Платёж принят"
+                    ? "Платёж принят — отправьте клиенту квитанцию"
                     : ready
                       ? "Можно проводить"
                       : !amountValid
@@ -398,18 +457,30 @@ export default function AcceptPaymentModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
+                className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
               >
-                Отмена
+                {saved ? "Готово" : "Отмена"}
               </button>
-              <button
-                type="submit"
-                disabled={!ready || saved}
-                className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
-              >
-                <Check size={15} aria-hidden />
-                {saved ? "Платёж принят" : "Принять платёж"}
-              </button>
+              {saved ? (
+                <button
+                  type="button"
+                  onClick={sendReceipt}
+                  disabled={newPayments.length === 0 || !payer}
+                  className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+                >
+                  <ReceiptText size={15} aria-hidden />
+                  Отправить квитанцию
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!ready}
+                  className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+                >
+                  <Check size={15} aria-hidden />
+                  Принять платёж
+                </button>
+              )}
             </footer>
           </form>
         )}

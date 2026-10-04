@@ -1,26 +1,216 @@
 @import "tailwindcss";
 
+/* Тёмная тема — классом .dark на <html> (см. components/theme-toggle.tsx
+   и скрипт в app/layout.tsx, который ставит класс до первой отрисовки). */
+@custom-variant dark (&:is(.dark *));
+
+/* ── Палитра ──────────────────────────────────────────────────────────────
+   Бирюзовая тема (primary — глубокий бирюзовый, accent — зелёный). Имена
+   переменных — как в shadcn/ui; интерфейс CRM пользуется своими токенами
+   (brand, surface, canvas, ink…), они привязаны к этим переменным ниже в
+   @theme, поэтому смена темы не требует правки компонентов. */
+
+:root {
+  /* ── Палитра «лаванда» ───────────────────────────────────────────────
+     Светло-серый сиреневый фон, сплошные белые карточки с мягкой тенью,
+     сине-сиреневый основной цвет с градиентом и подсветкой у главных
+     кнопок; оранжевый и лиловый — вторые цвета графиков и карт. */
+  --background: #e9eaf0;
+  --foreground: #16171d;
+  --card: #ffffff;
+  --card-foreground: #16171d;
+  --popover: #ffffff;
+  --popover-foreground: #16171d;
+  --primary: #5b6cf0;
+  --primary-foreground: #ffffff;
+  --secondary: #eceefd;
+  --secondary-foreground: #3f4fd2;
+  --muted: #f3f4f8;
+  --muted-foreground: #6b7086;
+  --accent: #f29b45;
+  --accent-foreground: #16171d;
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+  --border: #e6e7ee;
+  --input: #e6e7ee;
+  --ring: #5b6cf0;
+  --chart-1: #5b6cf0;
+  --chart-2: #f29b45;
+  --chart-3: #c98bd8;
+  --chart-4: #8fa0ff;
+  --chart-5: #f6c48f;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #16171d;
+  --sidebar-primary: #5b6cf0;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eceefd;
+  --sidebar-accent-foreground: #3f4fd2;
+  --sidebar-border: #e6e7ee;
+  --sidebar-ring: #5b6cf0;
+  --radius: 1.5rem;
+  --shadow-sm: 0 1px 2px rgb(22 24 40 / 0.04), 0 12px 32px -16px rgb(22 24 40 / 0.14);
+  --shadow-lg: 0 2px 6px rgb(22 24 40 / 0.06), 0 28px 64px -24px rgb(22 24 40 / 0.32);
+
+  /* Дополнения CRM, которых нет в базовой палитре */
+  --primary-deep: #4656dc; /* наведение, текст на светлой подложке */
+  --primary-hi: #8794f6; /* верх градиента главной кнопки */
+  --glow: rgb(91 108 240 / 0.45); /* подсветка под главной кнопкой */
+  --orange: #f29b45;
+  --lilac: #d39be0;
+  --lane: #f4f5f9; /* фон колонок канбана */
+  --danger-soft: #fdecec;
+  --warn: #b26a12;
+  --warn-soft: #fdf3e4;
+  --good: #1f9254;
+  --good-soft: #e5f6ec;
+  --scrim: rgb(22 23 29 / 0.32);
+  --scrollbar: #c9cbd8;
+  /* Меню — светлое, как карточки */
+  --rail: #ffffff;
+  --rail-fg: #16171d;
+  --rail-mute: #6b7086;
+  --rail-hover: #f1f2f7;
+}
+
+/* Тёмные значения — только на экране: печать (договор, квитанция) всегда
+   светлая, на бумаге тёмный фон не нужен. */
+@media screen {
+  .dark {
+    --background: #0f1016;
+    --foreground: #eceef4;
+    --card: #191a23;
+    --card-foreground: #eceef4;
+    --popover: #1e1f29;
+    --popover-foreground: #eceef4;
+    --primary: #8592f7;
+    --primary-foreground: #10121a;
+    --secondary: #252848;
+    --secondary-foreground: #b6befc;
+    --muted: #20212b;
+    --muted-foreground: #9a9fb4;
+    --accent: #f2a65a;
+    --accent-foreground: #10121a;
+    --destructive: #f2666a;
+    --destructive-foreground: #10121a;
+    --border: #2a2c38;
+    --input: #2a2c38;
+    --ring: #8592f7;
+    --chart-1: #8592f7;
+    --chart-2: #f2a65a;
+    --chart-3: #d39be0;
+    --chart-4: #aab4ff;
+    --chart-5: #f6c48f;
+    --sidebar: #191a23;
+    --sidebar-foreground: #eceef4;
+    --sidebar-primary: #8592f7;
+    --sidebar-primary-foreground: #10121a;
+    --sidebar-accent: #252848;
+    --sidebar-accent-foreground: #b6befc;
+    --sidebar-border: #2a2c38;
+    --sidebar-ring: #8592f7;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -16px rgb(0 0 0 / 0.6);
+    --shadow-lg: 0 2px 6px rgb(0 0 0 / 0.4), 0 28px 64px -24px rgb(0 0 0 / 0.8);
+
+    --primary-deep: #a7b0fa;
+    --primary-hi: #a5aefa;
+    --glow: rgb(133 146 247 / 0.35);
+    --orange: #f2a65a;
+    --lilac: #d39be0;
+    --lane: #14151c;
+    --danger-soft: #3a1f24;
+    --warn: #f0b45e;
+    --warn-soft: #3a2d1a;
+    --good: #4fd18b;
+    --good-soft: #17322a;
+    --scrim: rgb(0 0 0 / 0.55);
+    --scrollbar: #3a3c4a;
+    --rail: #191a23;
+    --rail-fg: #eceef4;
+    --rail-mute: #9a9fb4;
+    --rail-hover: #22232e;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  /* Токены интерфейса CRM */
+  --color-surface: var(--card);
+  --color-canvas: var(--background);
+  --color-line: var(--border);
+  --color-brand: var(--primary);
+  --color-brand-deep: var(--primary-deep);
+  --color-brand-soft: var(--secondary);
+  --color-on-brand: var(--primary-foreground);
+  --color-ink: var(--foreground);
+  --color-mute: var(--muted-foreground);
+  --color-danger: var(--destructive);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-lane: var(--lane);
+  --color-scrim: var(--scrim);
+  --color-rail: var(--rail);
+  --color-rail-fg: var(--rail-fg);
+  --color-rail-mute: var(--rail-mute);
+  --color-rail-hover: var(--rail-hover);
+  --color-brand-hi: var(--primary-hi);
+  --color-orange: var(--orange);
+  --color-lilac: var(--lilac);
+  --shadow-card: var(--shadow-sm);
+  --shadow-pop: var(--shadow-lg);
+  --radius-card: var(--radius);
+
+  /* Имена shadcn/ui — для новых компонентов */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
 @theme {
-  --color-surface: #ffffff;
-  --color-canvas: #f7faff;
-  --color-line: #e3ebf5;
-  --color-brand: #2f80ed;
-  --color-brand-deep: #175ba9;
-  --color-brand-soft: #eaf2fd;
-  --color-ink: #172640;
-  --color-mute: #77869c;
-  --color-danger: #e2574c;
-  --color-danger-soft: #fdeeec;
-  --color-warn: #b9822a;
-  --color-warn-soft: #fdf3e2;
-  --color-good: #1e8e5a;
-  --color-good-soft: #e7f6ee;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-montserrat), var(--font-sans);
-  --radius-card: 16px;
-  --radius-field: 10px;
-  --shadow-card: 0 1px 2px rgba(23, 38, 64, 0.04), 0 4px 16px rgba(23, 38, 64, 0.04);
-  --shadow-pop: 0 8px 30px rgba(23, 38, 64, 0.1);
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+  --radius-field: 14px;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
 }
 
 body {
@@ -34,21 +224,51 @@ body {
   color: var(--color-mute);
 }
 
+/* Заголовки — тонкие, как в референсе; правило вне слоёв Tailwind и
+   потому сильнее классов font-semibold на заголовках */
 h1,
 h2,
 h3,
 h4 {
   font-family: var(--font-heading);
-  letter-spacing: -0.01em;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+/* Главная кнопка — градиент основного цвета с мягкой подсветкой снизу.
+   Задано на всё, что залито bg-brand (кнопки, ссылки-кнопки, активные
+   вкладки), поэтому страницы править не нужно. Выключенная кнопка
+   остаётся серой. */
+:is(button, a, [role="tab"]).bg-brand:not(:disabled) {
+  background-image: linear-gradient(180deg, var(--primary-hi), var(--primary));
+  box-shadow: 0 10px 22px -10px var(--glow), inset 0 1px 0 rgb(255 255 255 / 0.22);
+}
+:is(button, a, [role="tab"]).bg-brand:not(:disabled):hover {
+  background-image: linear-gradient(180deg, var(--primary), var(--primary-deep));
+}
+.dark :is(button, a, [role="tab"]).bg-brand:not(:disabled):hover {
+  background-image: linear-gradient(180deg, var(--primary-hi), var(--primary));
+  filter: brightness(1.06);
+}
+
+/* Активный пункт меню — круг с градиентом и мягким ореолом */
+.rail-active {
+  background-image: linear-gradient(180deg, var(--primary-hi), var(--primary));
+  box-shadow: 0 10px 22px -8px var(--glow), 0 0 0 5px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+/* Деления прогресса («полосками», как лимит в референсе) — см. TickBar */
+.tick-track {
+  background-image: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #cdd9ea transparent;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-brand);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 

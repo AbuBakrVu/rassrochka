@@ -15,9 +15,12 @@ import { parseHost } from "@/lib/tenant-host";
 // чему и обязана идти раньше неё.
 const INFRA = [/^\/api\/health$/, /^\/api\/internal\//];
 
-// Открыты без входа: страница входа, кабинет заёмщика по ссылке и роуты,
-// которые сами разбираются с доступом
-const PUBLIC = [/^\/login$/, /^\/company$/, /^\/pay\//, /^\/api\/auth\//, /^\/api\/portal\//];
+// Открыты без входа: страница входа, кабинет заёмщика по ссылке, онлайн-
+// заявка и роуты, которые сами разбираются с доступом
+const PUBLIC = [
+  /^\/login$/, /^\/company$/, /^\/pay\//, /^\/apply$/,
+  /^\/api\/auth\//, /^\/api\/portal\//, /^\/api\/branding\//, /^\/api\/public\//,
+];
 
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;

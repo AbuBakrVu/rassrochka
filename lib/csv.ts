@@ -5,7 +5,11 @@
 // и CSV с запятыми у пользователя разъедется по одному столбцу.
 
 function escapeCell(value: string | number): string {
-  const s = String(value);
+  let s = String(value);
+  // Текст, который Excel принял бы за формулу (=, +, @, «-» не перед
+  // цифрой), — со знаком-апострофом впереди: иначе клиент с именем
+  // «=HYPERLINK(...)» выполнит формулу у того, кто откроет выгрузку
+  if (typeof value === "string" && /^([=+@\t\r]|-(?!\d))/.test(s)) s = `'${s}`;
   return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

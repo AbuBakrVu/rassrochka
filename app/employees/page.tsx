@@ -66,7 +66,7 @@ export default function EmployeesPage() {
           <div className="mb-4 flex justify-end">
             <button
               onClick={() => setInviteOpen(true)}
-              className="flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+              className="flex items-center gap-2 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
             >
               <UserPlus2 size={16} aria-hidden /> Пригласить сотрудника
             </button>
@@ -79,7 +79,7 @@ export default function EmployeesPage() {
                 <span
                   className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
                     s.employee.active
-                      ? "bg-brand text-white"
+                      ? "bg-brand text-on-brand"
                       : "bg-canvas text-mute"
                   }`}
                 >
@@ -99,7 +99,7 @@ export default function EmployeesPage() {
                   <button
                     onClick={() => setEditing(s.employee)}
                     title="Редактировать"
-                    className="shrink-0 rounded-[8px] border border-line p-1.5 text-mute transition-colors hover:border-brand/40 hover:text-ink"
+                    className="shrink-0 rounded-[16px] border border-line p-1.5 text-mute transition-colors hover:border-brand/40 hover:text-ink"
                   >
                     <Pencil size={14} aria-hidden />
                   </button>
@@ -124,13 +124,13 @@ export default function EmployeesPage() {
               </div>
 
               <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-[10px] bg-canvas px-2 py-2.5">
+                <div className="rounded-[14px] bg-canvas px-2 py-2.5">
                   <p className="text-lg font-semibold tracking-tight">
                     {s.active}
                   </p>
                   <p className="text-xs text-mute">Активных</p>
                 </div>
-                <div className="rounded-[10px] bg-canvas px-2 py-2.5">
+                <div className="rounded-[14px] bg-canvas px-2 py-2.5">
                   <p
                     className={`text-lg font-semibold tracking-tight ${
                       s.overdue > 0 ? "text-danger" : ""
@@ -140,7 +140,7 @@ export default function EmployeesPage() {
                   </p>
                   <p className="text-xs text-mute">Просрочек</p>
                 </div>
-                <div className="rounded-[10px] bg-canvas px-2 py-2.5">
+                <div className="rounded-[14px] bg-canvas px-2 py-2.5">
                   <p className="text-lg font-semibold tracking-tight">
                     {s.newLeads}
                   </p>
@@ -148,7 +148,7 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              <div className="mt-3 flex items-center justify-between rounded-[10px] bg-brand-soft px-3 py-2.5 text-sm">
+              <div className="mt-3 flex items-center justify-between rounded-[16px] bg-brand-soft px-3 py-2.5 text-sm">
                 <span className="text-brand-deep">
                   Портфель {money(s.portfolio)}
                 </span>
@@ -170,7 +170,7 @@ export default function EmployeesPage() {
                         <Link
                           key={it.key}
                           href={`/deals/${it.dealId}`}
-                          className="flex items-center gap-2 rounded-[8px] px-1.5 py-1 text-sm transition-colors hover:bg-canvas"
+                          className="flex items-center gap-2 rounded-[10px] px-1.5 py-1 text-sm transition-colors hover:bg-canvas"
                         >
                           <Icon
                             size={13}
@@ -199,7 +199,7 @@ export default function EmployeesPage() {
                   <button
                     onClick={() => toggle(s.employee.id, !s.employee.active)}
                     disabled={busy === s.employee.id}
-                    className="shrink-0 rounded-[8px] border border-line px-2.5 py-1 text-xs text-mute transition-colors hover:border-brand/40 hover:text-ink disabled:opacity-50"
+                    className="shrink-0 rounded-[10px] border border-line px-2.5 py-1 text-xs text-mute transition-colors hover:border-brand/40 hover:text-ink disabled:opacity-50"
                   >
                     {s.employee.active ? "Закрыть доступ" : "Открыть доступ"}
                   </button>
@@ -240,7 +240,7 @@ export default function EmployeesPage() {
 }
 
 const field =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 function InviteModal({
   onClose,
@@ -278,7 +278,7 @@ function InviteModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <form
         onSubmit={submit}
         role="dialog"
@@ -319,7 +319,7 @@ function InviteModal({
                   type="button"
                   onClick={() => setRole(r)}
                   aria-pressed={role === r}
-                  className={`flex-1 rounded-[10px] border px-3 py-2.5 text-sm transition-colors ${
+                  className={`flex-1 rounded-full border px-3 py-2.5 text-sm transition-colors ${
                     role === r
                       ? "border-brand bg-brand-soft font-medium text-brand-deep"
                       : "border-line bg-canvas text-mute hover:border-brand/40"
@@ -340,13 +340,13 @@ function InviteModal({
           <p className="mr-auto text-sm" role="status" aria-live="polite">
             {error ? <span className="text-danger">{error}</span> : saving ? "Сохраняем…" : ""}
           </p>
-          <button type="button" onClick={onClose} className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
             Отмена
           </button>
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Создать
           </button>
@@ -388,7 +388,7 @@ function EditEmployeeModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <form
         onSubmit={submit}
         role="dialog"
@@ -423,7 +423,7 @@ function EditEmployeeModal({
                   type="button"
                   onClick={() => setRole(r)}
                   aria-pressed={role === r}
-                  className={`flex-1 rounded-[10px] border px-3 py-2.5 text-sm transition-colors ${
+                  className={`flex-1 rounded-full border px-3 py-2.5 text-sm transition-colors ${
                     role === r
                       ? "border-brand bg-brand-soft font-medium text-brand-deep"
                       : "border-line bg-canvas text-mute hover:border-brand/40"
@@ -440,13 +440,13 @@ function EditEmployeeModal({
           <p className="mr-auto text-sm" role="status" aria-live="polite">
             {error ? <span className="text-danger">{error}</span> : saving ? "Сохраняем…" : ""}
           </p>
-          <button type="button" onClick={onClose} className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
             Отмена
           </button>
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Сохранить
           </button>
@@ -465,11 +465,11 @@ function PasswordIssued({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <div role="dialog" aria-modal="true" className="relative w-full max-w-sm rounded-card bg-surface p-6 text-center shadow-pop">
         <p className="font-semibold tracking-tight">{data.name} добавлен</p>
         <p className="mt-1 text-sm text-mute">Временный пароль показывается один раз</p>
-        <p className="my-4 rounded-[10px] bg-canvas px-4 py-3 font-mono text-lg font-semibold tracking-wide">
+        <p className="my-4 rounded-[14px] bg-canvas px-4 py-3 font-mono text-lg font-semibold tracking-wide">
           {data.password}
         </p>
         <p className="text-xs text-mute">
@@ -477,7 +477,7 @@ function PasswordIssued({
         </p>
         <button
           onClick={onClose}
-          className="mt-4 w-full rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-deep"
+          className="mt-4 w-full rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand hover:bg-brand-deep"
         >
           Записал
         </button>

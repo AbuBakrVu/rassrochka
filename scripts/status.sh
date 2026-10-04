@@ -31,5 +31,13 @@ else
   c_red "код $CODE — проверьте DNS и docker compose logs caddy"
 fi
 
+echo -n "Резервные копии:       "
+if [ -f /etc/cron.d/nasiya-backup ] && [ -n "$(env_get RCLONE_REMOTE)" ]; then
+  LAST="$(ls -t backups/*.dump* 2>/dev/null | grep -v before-restore | head -1 || true)"
+  c_green "настроены → $(env_get RCLONE_REMOTE)${LAST:+, последняя $(basename "$LAST")}"
+else
+  c_red "НЕ НАСТРОЕНЫ — запустите ./nasiya backup-setup"
+fi
+
 echo
 df -h / | awk 'NR==1 || NR==2'

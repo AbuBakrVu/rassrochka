@@ -19,6 +19,7 @@ import {
 } from "react";
 import type { Deal, Client, ReminderStage } from "./data";
 import type { DealEvent } from "./events";
+import type { ContactLog, ContactOutcome } from "./collections";
 
 export interface CurrentUser {
   id: number;
@@ -62,6 +63,10 @@ export interface CashTx {
   coinvestorId?: string;
   title: string;
   note?: string;
+  /** Номер взноса графика, который закрыла (или отменяет) эта запись. */
+  installmentNumber?: number;
+  /** Запись-отмена: id отменённого ею платежа. */
+  reversesId?: string;
 }
 
 export interface Coinvestor {
@@ -100,6 +105,15 @@ export interface CoinvestorProfitTx {
   note?: string;
 }
 
+export type SavedFilterPage = "clients" | "cash" | "deals";
+
+export interface SavedFilter {
+  id: string;
+  page: SavedFilterPage;
+  name: string;
+  params: Record<string, string>;
+}
+
 export interface MessageTemplate {
   id: string;
   name: string;
@@ -121,8 +135,14 @@ interface Snapshot {
   coinvestorCapitalTx: CoinvestorCapitalTx[];
   coinvestorProfitTx: CoinvestorProfitTx[];
   templates: MessageTemplate[];
+  savedFilters: SavedFilter[];
+  /** Журнал звонков по просрочкам (страница «Просрочки»). */
+  contacts: ContactLog[];
+  attachments: Attachment[];
   cashOpeningBalance: number;
   hiddenNavItems: string[];
+  /** Базовый лимит клиента без истории; 0 — автоматические лимиты выключены. */
+  clientDefaultLimit: number;
 }
 
 const EMPTY: Snapshot = {
@@ -137,8 +157,12 @@ const EMPTY: Snapshot = {
   coinvestorCapitalTx: [],
   coinvestorProfitTx: [],
   templates: [],
+  savedFilters: [],
+  contacts: [],
+  attachments: [],
   cashOpeningBalance: 0,
   hiddenNavItems: [],
+  clientDefaultLimit: 0,
 };
 
 export interface NewDealInput {
@@ -155,6 +179,8 @@ export interface NewDealInput {
   city?: string;
   guarantorIds?: string[];
   downPayment?: number;
+  /** Менеджер подтвердил оформление сверх лимита клиента — пишется в журнал. */
+  overLimit?: boolean;
 }
 
 export interface NewClientInput {
@@ -170,6 +196,20 @@ export interface NewClientInput {
   registrationAddress?: string;
   livingAddress?: string;
   inn?: string;
+  /** Клиент подписал согласие на обработку персональных данных. */
+  consent?: boolean;
+}
+
+/** Файл клиента или сделки (без содержимого — оно по /api/attachments/<id>). */
+export interface Attachment {
+  id: string;
+  clientId?: string;
+  dealId?: string;
+  kind: "passport" | "document" | "product" | "other";
+  name: string;
+  contentType: string;
+  size: number;
+  at: string;
 }
 
 export interface UpdateDealInput {
@@ -260,11 +300,32 @@ interface DataContextValue extends Snapshot {
   reassignDeal: (dealId: string, managerId: number) => Promise<Deal>;
   setDealStage: (dealId: string, stage: "new" | "check" | "active") => Promise<Deal>;
   closeDeal: (dealId: string) => Promise<Deal>;
+  rejectDeal: (dealId: string, reason: string) => Promise<Deal>;
+  holidayDeal: (dealId: string, months: number, reason: string) => Promise<Deal>;
+  uploadAttachment: (input: {
+    clientId?: string;
+    dealId?: string;
+    kind: Attachment["kind"];
+    files: File[];
+  }) => Promise<void>;
+  deleteAttachment: (id: string) => Promise<void>;
+  setClientConsent: (clientId: string, given: boolean) => Promise<void>;
+  addContact: (
+    dealId: string,
+    input: { outcome: ContactOutcome; dueDate?: string; amount?: number; note?: string }
+  ) => Promise<void>;
   deleteDeal: (dealId: string) => Promise<void>;
   addEmployee: (input: NewEmployeeInput) => Promise<{ password: string }>;
   updateEmployee: (id: number, input: UpdateEmployeeInput) => Promise<void>;
   setEmployeeActive: (id: number, active: boolean) => Promise<void>;
   setHiddenNavItems: (hrefs: string[]) => Promise<void>;
+  setClientDefaultLimit: (limit: number) => Promise<void>;
+  setClientCreditLimit: (clientId: string, limit: number | null) => Promise<void>;
+  /** Настройки → Оформление: меняет только переданные поля, возвращает новое состояние. */
+  saveBranding: (input: {
+    color?: string | null;
+    logo?: string | null;
+  }) => Promise<{ color: string | null; logoVersion: string | null }>;
   logout: () => Promise<void>;
   addClient: (input: NewClientInput) => Promise<Client>;
   setClientBlacklisted: (
@@ -290,13 +351,45 @@ interface DataContextValue extends Snapshot {
     dealId: string,
     stageInfo?: { stage: ReminderStage; dueDate: string }
   ) => Promise<void>;
+  bulkUpdateDeals: (
+    ids: string[],
+    change: { action: "stage"; stage: "new" | "check" | "active" } | { action: "manager"; managerId: number }
+  ) => Promise<BulkResult>;
+  saveFilter: (page: SavedFilterPage, name: string, params: Record<string, string>) => Promise<void>;
+  deleteFilter: (id: string) => Promise<void>;
   /** Перечитать всё состояние с сервера. */
   refresh: () => Promise<void>;
+}
+
+export interface BulkResult {
+  ok: string[];
+  failed: { id: string; error: string }[];
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
 
 // ── Обращение к API ────────────────────────────────────────────────────
+
+/**
+ * Фото с телефона весят 5–10 МБ: уменьшаем до 2000 пикселей по длинной
+ * стороне и пересохраняем в JPEG. PDF и небольшие картинки — как есть.
+ */
+async function shrinkImage(file: File): Promise<Blob> {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size <= 1_500_000) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.85));
+    return blob && blob.size < file.size ? blob : file;
+  } catch {
+    return file;
+  }
+}
 
 async function api<T>(path: string, body?: unknown, method?: string): Promise<T> {
   const res = await fetch(path, {
@@ -327,8 +420,9 @@ async function api<T>(path: string, body?: unknown, method?: string): Promise<T>
   return res.json() as Promise<T>;
 }
 
-interface BootstrapResponse extends Omit<Snapshot, "cashOpeningBalance" | "hiddenNavItems"> {
-  settings: { cashOpeningBalance: number; hiddenNavItems: string[] };
+interface BootstrapResponse
+  extends Omit<Snapshot, "cashOpeningBalance" | "hiddenNavItems" | "clientDefaultLimit"> {
+  settings: { cashOpeningBalance: number; hiddenNavItems: string[]; clientDefaultLimit?: number };
 }
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
@@ -352,14 +446,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       coinvestorCapitalTx: data.coinvestorCapitalTx,
       coinvestorProfitTx: data.coinvestorProfitTx,
       templates: data.templates,
+      savedFilters: data.savedFilters,
+      contacts: data.contacts ?? [],
+      attachments: data.attachments ?? [],
       cashOpeningBalance: data.settings.cashOpeningBalance,
       hiddenNavItems: data.settings.hiddenNavItems,
+      clientDefaultLimit: data.settings.clientDefaultLimit ?? 0,
     });
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
+    // Первая загрузка данных — ровно то, для чего нужен эффект: состояние
+    // меняется после ответа сервера, а не синхронно при отрисовке
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load()
       .then(() => !cancelled && setStatus("ready"))
       .catch((err: Error) => {
@@ -395,6 +496,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         description: input.description,
         category: input.category,
         city: input.city,
+        overLimit: input.overLimit,
         guarantorIds: input.guarantorIds,
         downPayment: input.downPayment,
       });
@@ -457,6 +559,84 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const closeDeal = useCallback(
     async (dealId: string): Promise<Deal> => {
       const deal = await api<Deal>(`/api/deals/${encodeURIComponent(dealId)}/close`, {});
+      await load();
+      return deal;
+    },
+    [load]
+  );
+
+  const holidayDeal = useCallback(
+    async (dealId: string, months: number, reason: string): Promise<Deal> => {
+      const deal = await api<Deal>(`/api/deals/${encodeURIComponent(dealId)}/holiday`, { months, reason });
+      await load();
+      return deal;
+    },
+    [load]
+  );
+
+  const uploadAttachment = useCallback(
+    async (input: { clientId?: string; dealId?: string; kind: Attachment["kind"]; files: File[] }) => {
+      // Файлы по одному: каждый до 5 МБ, а общий запрос не упирается в
+      // лимит тела. Ошибки собираем и показываем разом — удачные файлы
+      // остаются загруженными.
+      const failed: string[] = [];
+      for (const file of input.files) {
+        try {
+          const blob = await shrinkImage(file);
+          if (blob.size > 5 * 1024 * 1024) throw new Error("больше 5 МБ");
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(new Error("не удалось прочитать"));
+            reader.readAsDataURL(blob);
+          });
+          await api("/api/attachments", {
+            clientId: input.clientId,
+            dealId: input.dealId,
+            kind: input.kind,
+            name: blob === file ? file.name : file.name.replace(/\.[^.]+$/, "") + ".jpg",
+            dataUrl,
+          });
+        } catch (err) {
+          failed.push(`«${file.name}»: ${err instanceof Error ? err.message : "ошибка"}`);
+        }
+      }
+      await load();
+      if (failed.length) throw new Error(`Не загружено: ${failed.join("; ")}`);
+    },
+    [load]
+  );
+
+  const deleteAttachment = useCallback(
+    async (id: string) => {
+      await api(`/api/attachments/${encodeURIComponent(id)}`, undefined, "DELETE");
+      await load();
+    },
+    [load]
+  );
+
+  const setClientConsent = useCallback(
+    async (clientId: string, given: boolean) => {
+      await api(`/api/clients/${encodeURIComponent(clientId)}/consent`, { given }, "PATCH");
+      await load();
+    },
+    [load]
+  );
+
+  const addContact = useCallback(
+    async (
+      dealId: string,
+      input: { outcome: ContactOutcome; dueDate?: string; amount?: number; note?: string }
+    ) => {
+      await api(`/api/deals/${encodeURIComponent(dealId)}/contacts`, input);
+      await load();
+    },
+    [load]
+  );
+
+  const rejectDeal = useCallback(
+    async (dealId: string, reason: string): Promise<Deal> => {
+      const deal = await api<Deal>(`/api/deals/${encodeURIComponent(dealId)}/reject`, { reason });
       await load();
       return deal;
     },
@@ -647,6 +827,60 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [load]
   );
 
+  const setClientDefaultLimit = useCallback(
+    async (limit: number) => {
+      await api("/api/settings/credit", { defaultLimit: limit }, "PATCH");
+      await load();
+    },
+    [load]
+  );
+
+  const setClientCreditLimit = useCallback(
+    async (clientId: string, limit: number | null) => {
+      await api(`/api/clients/${encodeURIComponent(clientId)}/limit`, { limit }, "PATCH");
+      await load();
+    },
+    [load]
+  );
+
+  const saveBranding = useCallback(
+    (input: { color?: string | null; logo?: string | null }) =>
+      api<{ color: string | null; logoVersion: string | null }>(
+        "/api/settings/branding",
+        input,
+        "PATCH"
+      ),
+    []
+  );
+
+  const bulkUpdateDeals = useCallback(
+    async (
+      ids: string[],
+      change: { action: "stage"; stage: "new" | "check" | "active" } | { action: "manager"; managerId: number }
+    ): Promise<BulkResult> => {
+      const result = await api<BulkResult>("/api/deals/bulk", { ids, ...change });
+      await load();
+      return result;
+    },
+    [load]
+  );
+
+  const saveFilter = useCallback(
+    async (page: SavedFilterPage, name: string, params: Record<string, string>) => {
+      await api("/api/saved-filters", { page, name, params });
+      await load();
+    },
+    [load]
+  );
+
+  const deleteFilter = useCallback(
+    async (id: string) => {
+      await api(`/api/saved-filters/${encodeURIComponent(id)}`, undefined, "DELETE");
+      await load();
+    },
+    [load]
+  );
+
   const logout = useCallback(async () => {
     await api("/api/auth/logout", {});
     window.location.href = "/login";
@@ -661,6 +895,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       reassignDeal,
       setDealStage,
       closeDeal,
+      rejectDeal,
+      holidayDeal,
+      addContact,
+      uploadAttachment,
+      deleteAttachment,
+      setClientConsent,
       deleteDeal,
       addClient,
       setClientBlacklisted,
@@ -683,14 +923,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updateEmployee,
       setEmployeeActive,
       setHiddenNavItems,
+      setClientDefaultLimit,
+      setClientCreditLimit,
+      saveBranding,
+      bulkUpdateDeals,
+      saveFilter,
+      deleteFilter,
       logout,
       refresh,
     }),
-    [state, addDeal, updateDeal, restructureDeal, reassignDeal, setDealStage, closeDeal, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
+    [state, addDeal, updateDeal, restructureDeal, reassignDeal, setDealStage, closeDeal, rejectDeal, holidayDeal, addContact, uploadAttachment, deleteAttachment, setClientConsent, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
      addCoinvestor, updateCoinvestor, setCoinvestorActive, deleteCoinvestor,
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,
-     addEmployee, updateEmployee, setEmployeeActive, setHiddenNavItems, logout, refresh]
+     addEmployee, updateEmployee, setEmployeeActive, setHiddenNavItems,
+     setClientDefaultLimit, setClientCreditLimit, saveBranding, bulkUpdateDeals, saveFilter, deleteFilter, logout, refresh]
   );
 
   // Пока состояние не загружено, страницы не рендерим: иначе каждая из них

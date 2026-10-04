@@ -24,7 +24,7 @@ export default function CompanyPage() {
         className="w-full max-w-sm rounded-card border border-line bg-surface p-6 shadow-card sm:p-8"
       >
         <div className="mb-6 flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-white">
+          <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-brand text-on-brand">
             <Zap size={18} aria-hidden />
           </span>
           <div>
@@ -35,7 +35,7 @@ export default function CompanyPage() {
 
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium">Адрес вашей компании</span>
-          <div className="flex items-center rounded-[10px] border border-line bg-canvas transition-colors focus-within:border-brand focus-within:bg-surface">
+          <div className="flex items-center rounded-[14px] border border-line bg-canvas transition-colors focus-within:border-brand focus-within:bg-surface">
             <input
               className="w-full min-w-0 bg-transparent px-3.5 py-2.5 text-sm outline-none"
               placeholder="акме"
@@ -50,7 +50,7 @@ export default function CompanyPage() {
         <button
           type="submit"
           disabled={!clean}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
         >
           Перейти <ArrowRight size={15} aria-hidden />
         </button>

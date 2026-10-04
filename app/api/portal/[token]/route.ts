@@ -7,7 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { loadPortalClient, loadPortalDeal } from "@/lib/queries";
+import { loadPortalClient, loadPortalDeal, loadPortalOffer } from "@/lib/queries";
 
 export async function GET(
   request: Request,
@@ -20,7 +20,9 @@ export async function GET(
 
     const client = await loadPortalClient(tenant.dbName, token);
     if (client) {
-      return NextResponse.json({ kind: "client", ...client });
+      // Предодобренный лимит — дополнение: его сбой не должен ломать кабинет
+      const offer = await loadPortalOffer(tenant.dbName, token).catch(() => null);
+      return NextResponse.json({ kind: "client", ...client, offer });
     }
 
     const deal = await loadPortalDeal(tenant.dbName, token);

@@ -11,8 +11,9 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
+import AnalyticsTabs from "@/components/analytics-tabs";
 import { stages, paidCount, dealMargin, type Deal } from "@/lib/data";
-import { scheduleForDeal, money } from "@/lib/schedule";
+import { scheduleForDeal, paidTotal, money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
 import { computeAging } from "@/lib/derive";
 
@@ -23,9 +24,7 @@ function activeRemaining(deals: Deal[], paidPayments: Record<string, number>) {
     .filter((d) => d.stage === "active")
     .reduce((sum, d) => {
       const schedule = scheduleForDeal(d, paidCount(d, paidPayments));
-      const paidSum = schedule
-        .filter((p) => p.status === "paid")
-        .reduce((s, p) => s + p.amount, 0);
+      const paidSum = paidTotal(schedule);
       return sum + (d.amount - paidSum);
     }, 0);
 }
@@ -146,13 +145,14 @@ export default function AnalyticsPage() {
         title="Аналитика"
         subtitle="Воронка, отказы и нагрузка по сотрудникам"
       />
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8">
+      <AnalyticsTabs />
+      <div className="mx-auto max-w-6xl px-4 py-5 sm:px-8">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {kpis.map(({ label, value, note, icon: Icon }) => (
             <Card key={label} className="p-5">
               <div className="flex items-start justify-between">
                 <p className="text-sm text-mute">{label}</p>
-                <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand-soft text-brand">
+                <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-brand-soft text-brand">
                   <Icon size={17} aria-hidden />
                 </span>
               </div>
@@ -238,7 +238,7 @@ export default function AnalyticsPage() {
               return (
                 <div
                   key={b.key}
-                  className="rounded-[12px] border border-line px-4 py-3.5"
+                  className="rounded-[16px] border border-line px-4 py-3.5"
                 >
                   <div className="flex items-center justify-between">
                     <span
@@ -261,7 +261,7 @@ export default function AnalyticsPage() {
                         <Link
                           key={i.dealId}
                           href={`/deals/${i.dealId}`}
-                          className="block rounded-[8px] px-1.5 py-1 text-sm transition-colors hover:bg-canvas"
+                          className="block rounded-[10px] px-1.5 py-1 text-sm transition-colors hover:bg-canvas"
                         >
                           <span className="block truncate text-ink">
                             {i.clientName}

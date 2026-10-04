@@ -18,24 +18,38 @@ import {
   Check,
   History,
   SearchX,
+  ReceiptText,
+  XCircle,
+  Camera,
 } from "lucide-react";
-import { Card, Badge, EmptyState } from "@/components/ui";
+import { Card, Badge, EmptyState, ProgressRing } from "@/components/ui";
 import DealActions from "@/components/deal-actions";
 import { useData, type Employee } from "@/lib/store";
-import { clientById, fmt, stages, paidCount, purchasePrice, type Deal } from "@/lib/data";
-import { scheduleForDeal, money, longDate } from "@/lib/schedule";
+import { clientById, fmt, stages, paidCount, purchasePrice, ruPlural, type Deal } from "@/lib/data";
+import { scheduleForDeal, paidTotal, money, longDate, addMonthsIso } from "@/lib/schedule";
 import { dealEvents } from "@/lib/events";
 import { reminderStageFor, pickReminderTemplate, buildReminderText } from "@/lib/reminders";
 import { todayIso } from "@/lib/status";
 import CopyLinkButton from "@/components/copy-link";
 import DealPrint, { type PrintMode } from "@/components/deal-print";
+import { paymentTitle, receiptMessage, receiptPath } from "@/lib/receipts";
+import { computeProfit } from "@/lib/profit";
+import PayoffCalculator from "@/components/payoff-calculator";
+import ContactModal from "@/components/contact-modal";
+import { OUTCOME_LABEL } from "@/lib/collections";
+import AttachmentsCard from "@/components/attachments-card";
 
 export default function DealDetail({ id }: { id: string }) {
   const {
-    deals, clients, paidPayments, events, templates, employees, user,
+    deals, clients, paidPayments, events, templates, employees, user, cash, contacts,
     acceptPayment, undoLastPayment, sendReminder, updateDeal, restructureDeal,
-    closeDeal, reassignDeal, deleteDeal,
+    closeDeal, reassignDeal, deleteDeal, setDealStage, rejectDeal, holidayDeal,
   } = useData();
+  const [holidayOpen, setHolidayOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [calcOpen, setCalcOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [issuing, setIssuing] = useState(false);
   const router = useRouter();
   const deal = deals.find((d) => d.id === id);
   const [printMode, setPrintMode] = useState<PrintMode | null>(null);
@@ -76,12 +90,12 @@ export default function DealDetail({ id }: { id: string }) {
   const schedule = scheduleForDeal(deal, paid);
   // Не amount/months «в лоб» — после реструктуризации размер взноса
   // отличается от простого среднего
-  const monthly =
-    schedule.find((p) => p.status !== "paid")?.amount ??
-    Math.round(deal.amount / deal.months);
-  const paidSum = schedule
-    .filter((p) => p.status === "paid")
-    .reduce((s, p) => s + p.amount, 0);
+  // Полный размер взноса — без учёта уже внесённого в счёт ближайшего
+  const upcoming = schedule.find((p) => p.status !== "paid");
+  const monthly = upcoming
+    ? upcoming.amount + (upcoming.credited ?? 0)
+    : Math.round(deal.amount / deal.months);
+  const paidSum = paidTotal(schedule);
   const remaining = deal.amount - paidSum;
   const purchase = purchasePrice(deal.amount, deal.markupPct, deal.downPayment ?? 0);
   const markup = deal.amount + (deal.downPayment ?? 0) - purchase;
@@ -92,6 +106,59 @@ export default function DealDetail({ id }: { id: string }) {
   const finished = deal.stage === "closed" || deal.stage === "rejected";
   const openedLabel = longDate(new Date(deal.openedAt));
   const nextPayment = schedule.find((p) => p.status !== "paid");
+  const today = todayIso();
+  const daysToNext = nextPayment
+    ? Math.round(
+        (Date.parse(`${nextPayment.iso}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000
+      )
+    : null;
+  const paidPct = Math.round((paid / deal.months) * 100);
+  // Окупаемость по реальным записям кассы — та же модель, что на
+  // Аналитика → Доходность (lib/profit.ts)
+  const profit = computeProfit([deal], cash, [], []).deals[0];
+
+  // Платёж в кассе по каждому оплаченному взносу — для квитанции.
+  // Отменённые платежи (у которых есть запись-отмена) пропускаем.
+  const reversed = new Set(cash.filter((t) => t.reversesId).map((t) => t.reversesId));
+  const receiptByInstallment = new Map<number, { id: string; amount: number; partial: boolean }>();
+  for (const t of cash) {
+    if (
+      t.dealId === deal.id &&
+      t.kind === "payment" &&
+      t.amount > 0 &&
+      t.installmentNumber &&
+      !t.reversesId &&
+      !reversed.has(t.id)
+    ) {
+      receiptByInstallment.set(t.installmentNumber, {
+        id: t.id,
+        amount: t.amount,
+        partial: t.title.startsWith("Частичная оплата"),
+      });
+    }
+  }
+
+  const sendReceipt = (n: number) => {
+    const payment = receiptByInstallment.get(n);
+    if (!client || !payment) return;
+    const url = `${window.location.origin}${receiptPath(client.portalToken, payment.id)}`;
+    const text = receiptMessage({
+      clientName: client.name,
+      product: deal.product,
+      amount: payment.amount,
+      title: paymentTitle(payment.partial ? "partial" : "installment", n, deal.months),
+      url,
+    });
+    window.open(
+      `https://wa.me/${client.phone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
+
+  const dealContacts = contacts
+    .filter((c) => c.dealId === deal.id)
+    .sort((a, b) => b.at.localeCompare(a.at));
 
   const history = dealEvents(events, deal.id).map((e) => ({
     date: longDate(new Date(e.date)),
@@ -162,13 +229,22 @@ export default function DealDetail({ id }: { id: string }) {
     }
   };
 
+  const countdown =
+    daysToNext === null
+      ? null
+      : daysToNext < 0
+        ? { text: `просрочка ${-daysToNext} ${ruPlural(-daysToNext, "день", "дня", "дней")}`, cls: "bg-danger-soft text-danger" }
+        : daysToNext === 0
+          ? { text: "сегодня", cls: "bg-warn-soft text-warn" }
+          : { text: `через ${daysToNext} ${ruPlural(daysToNext, "день", "дня", "дней")}`, cls: "bg-brand-soft text-brand-deep" };
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-8">
       {/* Хлебные крошки */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Link
           href="/deals"
-          className="flex items-center gap-1.5 rounded-[10px] border border-line bg-surface px-3.5 py-2 text-sm text-mute hover:text-ink"
+          className="flex items-center gap-1.5 rounded-full border border-line/70 bg-surface px-4 py-2 text-sm text-mute shadow-card hover:text-ink"
         >
           <ArrowLeft size={15} aria-hidden /> Все сделки
         </Link>
@@ -177,124 +253,208 @@ export default function DealDetail({ id }: { id: string }) {
         </span>
       </div>
 
-      {/* Паспорт сделки */}
-      <Card className="p-5 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-4">
-            <span className="hidden h-14 w-14 shrink-0 items-center justify-center rounded-[14px] bg-brand-soft text-brand sm:flex">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_340px]">
+        {/* Паспорт сделки */}
+        <Card className="p-5 sm:p-6">
+          <div className="flex flex-wrap items-start gap-4">
+            <span className="hidden h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-brand-soft text-brand sm:flex">
               <Package size={24} aria-hidden />
             </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
-                  Сделка {deal.id}
-                </h1>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-mute">Сделка {deal.id}</span>
                 <Badge tone={deal.statusTone}>{deal.status}</Badge>
+                {deal.online && deal.stage === "new" && <Badge tone="blue">С сайта</Badge>}
               </div>
+              <h1 className="mt-0.5 text-xl font-semibold tracking-tight sm:text-2xl">
+                {deal.product}
+              </h1>
               <p className="mt-1 text-sm text-mute">
-                {deal.product} · {fmt(deal.amount)} на {deal.months} мес ·
-                заключена {openedLabel} г.
+                <Link href={`/clients/${deal.clientId}`} className="font-medium text-ink hover:text-brand">
+                  {deal.client}
+                </Link>{" "}
+                · {deal.months} мес · заключена {openedLabel} г.
               </p>
               {deal.description && (
                 <p className="mt-1.5 text-sm text-ink">{deal.description}</p>
               )}
             </div>
+            {!finished && (
+              <button
+                onClick={() => setEditOpen(true)}
+                className="flex items-center gap-1.5 rounded-full border border-line px-4 py-2 text-sm font-medium text-mute hover:border-brand hover:text-brand-deep"
+              >
+                <Pencil size={15} aria-hidden />
+                <span className="hidden sm:inline">Редактировать</span>
+                <span className="sr-only sm:hidden">Редактировать сделку</span>
+              </button>
+            )}
           </div>
-          {!finished && (
-            <button
-              onClick={() => setEditOpen(true)}
-              className="flex items-center gap-1.5 rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
-            >
-              <Pencil size={15} aria-hidden /> Редактировать
-            </button>
-          )}
-        </div>
 
-        {/* Ключевые цифры */}
-        <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-5 sm:grid-cols-4">
-          {[
-            ["Сумма сделки", fmt(deal.amount), ""],
-            ["Месячный платёж", money(monthly), ""],
-            ["Оплачено", money(paidSum), "text-good"],
-            ["Остаток", money(remaining), ""],
-          ].map(([label, value, cls]) => (
-            <div key={label}>
-              <p className="text-sm text-mute">{label}</p>
-              <p className={`mt-0.5 text-lg font-semibold tracking-tight ${cls}`}>
-                {value}
+          <div className="mt-5 flex flex-col gap-5 border-t border-line pt-5 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-4">
+              <ProgressRing pct={paidPct} tone={deal.stage === "closed" ? "good" : "brand"}>
+                <span className="text-lg font-semibold tracking-tight">{paidPct}%</span>
+              </ProgressRing>
+              <div className="sm:hidden">
+                <p className="font-medium">
+                  {paid} из {deal.months} платежей
+                </p>
+                <p className="text-sm text-mute">оплачено по графику</p>
+              </div>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+                {[
+                  ["Сумма сделки", fmt(deal.amount), ""],
+                  ["Месячный платёж", money(monthly), ""],
+                  ["Оплачено", money(paidSum), "text-good"],
+                  ["Остаток", money(remaining), ""],
+                ].map(([label, value, cls]) => (
+                  <div key={label}>
+                    <p className="text-sm text-mute">{label}</p>
+                    <p className={`mt-0.5 text-lg font-semibold tracking-tight ${cls}`}>
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div
+                className="mt-4 flex gap-1"
+                role="progressbar"
+                aria-valuenow={paid}
+                aria-valuemin={0}
+                aria-valuemax={deal.months}
+                aria-label={`Оплачено ${paid} из ${deal.months} платежей`}
+              >
+                {schedule.map((p) => (
+                  <span
+                    key={p.n}
+                    title={`${p.n}. ${p.date} — ${money(p.amount)}`}
+                    className={`h-2 flex-1 rounded-full ${
+                      p.status === "paid"
+                        ? "bg-brand"
+                        : active && p.iso < today
+                          ? "bg-danger"
+                          : "bg-line"
+                    }`}
+                  />
+                ))}
+              </div>
+              <p className="mt-1.5 hidden text-xs text-mute sm:block">
+                {paid} из {deal.months} платежей
               </p>
             </div>
-          ))}
-        </div>
+          </div>
+        </Card>
 
-        {/* Сегментный прогресс */}
-        <div className="mt-5">
-          <div className="mb-2 flex items-baseline justify-between">
-            <p className="text-sm font-medium">
-              {paid} из {deal.months} платежей
+        {/* Следующий шаг — только пока по сделке есть что делать */}
+        {finished ? (
+          <Card className="flex flex-col items-start gap-3 p-5 sm:p-6">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-canvas text-mute">
+              <ShieldCheck size={20} aria-hidden />
+            </span>
+            <p className="font-semibold">
+              {deal.stage === "closed" ? "Сделка закрыта" : "Заявка отклонена"}
             </p>
             <p className="text-sm text-mute">
-              {Math.round((paid / deal.months) * 100)}% графика
+              {deal.stage === "closed"
+                ? `Все ${deal.months} платежей внесены, задолженности нет.`
+                : `${deal.nextStep}.`}
             </p>
-          </div>
-          <div
-            className="flex gap-1"
-            role="progressbar"
-            aria-valuenow={paid}
-            aria-valuemin={0}
-            aria-valuemax={deal.months}
-            aria-label="Прогресс платежей"
-          >
-            {schedule.map((p) => (
-              <span
-                key={p.n}
-                className={`h-2 flex-1 rounded-full ${
-                  p.status === "paid" ? "bg-brand" : "bg-line"
-                }`}
+          </Card>
+        ) : (
+          <Card className="flex flex-col p-5 sm:p-6">
+            <div className="flex items-center gap-2">
+              <CalendarDays
+                size={16}
+                className={daysToNext !== null && daysToNext < 0 ? "text-danger" : "text-brand"}
+                aria-hidden
               />
-            ))}
-          </div>
-        </div>
-      </Card>
-
-      {/* Следующий шаг — только пока по сделке есть что делать */}
-      {finished ? (
-        <div className="mt-4 flex flex-wrap items-center gap-4 rounded-card border border-line bg-surface px-5 py-4">
-          <ShieldCheck size={18} className="shrink-0 text-mute" aria-hidden />
-          <p className="text-sm text-mute">
-            {deal.stage === "closed"
-              ? `Сделка закрыта: все ${deal.months} платежей внесены, задолженности нет.`
-              : `Заявка отклонена. ${deal.nextStep}.`}
-          </p>
-        </div>
-      ) : (
-        <div className="mt-4 flex flex-wrap items-center gap-4 rounded-card border border-line bg-brand-soft px-5 py-4">
-          <CalendarDays size={18} className="shrink-0 text-brand" aria-hidden />
-          <div className="min-w-0 flex-1 basis-52">
-            <p className="text-sm font-medium text-brand-deep">Следующий шаг</p>
-            <p className="text-sm text-ink">
-              {deal.urgent
-                ? deal.nextStep
-                : nextPayment
-                  ? `Платёж ${money(nextPayment.amount)} — ${nextPayment.date} г.`
-                  : deal.nextStep}
-            </p>
-          </div>
-          <DealActions
-            dealId={deal.id}
-            clientName={deal.client}
-            remaining={remaining}
-            monthly={monthly}
-            canRestructure={active}
-            primaryLabel={active ? "Принять платёж" : "Продолжить работу"}
-            onPrimary={active ? () => acceptPayment(deal.id) : undefined}
-            onRestructure={async (input) => {
-              await restructureDeal(deal.id, input);
-            }}
-            onCloseEarly={active ? async () => { await closeDeal(deal.id); } : undefined}
-          />
-        </div>
-      )}
+              <p className="text-sm font-medium text-mute">
+                {active && nextPayment ? "Следующий платёж" : "Следующий шаг"}
+              </p>
+            </div>
+            {active && nextPayment ? (
+              <>
+                <p className="mt-2 text-3xl font-semibold tracking-tight">
+                  {money(nextPayment.amount)}
+                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-mute">
+                    {nextPayment.n}-й из {deal.months} · {nextPayment.date}
+                  </span>
+                  {countdown && (
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${countdown.cls}`}>
+                      {countdown.text}
+                    </span>
+                  )}
+                </div>
+                {deal.urgent && <p className="mt-2 text-sm text-danger">{deal.nextStep}</p>}
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-ink">{deal.nextStep}</p>
+            )}
+            <div className="mt-auto pt-5">
+              {!active ? (
+                // Заявка: одобрить и выдать (закупка уходит из кассы) или отклонить
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    disabled={issuing}
+                    onClick={async () => {
+                      if (!confirm(`Выдать сделку ${deal.id}? Закупка ${money(purchase)} спишется из кассы.`)) return;
+                      setIssuing(true);
+                      try {
+                        await setDealStage(deal.id, "active");
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : "Не удалось выдать сделку");
+                      } finally {
+                        setIssuing(false);
+                      }
+                    }}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-full bg-brand px-5 py-3 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:opacity-60"
+                  >
+                    <Check size={15} aria-hidden /> Одобрить и выдать
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRejectOpen(true)}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:border-danger/40 hover:text-danger"
+                  >
+                    <XCircle size={15} aria-hidden /> Отклонить заявку
+                  </button>
+                </div>
+              ) : (
+              <DealActions
+                layout="stack"
+                dealId={deal.id}
+                clientName={deal.client}
+                remaining={remaining}
+                monthly={monthly}
+                canRestructure={active}
+                primaryLabel={active ? "Принять платёж" : "Продолжить работу"}
+                onPrimary={active ? () => acceptPayment(deal.id) : undefined}
+                onRestructure={async (input) => {
+                  await restructureDeal(deal.id, input);
+                }}
+                onCloseEarly={active ? async () => { await closeDeal(deal.id); } : undefined}
+              />
+              )}
+              {active && (
+                <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm">
+                  <button type="button" onClick={() => setCalcOpen(true)} className="font-medium text-brand hover:text-brand-deep">
+                    Досрочное погашение
+                  </button>
+                  <button type="button" onClick={() => setHolidayOpen(true)} className="font-medium text-brand hover:text-brand-deep">
+                    Отсрочка платежа
+                  </button>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+      </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1fr_340px]">
         {/* Левая колонка */}
@@ -303,33 +463,82 @@ export default function DealDetail({ id }: { id: string }) {
           <Card className="p-5 sm:p-6">
             <h2 className="font-semibold">Экономика сделки</h2>
             <p className="mb-3 text-sm text-mute">
-              Из чего складывается итоговая сумма
+              Из чего складывается итоговая сумма и когда вернутся вложенные деньги
             </p>
-            <dl className="divide-y divide-line text-sm">
-              {[
-                ["Закупочная цена", money(purchase)],
-                [`Наценка рассрочки · ${deal.markupPct}%`, `+${money(markup)}`],
-                ["Итоговая цена для клиента", fmt(deal.amount + (deal.downPayment ?? 0))],
-                ...(deal.downPayment
-                  ? [
-                      ["Первоначальный взнос", `−${money(deal.downPayment)}`],
-                      ["Сумма в рассрочку", fmt(deal.amount)],
-                    ]
-                  : []),
-              ].map(([k, v]) => (
-                <div key={k} className="flex items-center justify-between py-2.5">
-                  <dt className="text-mute">{k}</dt>
-                  <dd className="font-medium">{v}</dd>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_260px]">
+              <dl className="divide-y divide-line text-sm">
+                {[
+                  ["Закупочная цена", money(purchase)],
+                  [`Наценка рассрочки · ${deal.markupPct}%`, `+${money(markup)}`],
+                  ["Итоговая цена для клиента", fmt(deal.amount + (deal.downPayment ?? 0))],
+                  ...(deal.downPayment
+                    ? [
+                        ["Первоначальный взнос", `−${money(deal.downPayment)}`],
+                        ["Сумма в рассрочку", fmt(deal.amount)],
+                      ]
+                    : []),
+                ].map(([k, v]) => (
+                  <div key={k} className="flex items-center justify-between py-2.5">
+                    <dt className="text-mute">{k}</dt>
+                    <dd className="font-medium">{v}</dd>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between py-2.5">
+                  <dt className="font-medium">Ваша прибыль по сделке</dt>
+                  <dd className="font-semibold text-good">{money(markup)}</dd>
                 </div>
-              ))}
-              <div className="flex items-center justify-between py-2.5">
-                <dt className="font-medium">Ваша прибыль по сделке</dt>
-                <dd className="font-semibold text-good">{money(markup)}</dd>
+              </dl>
+              <div className="rounded-[16px] bg-canvas/70 p-4">
+                <p className="text-sm font-medium">Окупаемость</p>
+                {profit ? (
+                  <>
+                    <div className="mt-3 flex items-center gap-3">
+                      <ProgressRing
+                        pct={profit.purchase ? (Math.max(profit.collected, 0) / profit.purchase) * 100 : 100}
+                        size={64}
+                        stroke={7}
+                        tone={profit.paybackDate ? "good" : "brand"}
+                      >
+                        <span className="text-xs font-semibold">
+                          {Math.min(Math.round((Math.max(profit.collected, 0) / (profit.purchase || 1)) * 100), 100)}%
+                        </span>
+                      </ProgressRing>
+                      <p className="text-sm text-mute">
+                        {profit.paybackDate
+                          ? "Закупка вернулась, дальше — чистая прибыль"
+                          : `Вернулось ${money(Math.max(profit.collected, 0))} из ${money(profit.purchase)}`}
+                      </p>
+                    </div>
+                    <dl className="mt-3 flex flex-col gap-1.5 text-sm">
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-mute">Прибыль получена</dt>
+                        <dd className="font-medium text-good">{money(profit.earned)}</dd>
+                      </div>
+                      {profit.paybackDays !== null && (
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-mute">
+                            {profit.paybackDate ? "Окупилась за" : "Окупится за"}
+                          </dt>
+                          <dd className="font-medium">
+                            {Math.max(Math.round(profit.paybackDays / 30), 1)} мес.
+                            {profit.paybackPlanned && " по графику"}
+                          </dd>
+                        </div>
+                      )}
+                      {profit.coinvestorShare > 0 && (
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-mute">Доля соинвесторов</dt>
+                          <dd className="font-medium">{money(profit.coinvestorShare)}</dd>
+                        </div>
+                      )}
+                    </dl>
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm text-mute">
+                    Посчитается, когда сделка будет выдана.
+                  </p>
+                )}
               </div>
-            </dl>
-            <div className="mt-2 rounded-[10px] bg-canvas px-3.5 py-2.5 text-sm text-mute">
-              Получено уже {money(Math.round((markup * paid) / deal.months))} —{" "}
-              {Math.round((paid / deal.months) * 100)}% от потенциальной прибыли
             </div>
           </Card>
 
@@ -344,15 +553,75 @@ export default function DealDetail({ id }: { id: string }) {
               </div>
               <button
                 onClick={() => acceptPayment(deal.id)}
-                disabled={paid >= deal.months}
+                disabled={!active || paid >= deal.months}
                 title="Принять ближайший платёж по графику"
-                className="rounded-[10px] border border-line px-3.5 py-2 text-sm font-medium text-mute transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-full border border-line px-4 py-2 text-sm font-medium text-mute transition-colors hover:border-brand hover:text-brand-deep disabled:cursor-not-allowed disabled:opacity-50"
               >
                 + Добавить платёж
               </button>
             </div>
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[560px] text-sm">
+            {/* Телефон: список вместо широкой таблицы */}
+            <ul className="mt-4 divide-y divide-line border-t border-line sm:hidden">
+              {schedule.map((p) => {
+                const late = p.status !== "paid" && active && p.iso < today;
+                return (
+                  <li
+                    key={p.n}
+                    className={`flex items-center gap-3 px-5 py-3 ${
+                      p.status === "due" && p.n === paid + 1 ? "bg-brand-soft/40" : ""
+                    }`}
+                  >
+                    <span
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                        p.status === "paid"
+                          ? "bg-good-soft text-good"
+                          : late
+                            ? "bg-danger-soft text-danger"
+                            : "bg-canvas text-mute"
+                      }`}
+                    >
+                      {p.status === "paid" ? <Check size={14} aria-label="Оплачен" /> : p.n}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{money(p.amount)}</p>
+                      <p className={`text-xs ${late ? "text-danger" : "text-mute"}`}>
+                        {p.date}
+                        {p.credited ? ` · внесено ${money(p.credited)}` : ""}
+                        {late ? " · просрочен" : p.status === "paid" ? " · оплачен" : ""}
+                      </p>
+                    </div>
+                    {p.status === "paid" && receiptByInstallment.has(p.n) && client && (
+                      <button
+                        onClick={() => sendReceipt(p.n)}
+                        aria-label={`Отправить квитанцию за платёж ${p.n}`}
+                        className="rounded-full border border-line p-2 text-mute hover:text-brand-deep"
+                      >
+                        <ReceiptText size={15} aria-hidden />
+                      </button>
+                    )}
+                    {user.role === "admin" && p.status === "paid" && p.n === paid && (
+                      <button
+                        onClick={undoPayment}
+                        disabled={undoing}
+                        className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-mute hover:text-danger disabled:opacity-50"
+                      >
+                        Отменить
+                      </button>
+                    )}
+                    {active && p.status !== "paid" && p.n === paid + 1 && (
+                      <button
+                        onClick={() => acceptPayment(deal.id)}
+                        className="rounded-full bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep"
+                      >
+                        Оплачен
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="mt-4 hidden overflow-x-auto sm:block">
+              <table className="w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-xs text-mute">
                     <th className="px-5 py-2.5 font-medium sm:px-6">№</th>
@@ -367,7 +636,7 @@ export default function DealDetail({ id }: { id: string }) {
                   {schedule.map((p) => (
                     <tr
                       key={p.n}
-                      className={p.status === "due" && p.n === paid + 1 ? "bg-brand-soft/40" : ""}
+                      className={p.status === "due" && p.n === paid + 1 ? "bg-brand-soft/40" : "hover:bg-canvas/50"}
                     >
                       <td className="px-5 py-3 text-mute sm:px-6">{p.n}</td>
                       <td className="px-3 py-3 whitespace-nowrap">{p.date} г.</td>
@@ -378,15 +647,32 @@ export default function DealDetail({ id }: { id: string }) {
                         {money(p.remaining)}
                       </td>
                       <td className="px-3 py-3">
-                        <Badge tone={p.status === "paid" ? "green" : "gray"}>
-                          {p.status === "paid" ? "Оплачен" : "Ожидается"}
-                        </Badge>
+                        {p.status === "paid" ? (
+                          <Badge tone="green">Оплачен</Badge>
+                        ) : p.credited ? (
+                          <Badge tone={active && p.iso < today ? "red" : "yellow"}>
+                            Внесено {money(p.credited)}
+                          </Badge>
+                        ) : active && p.iso < today ? (
+                          <Badge tone="red">Просрочен</Badge>
+                        ) : (
+                          <Badge tone="gray">Ожидается</Badge>
+                        )}
                       </td>
-                      <td className="px-5 py-3 text-right sm:px-6">
-                        {p.status !== "paid" && p.n === paid + 1 && (
+                      <td className="px-5 py-3 text-right whitespace-nowrap sm:px-6">
+                        {p.status === "paid" && receiptByInstallment.has(p.n) && client && (
+                          <button
+                            onClick={() => sendReceipt(p.n)}
+                            title="Отправить клиенту квитанцию об этом платеже в WhatsApp"
+                            className="mr-2 inline-flex items-center gap-1 rounded-[14px] border border-line px-2.5 py-1.5 text-xs font-medium text-mute hover:border-brand hover:text-brand-deep"
+                          >
+                            <ReceiptText size={13} aria-hidden /> Квитанция
+                          </button>
+                        )}
+                        {active && p.status !== "paid" && p.n === paid + 1 && (
                           <button
                             onClick={() => acceptPayment(deal.id)}
-                            className="rounded-[10px] bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep hover:bg-brand hover:text-white"
+                            className="rounded-full bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep hover:bg-brand hover:text-on-brand"
                           >
                             Отметить оплату
                           </button>
@@ -396,7 +682,7 @@ export default function DealDetail({ id }: { id: string }) {
                             onClick={undoPayment}
                             disabled={undoing}
                             title="Отменить этот платёж — например, если приняли по ошибке"
-                            className="rounded-[10px] border border-line px-3 py-1.5 text-xs font-medium text-mute hover:border-danger/40 hover:text-danger disabled:opacity-50"
+                            className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-mute hover:border-danger/40 hover:text-danger disabled:opacity-50"
                           >
                             Отменить
                           </button>
@@ -415,7 +701,7 @@ export default function DealDetail({ id }: { id: string }) {
           <Card className="p-5">
             <h2 className="mb-3 font-semibold">Клиент</h2>
             <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-semibold text-on-brand">
                 {deal.client
                   .split(" ")
                   .map((w) => w[0])
@@ -439,7 +725,7 @@ export default function DealDetail({ id }: { id: string }) {
                 <button
                   onClick={remind}
                   disabled={templates.length === 0 || !client}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
                 >
                   <MessageCircle size={16} aria-hidden />
                   Напомнить об оплате
@@ -461,7 +747,7 @@ export default function DealDetail({ id }: { id: string }) {
                           reminderTemplateId: value,
                         });
                       }}
-                      className="w-full rounded-[8px] border border-line bg-canvas px-2.5 py-1.5 text-xs outline-none focus:border-brand"
+                      className="w-full rounded-[12px] border border-line bg-canvas px-2.5 py-1.5 text-xs outline-none focus:border-brand"
                     >
                       <option value="">Общий по умолчанию</option>
                       {templates.map((t) => (
@@ -482,6 +768,51 @@ export default function DealDetail({ id }: { id: string }) {
             )}
           </Card>
 
+          {(dealContacts.length > 0 || deal.statusTone === "red") && (
+            <Card className="p-5">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="font-semibold">Звонки по просрочке</h2>
+                {active && (
+                  <button
+                    type="button"
+                    onClick={() => setContactOpen(true)}
+                    className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-brand hover:border-brand"
+                  >
+                    Записать звонок
+                  </button>
+                )}
+              </div>
+              {dealContacts.length === 0 ? (
+                <p className="text-sm text-mute">Звонков ещё не было.</p>
+              ) : (
+                <ol className="flex flex-col gap-2.5">
+                  {dealContacts.slice(0, 5).map((c) => (
+                    <li key={c.id} className="text-sm">
+                      <p className="font-medium">
+                        {OUTCOME_LABEL[c.outcome]}
+                        {c.dueDate && ` · ${longDate(new Date(`${c.dueDate}T00:00:00`))}`}
+                        {c.amount && ` · ${money(c.amount)}`}
+                      </p>
+                      <p className="text-xs text-mute">
+                        {longDate(new Date(c.at))}
+                        {c.userId && ` · ${employees.find((e) => e.id === c.userId)?.name ?? ""}`}
+                        {c.note && ` — ${c.note}`}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </Card>
+          )}
+
+          <AttachmentsCard
+            title="Фото товара"
+            icon={Camera}
+            dealId={deal.id}
+            kinds={[{ kind: "product", label: "Товар" }]}
+            hint="Фото товара при выдаче: пригодится, если возникнет спор о комплектации или состоянии."
+          />
+
           <Card className="p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold">Поручители</h2>
@@ -497,7 +828,7 @@ export default function DealDetail({ id }: { id: string }) {
                   <li key={g.id}>
                     <Link
                       href={`/clients/${g.id}`}
-                      className="flex items-center justify-between rounded-[10px] px-2 py-1.5 text-sm hover:bg-canvas"
+                      className="flex items-center justify-between rounded-[14px] px-2 py-1.5 text-sm hover:bg-canvas"
                     >
                       <span>{g.name}</span>
                       {i === 0 && (
@@ -546,8 +877,9 @@ export default function DealDetail({ id }: { id: string }) {
                           setReassigning(false);
                         }
                       }}
-                      className="rounded-[8px] border border-line bg-canvas px-2 py-1 text-sm outline-none focus:border-brand"
+                      className="rounded-[10px] border border-line bg-canvas px-2 py-1 text-sm outline-none focus:border-brand"
                     >
+                      {!deal.managerId && <option value="">Не назначен</option>}
                       {employees.filter((e) => e.active).map((e) => (
                         <option key={e.id} value={e.id}>{e.name}</option>
                       ))}
@@ -579,7 +911,7 @@ export default function DealDetail({ id }: { id: string }) {
               ].map(({ icon: Icon, title, text, mode }) => (
                 <li
                   key={title}
-                  className="flex items-center gap-3 rounded-[10px] border border-line px-3.5 py-2.5"
+                  className="flex items-center gap-3 rounded-full border border-line px-3.5 py-2.5"
                 >
                   <Icon size={17} className="shrink-0 text-brand" aria-hidden />
                   <div className="min-w-0 flex-1">
@@ -638,7 +970,7 @@ export default function DealDetail({ id }: { id: string }) {
           <button
             onClick={removeDeal}
             disabled={deleting}
-            className="rounded-[10px] border border-danger/40 px-4 py-2.5 text-sm font-medium text-danger hover:bg-danger hover:text-white disabled:opacity-50"
+            className="rounded-full border border-danger/40 px-4 py-2.5 text-sm font-medium text-danger hover:bg-danger hover:text-white disabled:opacity-50"
           >
             Удалить сделку
           </button>
@@ -660,6 +992,58 @@ export default function DealDetail({ id }: { id: string }) {
           document.body
         )}
 
+      {contactOpen && (
+        <ContactModal
+          dealId={deal.id}
+          clientName={deal.client}
+          phone={client?.phone}
+          overdueSum={schedule.filter((p) => p.status === "due" && p.iso < today).reduce((s, p) => s + p.amount, 0)}
+          onClose={() => setContactOpen(false)}
+        />
+      )}
+
+      {calcOpen && (
+        <SimpleModal title="Досрочное погашение" subtitle={`${deal.client} · ${deal.id}`} onClose={() => setCalcOpen(false)}>
+          <PayoffCalculator
+            schedule={schedule}
+            onAccept={async (amount) => {
+              if (!confirm(`Принять платёж ${money(amount)} по сделке ${deal.id}?`)) return;
+              try {
+                await acceptPayment(deal.id, { amount });
+                setCalcOpen(false);
+              } catch (err) {
+                alert(err instanceof Error ? err.message : "Не удалось принять платёж");
+              }
+            }}
+          />
+        </SimpleModal>
+      )}
+
+      {holidayOpen && nextPayment && (
+        <HolidayModal
+          dealId={deal.id}
+          clientName={deal.client}
+          nextIso={nextPayment.iso}
+          onClose={() => setHolidayOpen(false)}
+          onSubmit={async (months, reason) => {
+            await holidayDeal(deal.id, months, reason);
+            setHolidayOpen(false);
+          }}
+        />
+      )}
+
+      {rejectOpen && (
+        <RejectModal
+          dealId={deal.id}
+          clientName={deal.client}
+          onClose={() => setRejectOpen(false)}
+          onSubmit={async (reason) => {
+            await rejectDeal(deal.id, reason);
+            setRejectOpen(false);
+          }}
+        />
+      )}
+
       {editOpen && (
         <EditDealModal
           deal={deal}
@@ -677,7 +1061,7 @@ export default function DealDetail({ id }: { id: string }) {
 }
 
 const editField =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 function EditDealModal({
   deal,
@@ -740,7 +1124,7 @@ function EditDealModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <form
         onSubmit={submit}
         role="dialog"
@@ -822,15 +1206,248 @@ function EditDealModal({
           <p className="mr-auto text-sm" role="status" aria-live="polite">
             {error ? <span className="text-danger">{error}</span> : saving ? "Сохраняем…" : ""}
           </p>
-          <button type="button" onClick={onClose} className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
             Отмена
           </button>
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Сохранить
+          </button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+const REJECT_REASONS = [
+  "Не прошёл проверку",
+  "Нет подтверждения дохода",
+  "Плохая платёжная история",
+  "Клиент передумал",
+  "Не устроили условия",
+];
+
+function RejectModal({
+  dealId,
+  clientName,
+  onClose,
+  onSubmit,
+}: {
+  dealId: string;
+  clientName: string;
+  onClose: () => void;
+  onSubmit: (reason: string) => Promise<void>;
+}) {
+  const [reason, setReason] = useState(REJECT_REASONS[0]);
+  const [other, setOther] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const final = reason === "other" ? other.trim() : reason;
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!final || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSubmit(final);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось отклонить заявку");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
+      <form
+        onSubmit={submit}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reject-title"
+        className="relative w-full max-w-md rounded-t-card bg-surface shadow-pop sm:rounded-card"
+      >
+        <div className="border-b border-line px-5 py-4">
+          <h2 id="reject-title" className="font-semibold tracking-tight">
+            Отклонить заявку {dealId}
+          </h2>
+          <p className="text-sm text-mute">{clientName}</p>
+        </div>
+        <fieldset className="flex flex-col gap-2 px-5 py-4">
+          <legend className="mb-2 text-sm font-medium">Причина — попадёт в аналитику отказов</legend>
+          {[...REJECT_REASONS, "other"].map((r) => (
+            <label key={r} className="flex items-center gap-2.5 text-sm">
+              <input
+                type="radio"
+                name="reason"
+                checked={reason === r}
+                onChange={() => setReason(r)}
+                className="h-4 w-4 accent-[var(--color-brand)]"
+              />
+              {r === "other" ? "Другая" : r}
+            </label>
+          ))}
+          {reason === "other" && (
+            <input
+              autoFocus
+              value={other}
+              onChange={(e) => setOther(e.target.value)}
+              maxLength={200}
+              placeholder="Опишите причину"
+              className="mt-1 w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:bg-surface"
+            />
+          )}
+        </fieldset>
+        <footer className="flex items-center gap-3 border-t border-line px-5 py-4">
+          <p className="mr-auto text-sm text-danger" role="status" aria-live="polite">
+            {error}
+          </p>
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+            Отмена
+          </button>
+          <button
+            type="submit"
+            disabled={!final || saving}
+            className="rounded-full bg-danger px-4 py-2.5 text-sm font-medium text-white shadow-card hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? "Сохраняем…" : "Отклонить"}
+          </button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function SimpleModal({
+  title,
+  subtitle,
+  onClose,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-label={title} className="relative w-full max-w-md rounded-t-card bg-surface shadow-pop sm:rounded-card">
+        <div className="border-b border-line px-5 py-4">
+          <h2 className="font-semibold tracking-tight">{title}</h2>
+          {subtitle && <p className="text-sm text-mute">{subtitle}</p>}
+        </div>
+        <div className="px-5 py-4">{children}</div>
+        <footer className="flex justify-end border-t border-line px-5 py-3">
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2 text-sm font-medium text-mute hover:text-ink">
+            Закрыть
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+const HOLIDAY_REASONS = ["Болезнь", "Потеря работы", "Задержка зарплаты", "Семейные обстоятельства"];
+
+function HolidayModal({
+  dealId,
+  clientName,
+  nextIso,
+  onClose,
+  onSubmit,
+}: {
+  dealId: string;
+  clientName: string;
+  nextIso: string;
+  onClose: () => void;
+  onSubmit: (months: number, reason: string) => Promise<void>;
+}) {
+  const [months, setMonths] = useState(1);
+  const [reason, setReason] = useState(HOLIDAY_REASONS[0]);
+  const [other, setOther] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const final = reason === "other" ? other.trim() : reason;
+  const shiftedTo = new Date(`${addMonthsIso(nextIso, months)}T00:00:00`).toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!final || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSubmit(months, final);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось оформить отсрочку");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
+      <form onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="holiday-title" className="relative w-full max-w-md rounded-t-card bg-surface shadow-pop sm:rounded-card">
+        <div className="border-b border-line px-5 py-4">
+          <h2 id="holiday-title" className="font-semibold tracking-tight">Отсрочка платежа · {dealId}</h2>
+          <p className="text-sm text-mute">{clientName}</p>
+        </div>
+        <div className="flex flex-col gap-4 px-5 py-4">
+          <div>
+            <p className="mb-2 text-sm font-medium">На сколько месяцев</p>
+            <div className="flex gap-2">
+              {[1, 2, 3].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMonths(m)}
+                  aria-pressed={months === m}
+                  className={`flex-1 rounded-full border px-3 py-2 text-sm font-medium ${
+                    months === m ? "border-brand bg-brand-soft text-brand-deep" : "border-line text-mute hover:text-ink"
+                  }`}
+                >
+                  {m} мес.
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-sm text-mute">
+              Все оставшиеся взносы сдвинутся на {months} мес., суммы не изменятся. Ближайший платёж — {shiftedTo}.
+            </p>
+          </div>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1 text-sm font-medium">Причина</legend>
+            {[...HOLIDAY_REASONS, "other"].map((r) => (
+              <label key={r} className="flex items-center gap-2.5 text-sm">
+                <input type="radio" name="holiday-reason" checked={reason === r} onChange={() => setReason(r)} className="h-4 w-4 accent-[var(--color-brand)]" />
+                {r === "other" ? "Другая" : r}
+              </label>
+            ))}
+            {reason === "other" && (
+              <input
+                autoFocus
+                value={other}
+                onChange={(e) => setOther(e.target.value)}
+                maxLength={200}
+                placeholder="Опишите причину"
+                className="mt-1 w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:bg-surface"
+              />
+            )}
+          </fieldset>
+        </div>
+        <footer className="flex items-center gap-3 border-t border-line px-5 py-4">
+          <p className="mr-auto text-sm text-danger" role="status" aria-live="polite">{error}</p>
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+            Отмена
+          </button>
+          <button type="submit" disabled={!final || saving} className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:opacity-50">
+            {saving ? "Сохраняем…" : "Оформить отсрочку"}
           </button>
         </footer>
       </form>

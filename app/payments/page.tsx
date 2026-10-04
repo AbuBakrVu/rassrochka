@@ -69,7 +69,7 @@ export default function PaymentsPage() {
                 value={view}
                 onChange={(e) => setView(e.target.value as "month" | "week")}
                 aria-label="Период календаря"
-                className="rounded-[10px] border border-line bg-surface px-4 py-2 text-sm text-mute outline-none hover:text-ink focus:border-brand"
+                className="rounded-full border border-line bg-surface px-4 py-2 text-sm text-mute outline-none hover:text-ink focus:border-brand"
               >
                 <option value="month">Месяц</option>
                 <option value="week">Неделя</option>
@@ -150,10 +150,10 @@ export default function PaymentsPage() {
                     <li key={it.dealId + it.kind}>
                       <Link
                         href={`/deals/${it.dealId}`}
-                        className="-mx-2 flex gap-3 rounded-[10px] px-2 py-3 hover:bg-canvas"
+                        className="-mx-2 flex gap-3 rounded-[14px] px-2 py-3 hover:bg-canvas"
                       >
                         <span
-                          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ${
+                          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[14px] ${
                             it.urgent
                               ? "bg-danger-soft text-danger"
                               : "bg-brand-soft text-brand"
@@ -194,7 +194,7 @@ function DayModal({ cell, onClose }: { cell: CalendarCell; onClose: () => void }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
@@ -208,7 +208,7 @@ function DayModal({ cell, onClose }: { cell: CalendarCell; onClose: () => void }
           <button
             onClick={onClose}
             aria-label="Закрыть"
-            className="rounded-[10px] p-2 text-mute hover:bg-canvas hover:text-ink"
+            className="rounded-full p-2 text-mute hover:bg-canvas hover:text-ink"
           >
             <X size={18} />
           </button>
@@ -216,7 +216,7 @@ function DayModal({ cell, onClose }: { cell: CalendarCell; onClose: () => void }
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {cell.event && (
-            <div className="mb-3 flex items-center gap-3 rounded-[10px] bg-danger-soft px-3.5 py-2.5">
+            <div className="mb-3 flex items-center gap-3 rounded-[14px] bg-danger-soft px-3.5 py-2.5">
               <Flag size={15} className="shrink-0 text-danger" aria-hidden />
               <p className="text-sm font-medium text-danger">{cell.event.label}</p>
             </div>
@@ -234,7 +234,7 @@ function DayModal({ cell, onClose }: { cell: CalendarCell; onClose: () => void }
                   <Link
                     href={`/deals/${it.dealId}`}
                     onClick={onClose}
-                    className="-mx-1 flex items-center justify-between gap-3 rounded-[10px] px-1 py-3 hover:bg-canvas"
+                    className="-mx-1 flex items-center justify-between gap-3 rounded-[14px] px-1 py-3 hover:bg-canvas"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{it.clientName}</p>

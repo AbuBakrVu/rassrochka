@@ -9,7 +9,8 @@
     "lint": "eslint",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate-all.mjs",
     "db:tenant:create": "node --env-file-if-exists=.env.local scripts/create-tenant.mjs",
-    "db:tenant:drop": "node --env-file-if-exists=.env.local scripts/drop-tenant.mjs"
+    "db:tenant:drop": "node --env-file-if-exists=.env.local scripts/drop-tenant.mjs",
+    "test": "node --experimental-strip-types --test --test-reporter=spec \"lib/**/*.test.ts\""
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",

@@ -1,6 +1,6 @@
 // Моковые данные CRM «Nasiya» — учёт рассрочек. Сегодня 5 августа 2026 г.
 
-import { scheduleForDeal } from "./schedule";
+import { scheduleForDeal, type PlanItem } from "./schedule";
 
 export const fmt = (n: number) =>
   new Intl.NumberFormat("ru-RU").format(n) + " ₽";
@@ -55,6 +55,15 @@ export interface Deal {
   restructuredMonths?: number;
   restructuredFrom?: string;
   downPayment?: number;
+  /** Сделка пришла онлайн-заявкой со страницы /apply. */
+  online?: boolean;
+  /**
+   * Внесено в счёт следующего, ещё не закрытого взноса — частичная оплата
+   * или переплата (lib/payments.ts). Учитывается в остатке долга.
+   */
+  credit?: number;
+  /** Сохранённый план графика (после реструктуризации, отсрочки или гибкого графика). */
+  plan?: PlanItem[];
   /** Свой шаблон напоминания на эту сделку — если не задан, используется общий по умолчанию. */
   reminderTemplateId?: string;
   /** Последняя стадия лесенки напоминаний, отправленная по текущему взносу — вместе с датой взноса не даёт слать её повторно. */
@@ -119,7 +128,12 @@ export interface RiskAssessment {
 
 // Простая прозрачная скоринговая модель: каждый фактор виден в reasons,
 // решение не должно выглядеть чёрным ящиком для менеджера.
-export function assessRisk(deals: Deal[], clientId: string): RiskAssessment {
+export function assessRisk(
+  deals: Deal[],
+  clientId: string,
+  /** Дисциплина платежей из lib/credit.ts — без неё оценка только по сделкам. */
+  punctuality?: { total: number; onTime: number; late: number; maxLateDays: number }
+): RiskAssessment {
   const list = dealsOfClient(deals, clientId);
   const closed = list.filter((d) => d.stage === "closed").length;
   const rejected = list.filter((d) => d.stage === "rejected").length;
@@ -169,6 +183,30 @@ export function assessRisk(deals: Deal[], clientId: string): RiskAssessment {
     score -= rejected * 12;
     reasons.push({
       text: `${rejected} ${ruPlural(rejected, "отклонённая заявка", "отклонённые заявки", "отклонённых заявок")} в прошлом`,
+      positive: false,
+    });
+  }
+
+  // Дисциплину оцениваем, только когда платежей набралось хотя бы три:
+  // одна задержка из двух платежей ещё ничего не говорит о клиенте
+  if (punctuality && punctuality.total >= 3) {
+    const rate = punctuality.onTime / punctuality.total;
+    const text = `Вовремя ${punctuality.onTime} из ${punctuality.total} ${ruPlural(punctuality.total, "платежа", "платежей", "платежей")}`;
+    if (rate >= 0.9) {
+      score += 10;
+      reasons.push({ text, positive: true });
+    } else if (rate >= 0.7) {
+      score -= 5;
+      reasons.push({ text, positive: false });
+    } else {
+      score -= 15;
+      reasons.push({ text, positive: false });
+    }
+  }
+  if (punctuality && punctuality.maxLateDays > 30) {
+    score -= 10;
+    reasons.push({
+      text: `Была задержка платежа на ${punctuality.maxLateDays} ${ruPlural(punctuality.maxLateDays, "день", "дня", "дней")}`,
       positive: false,
     });
   }
@@ -295,30 +333,33 @@ const notificationTitles: Record<RouteKind, string> = {
   request: "Новая заявка",
 };
 
-// Не настоящие метки времени (у сделок нет event-лога) — просто
-// правдоподобная лесенка «свежее выше», по порядку приоритета маршрута.
-const notificationTimes = [
-  "5 минут назад",
-  "32 минуты назад",
-  "1 час назад",
-  "3 часа назад",
-  "Вчера",
-  "2 дня назад",
-];
+const shortRuDate = (iso: string) =>
+  new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+
+/** Подпись под уведомлением: настоящий факт о сделке, а не выдуманное «5 минут назад». */
+function notificationWhen(deal: Deal | undefined, kind: RouteKind): string {
+  if (!deal) return "";
+  if (kind === "overdue") return deal.status;
+  if (kind === "deadline") return deal.deadline ? `срок ${deal.deadline}` : deal.status;
+  return `заявка от ${shortRuDate(deal.openedAt)}`;
+}
 
 // Уведомления в шапке — тот же приоритизированный список, что и маршрут
 // менеджера, просто оформленный как лента событий, а не список дел.
 export function buildNotifications(deals: Deal[]): NotificationItem[] {
   return buildRoute(deals)
     .slice(0, 6)
-    .map((item, i) => ({
+    .map((item) => ({
       key: item.key,
       dealId: item.dealId,
       clientId: item.clientId,
       kind: item.kind,
       title: notificationTitles[item.kind],
       text: `${item.clientName} — ${item.text}`,
-      time: notificationTimes[i] ?? "Ранее",
+      time: notificationWhen(
+        deals.find((d) => d.id === item.dealId),
+        item.kind
+      ),
     }));
 }
 
@@ -349,6 +390,11 @@ export interface Client {
   blacklistReason?: string;
   /** Случайный токен для /pay/<token> — один на клиента, покрывает все его сделки. */
   portalToken: string;
+  /** Лимит, заданный администратором вручную; нет — считается автоматически (lib/credit.ts). */
+  creditLimit?: number;
+  /** Согласие на обработку персональных данных (152-ФЗ): когда и как получено. */
+  consentAt?: string;
+  consentSource?: "paper" | "online";
 }
 
 export const clientById = (clients: Client[], id: string) =>

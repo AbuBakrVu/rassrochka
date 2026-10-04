@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   X,
@@ -32,9 +32,11 @@ import {
 } from "lucide-react";
 import { type Client } from "@/lib/data";
 import { todayIso } from "@/lib/derive";
+import { isoDate } from "@/lib/status";
 import { useData } from "@/lib/store";
 import { cashBalance } from "@/lib/cash";
 import NewClientModal from "@/components/new-client-modal";
+import { ClientCreditSummary, isOverLimit, useClientCredit } from "@/components/client-credit";
 
 const steps = [
   { key: "product", title: "Товар", icon: Package },
@@ -68,7 +70,7 @@ const cities = [
 const terms = [3, 4, 6, 9, 12, 18, 24];
 
 const input =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 const money = (n: number) =>
   new Intl.NumberFormat("ru-RU").format(Math.round(n)) + " ₽";
@@ -82,10 +84,10 @@ const longDate = (iso: string) =>
       })
     : "—";
 
+// Тот же сдвиг, что у графика (lib/schedule.ts): тот же день следующего месяца
 const addMonth = (iso: string) => {
-  const d = new Date(iso);
-  d.setMonth(d.getMonth() + 1);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = iso.split("-").map(Number);
+  return isoDate(new Date(y, m, d));
 };
 
 function Label({
@@ -123,7 +125,7 @@ function StepHead({
 }) {
   return (
     <div className="mb-5 flex items-start gap-3">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-brand-soft text-brand">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px] bg-brand-soft text-brand">
         <Icon size={19} aria-hidden />
       </span>
       <div>
@@ -134,8 +136,15 @@ function StepHead({
   );
 }
 
-export default function NewDealModal({ onClose }: { onClose: () => void }) {
-  const { clients, cash, cashOpeningBalance, employees, addDeal } = useData();
+export default function NewDealModal({
+  onClose,
+  initialClient,
+}: {
+  onClose: () => void;
+  /** «Новая сделка» из карточки клиента — клиент уже выбран. */
+  initialClient?: Client;
+}) {
+  const { clients, cash, cashOpeningBalance, employees, addDeal, uploadAttachment } = useData();
   // Ответственным можно назначить только действующего сотрудника
   const managers = employees.filter((e) => e.active);
   const cashNow = cashBalance(cashOpeningBalance, cash);
@@ -150,7 +159,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [city, setCity] = useState("");
-  const [photos, setPhotos] = useState<{ url: string; name: string }[]>([]);
+  const [photos, setPhotos] = useState<{ url: string; name: string; file: File }[]>([]);
 
   const [price, setPrice] = useState("");
   const [markup, setMarkup] = useState("15");
@@ -159,19 +168,19 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
   const [months, setMonths] = useState(6);
   const [dealDate, setDealDate] = useState(todayIso());
   const [firstPayment, setFirstPayment] = useState("");
-  const [manager, setManager] = useState<number | null>(null);
-
-  // По умолчанию ответственный — тот, кто создаёт сделку
+  // По умолчанию ответственный — тот, кто создаёт сделку; выбор вручную
+  // хранится отдельно и перекрывает умолчание (без эффекта, который
+  // дописывал бы состояние после первой отрисовки)
   const { user } = useData();
-  useEffect(() => {
-    if (manager === null && managers.length > 0) {
-      setManager(managers.some((m) => m.id === user.id) ? user.id : managers[0].id);
-    }
-  }, [manager, managers, user.id]);
+  const [pickedManager, setManager] = useState<number | null>(null);
+  const manager =
+    pickedManager ??
+    (managers.some((m) => m.id === user.id) ? user.id : (managers[0]?.id ?? null));
 
   const [clientQuery, setClientQuery] = useState("");
-  const [client, setClient] = useState<Client | null>(null);
+  const [client, setClient] = useState<Client | null>(initialClient ?? null);
   const [guarantors, setGuarantors] = useState<{ id: string; name: string }[]>([]);
+  const [overLimitAck, setOverLimitAck] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -185,10 +194,13 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
     };
   }, [onClose, clientFormOpen]);
 
-  useEffect(
-    () => () => photos.forEach((p) => URL.revokeObjectURL(p.url)),
-    [photos]
-  );
+  // Превью живут, пока открыт мастер: освобождаем их при закрытии (а не при
+  // каждом изменении списка — иначе гасли бы превью уже добавленных фото)
+  const photosRef = useRef(photos);
+  useEffect(() => {
+    photosRef.current = photos;
+  }, [photos]);
+  useEffect(() => () => photosRef.current.forEach((p) => URL.revokeObjectURL(p.url)), []);
 
   const calc = useMemo(() => {
     const base = Number(price) || 0;
@@ -215,10 +227,13 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
 
   const firstDate = firstPayment || (dealDate ? addMonth(dealDate) : "");
 
+  const credit = useClientCredit(client);
+  const overLimit = isOverLimit(credit, Math.round(calc.financed));
+
   const stepReady = [
     name.trim() !== "" && category !== "" && city !== "",
     calc.base > 0 && months > 0 && dealDate !== "" && manager !== null,
-    client !== null,
+    client !== null && (!overLimit || overLimitAck),
     true,
   ];
 
@@ -230,7 +245,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
     if (!files) return;
     const next = Array.from(files)
       .slice(0, 8 - photos.length)
-      .map((f) => ({ url: URL.createObjectURL(f), name: f.name }));
+      .map((f) => ({ url: URL.createObjectURL(f), name: f.name, file: f }));
     setPhotos((p) => [...p, ...next]);
   };
 
@@ -255,11 +270,21 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
         city,
         guarantorIds: guarantors.map((g) => g.id),
         downPayment: calc.downSum > 0 ? Math.round(calc.downSum) : undefined,
+        overLimit: overLimit || undefined,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось создать сделку");
       setSaving(false);
       return;
+    }
+    // Фото товара — к созданной сделке. Сделка уже есть, поэтому сбой
+    // загрузки не отменяет её: фото можно добавить в карточке сделки.
+    if (photos.length > 0) {
+      try {
+        await uploadAttachment({ dealId: deal.id, kind: "product", files: photos.map((p) => p.file) });
+      } catch (err) {
+        alert(`Сделка создана, но часть фото не загрузилась — добавьте их в карточке сделки. ${err instanceof Error ? err.message : ""}`);
+      }
     }
     setCreated(true);
     setTimeout(() => {
@@ -272,7 +297,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex items-stretch justify-center sm:items-center sm:p-4 lg:p-6">
       <button
         aria-label="Закрыть окно"
-        className="absolute inset-0 bg-ink/35"
+        className="absolute inset-0 bg-scrim"
         onClick={onClose}
       />
       <div
@@ -296,7 +321,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
           <button
             onClick={onClose}
             aria-label="Закрыть"
-            className="rounded-[10px] p-2 text-mute hover:bg-canvas hover:text-ink"
+            className="rounded-full p-2 text-mute hover:bg-canvas hover:text-ink"
           >
             <X size={18} />
           </button>
@@ -320,7 +345,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                     onClick={() => i < step && setStep(i)}
                     disabled={i > step}
                     aria-current={current ? "step" : undefined}
-                    className={`flex min-w-0 items-center gap-2 rounded-[10px] px-2 py-1.5 text-sm whitespace-nowrap ${
+                    className={`flex min-w-0 items-center gap-2 rounded-[14px] px-2 py-1.5 text-sm whitespace-nowrap ${
                       i < step ? "hover:bg-surface" : "cursor-default"
                     }`}
                   >
@@ -329,7 +354,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                         done
                           ? "bg-brand-soft text-brand-deep"
                           : current
-                            ? "bg-brand text-white"
+                            ? "bg-brand text-on-brand"
                             : "bg-line text-mute"
                       }`}
                     >
@@ -404,7 +429,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                             key={label}
                             onClick={() => setCategory(label)}
                             aria-pressed={on}
-                            className={`flex items-center gap-2.5 rounded-[10px] border px-3 py-2.5 text-left text-sm transition-colors ${
+                            className={`flex items-center gap-2.5 rounded-full border px-3 py-2.5 text-left text-sm transition-colors ${
                               on
                                 ? "border-brand bg-brand-soft font-medium text-brand-deep"
                                 : "border-line bg-canvas text-mute hover:border-brand/40 hover:text-ink"
@@ -451,7 +476,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                       {photos.map((p, i) => (
                         <div
                           key={p.url}
-                          className="group relative aspect-square overflow-hidden rounded-[10px] border border-line"
+                          className="group relative aspect-square overflow-hidden rounded-[14px] border border-line"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
@@ -460,23 +485,24 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                             className="h-full w-full object-cover"
                           />
                           <button
-                            onClick={() =>
-                              setPhotos((s) => s.filter((_, j) => j !== i))
-                            }
+                            onClick={() => {
+                              URL.revokeObjectURL(p.url);
+                              setPhotos((s) => s.filter((_, j) => j !== i));
+                            }}
                             aria-label={`Удалить фото ${p.name}`}
-                            className="absolute top-1 right-1 rounded-lg bg-surface/90 p-1 text-danger opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            className="absolute top-1 right-1 rounded-lg bg-surface p-1 text-danger opacity-0 group-hover:opacity-100 focus:opacity-100"
                           >
                             <Trash2 size={13} />
                           </button>
                         </div>
                       ))}
                       {photos.length < 8 && (
-                        <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-[10px] border border-dashed border-line bg-canvas text-mute transition-colors hover:border-brand hover:text-brand">
+                        <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-[14px] border border-dashed border-line bg-canvas text-mute transition-colors hover:border-brand hover:text-brand">
                           <ImagePlus size={18} aria-hidden />
                           <span className="text-[11px]">Добавить</span>
                           <input
                             type="file"
-                            accept="image/*"
+                            accept="image/jpeg,image/png,image/webp"
                             multiple
                             className="sr-only"
                             onChange={(e) => addPhotos(e.target.files)}
@@ -538,7 +564,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                     <div className="mb-1.5 flex items-center justify-between">
                       <Label hint="необязательно">Первоначальный взнос</Label>
                       <div
-                        className="flex rounded-[10px] border border-line bg-canvas p-0.5"
+                        className="flex rounded-[14px] border border-line bg-canvas p-0.5"
                         role="group"
                         aria-label="Единица взноса"
                       >
@@ -594,7 +620,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                           aria-pressed={months === t}
                           className={`rounded-full px-4 py-2 text-sm transition-colors ${
                             months === t
-                              ? "bg-brand font-medium text-white"
+                              ? "bg-brand font-medium text-on-brand"
                               : "border border-line bg-canvas text-mute hover:text-ink"
                           }`}
                         >
@@ -627,7 +653,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                     </label>
                   </div>
 
-                  <div className="flex items-center gap-2.5 rounded-[12px] bg-brand-soft px-4 py-3 text-sm">
+                  <div className="flex items-center gap-2.5 rounded-[16px] bg-brand-soft px-4 py-3 text-sm">
                     <CalendarDays
                       size={16}
                       className="shrink-0 text-brand"
@@ -641,7 +667,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
 
                   <div>
                     <Label>Касса</Label>
-                    <div className="flex items-center justify-between rounded-[12px] border border-line bg-canvas px-4 py-3">
+                    <div className="flex items-center justify-between rounded-[16px] border border-line bg-canvas px-4 py-3">
                       <span className="flex items-center gap-2.5 text-sm font-medium">
                         <Wallet size={16} className="text-brand" aria-hidden />
                         Основная
@@ -660,7 +686,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                           key={e.id}
                           onClick={() => setManager(e.id)}
                           aria-pressed={manager === e.id}
-                          className={`flex items-center gap-2 rounded-[10px] border px-3 py-2.5 text-left text-sm transition-colors ${
+                          className={`flex items-center gap-2 rounded-full border px-3 py-2.5 text-left text-sm transition-colors ${
                             manager === e.id
                               ? "border-brand bg-brand-soft font-medium text-brand-deep"
                               : "border-line bg-canvas text-mute hover:border-brand/40 hover:text-ink"
@@ -669,7 +695,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                           <span
                             className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                               manager === e.id
-                                ? "bg-brand text-white"
+                                ? "bg-brand text-on-brand"
                                 : "bg-surface text-mute"
                             }`}
                           >
@@ -695,8 +721,8 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                   <div>
                     <Label required>Клиент</Label>
                     {client ? (
-                      <div className="flex items-center gap-3 rounded-[12px] border border-brand bg-brand-soft px-4 py-3">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white">
+                      <div className="flex items-center gap-3 rounded-[16px] border border-brand bg-brand-soft px-4 py-3">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-semibold text-on-brand">
                           {client.name
                             .split(" ")
                             .map((w) => w[0])
@@ -711,7 +737,10 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                           </p>
                         </div>
                         <button
-                          onClick={() => setClient(null)}
+                          onClick={() => {
+                            setClient(null);
+                            setOverLimitAck(false);
+                          }}
                           className="text-sm font-medium text-brand-deep hover:underline"
                         >
                           Заменить
@@ -719,7 +748,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                       </div>
                     ) : null}
                     {client?.blacklistedAt && (
-                      <div className="mt-2 flex items-start gap-2.5 rounded-[10px] border border-danger-soft bg-danger-soft px-4 py-3 text-sm text-danger">
+                      <div className="mt-2 flex items-start gap-2.5 rounded-[16px] border border-danger-soft bg-danger-soft px-4 py-3 text-sm text-danger">
                         <ShieldAlert size={16} className="mt-0.5 shrink-0" aria-hidden />
                         <div>
                           <p className="font-medium">Клиент в чёрном списке</p>
@@ -728,6 +757,22 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                           )}
                         </div>
                       </div>
+                    )}
+                    {credit && (
+                      <ClientCreditSummary credit={credit} amount={Math.round(calc.financed)} />
+                    )}
+                    {overLimit && (
+                      <label className="mt-2 flex items-start gap-2.5 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={overLimitAck}
+                          onChange={(e) => setOverLimitAck(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 accent-[var(--color-brand)]"
+                        />
+                        <span>
+                          Оформить сверх лимита — отметка попадёт в журнал действий
+                        </span>
+                      </label>
                     )}
                     {!client && (
                       <>
@@ -745,7 +790,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                             onChange={(e) => setClientQuery(e.target.value)}
                           />
                         </div>
-                        <ul className="mt-2 max-h-56 divide-y divide-line overflow-y-auto rounded-[12px] border border-line">
+                        <ul className="mt-2 max-h-56 divide-y divide-line overflow-y-auto rounded-[16px] border border-line">
                           {found.length === 0 ? (
                             <li className="px-4 py-6 text-center text-sm text-mute">
                               Никого не нашли. Заведите нового клиента ниже.
@@ -833,7 +878,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
 
                   <button
                     onClick={() => setClientFormOpen(true)}
-                    className="flex items-center gap-3 rounded-[12px] border border-dashed border-line px-4 py-3.5 text-left transition-colors hover:border-brand hover:bg-brand-soft"
+                    className="flex items-center gap-3 rounded-[16px] border border-dashed border-line px-4 py-3.5 text-left transition-colors hover:border-brand hover:bg-brand-soft"
                   >
                     <UserPlus size={18} className="text-brand" aria-hidden />
                     <span>
@@ -857,9 +902,9 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                   text="Проверьте данные перед созданием"
                 />
                 <div className="flex flex-col gap-4">
-                  <div className="rounded-[12px] border border-line">
+                  <div className="rounded-[16px] border border-line">
                     <div className="flex items-center gap-3 border-b border-line px-4 py-3.5">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-brand-soft text-brand">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-brand-soft text-brand">
                         <Package size={18} aria-hidden />
                       </span>
                       <div className="min-w-0">
@@ -890,7 +935,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                     </dl>
                   </div>
 
-                  <div className="rounded-[12px] border border-line px-4 py-3.5">
+                  <div className="rounded-[16px] border border-line px-4 py-3.5">
                     <p className="text-sm text-mute">Клиент</p>
                     <p className="mt-0.5 font-medium">{client?.name}</p>
                     <p className="text-sm text-mute">{client?.phone}</p>
@@ -905,7 +950,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                     </p>
                   </div>
 
-                  <div className="flex gap-3 rounded-[12px] bg-brand-soft px-4 py-3.5">
+                  <div className="flex gap-3 rounded-[16px] bg-brand-soft px-4 py-3.5">
                     <ShieldCheck
                       size={18}
                       className="mt-0.5 shrink-0 text-brand"
@@ -964,26 +1009,26 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
               </div>
             </dl>
 
-            <div className="mt-4 flex items-center justify-between rounded-[12px] bg-brand px-4 py-3.5 text-white lg:block lg:py-4 lg:text-center">
-              <p className="text-xs tracking-wide text-white/80 uppercase">
+            <div className="mt-4 flex items-center justify-between rounded-[20px] bg-brand bg-gradient-to-b from-brand-hi to-brand px-4 shadow-[0_14px_28px_-14px_var(--glow)] py-3.5 text-on-brand lg:block lg:py-4 lg:text-center">
+              <p className="text-xs tracking-wide text-on-brand/80 uppercase">
                 Ежемесячный платёж
               </p>
               <p className="text-xl font-semibold lg:mt-1 lg:text-[28px]">
                 {calc.monthly ? `≈ ${money(calc.monthly)}` : "—"}
               </p>
-              <p className="hidden text-sm text-white/80 lg:block">
+              <p className="hidden text-sm text-on-brand/80 lg:block">
                 {months} месяцев · равные платежи
               </p>
             </div>
 
             <div className="mt-3 hidden grid-cols-2 gap-3 lg:grid">
-              <div className="rounded-[12px] border border-line bg-surface px-3 py-3 text-center">
+              <div className="rounded-[16px] border border-line bg-surface px-3 py-3 text-center">
                 <p className="text-xs text-mute">Прибыль</p>
                 <p className="mt-0.5 font-semibold text-good">
                   {money(calc.markupSum)}
                 </p>
               </div>
-              <div className="rounded-[12px] border border-line bg-surface px-3 py-3 text-center">
+              <div className="rounded-[16px] border border-line bg-surface px-3 py-3 text-center">
                 <p className="text-xs text-mute">Доходность</p>
                 <p className="mt-0.5 font-semibold">
                   {calc.roi.toFixed(1).replace(".", ",")}%
@@ -1036,7 +1081,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
                 : [
                     "Заполните название, категорию и город",
                     "Укажите закупочную цену и срок",
-                    "Выберите клиента",
+                    overLimit ? "Подтвердите оформление сверх лимита" : "Выберите клиента",
                     "",
                   ][step]
             )}
@@ -1044,7 +1089,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
           {step > 0 && (
             <button
               onClick={() => setStep((s) => s - 1)}
-              className="flex items-center gap-1.5 rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
+              className="flex items-center gap-1.5 rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
             >
               <ArrowLeft size={15} aria-hidden /> Назад
             </button>
@@ -1053,7 +1098,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
             <button
               onClick={() => setStep((s) => s + 1)}
               disabled={!stepReady[step]}
-              className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+              className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
             >
               Далее <ArrowRight size={15} aria-hidden />
             </button>
@@ -1061,7 +1106,7 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
             <button
               onClick={create}
               disabled={created || saving}
-              className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:bg-line disabled:text-mute"
+              className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:bg-line disabled:text-mute"
             >
               <Check size={15} aria-hidden />
               {created ? "Сделка создана" : saving ? "Сохраняем…" : "Создать сделку"}

@@ -38,6 +38,23 @@ interface Options {
   roles?: readonly SessionUser["role"][];
 }
 
+/**
+ * Компания и сотрудник запроса — для роутов, которые отдают не JSON (файлы),
+ * и потому не могут жить внутри handle(). Бросает те же ошибки доступа.
+ */
+export async function sessionFor(
+  request: Request,
+  options: Options = {}
+): Promise<{ tenant: Tenant; user: SessionUser }> {
+  const tenant = await resolveTenant(request.headers.get("host"));
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const user = await findSessionUser(tenant.dbName, token);
+  if (!user) throw new UnauthorizedError();
+  if (options.adminOnly && user.role !== "admin") throw new ForbiddenError();
+  if (options.roles && !options.roles.includes(user.role)) throw new ForbiddenError();
+  return { tenant, user };
+}
+
 export async function handle<T>(
   request: Request,
   fn: Handler<T>,

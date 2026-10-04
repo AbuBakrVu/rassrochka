@@ -3,6 +3,7 @@
 import type { Deal, Client } from "@/lib/data";
 import { fmt } from "@/lib/data";
 import { money, type Installment } from "@/lib/schedule";
+import { useBranding, useBrandName } from "@/components/branding";
 
 // Печатная версия карточки сделки — рендерится в портал поверх всего
 // приложения (см. вызов в deal-detail.tsx) и видна только в @media print,
@@ -30,13 +31,21 @@ export default function DealPrint({
   remaining: number;
 }) {
   const lastPaid = paid > 0 ? schedule[paid - 1] : undefined;
+  const { logoUrl } = useBranding();
+  const brandName = useBrandName();
 
   return (
     <div className="hidden bg-white p-10 text-black print:block">
       <div className="flex items-center justify-between border-b border-black/20 pb-4">
-        <div>
-          <p className="text-lg font-semibold">Nasiya</p>
-          <p className="text-sm text-black/60">Учёт рассрочек</p>
+        <div className="flex items-center gap-3">
+          {logoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element -- логотип из базы компании
+            <img src={logoUrl} alt="" className="h-12 w-12 object-contain" />
+          )}
+          <div>
+            <p className="text-lg font-semibold">{brandName}</p>
+            <p className="text-sm text-black/60">Учёт рассрочек</p>
+          </div>
         </div>
         <div className="text-right text-sm text-black/60">
           <p>

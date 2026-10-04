@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { Zap } from "lucide-react";
+import { BrandMark, useBrandName } from "@/components/branding";
 
 const field =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-full border border-transparent bg-surface px-4 py-3 text-sm shadow-card outline-none transition-colors focus:border-brand";
 
 function LoginForm() {
   const router = useRouter();
+  const brandName = useBrandName();
   const params = useSearchParams();
   const next = params.get("next") || "/";
 
@@ -50,10 +51,8 @@ function LoginForm() {
   return (
     <form onSubmit={submit} className="w-full max-w-sm">
       <div className="mb-8 flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand text-white">
-          <Zap size={18} aria-hidden />
-        </span>
-        <p className="font-semibold tracking-tight">Nasiya</p>
+        <BrandMark className="h-11 w-11 rounded-[16px]" />
+        <p className="font-semibold tracking-tight">{brandName}</p>
       </div>
 
       <h1 className="text-2xl font-semibold tracking-tight">Вход в систему</h1>
@@ -93,7 +92,7 @@ function LoginForm() {
       <button
         type="submit"
         disabled={busy || !email || !password}
-        className="mt-5 w-full rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+        className="mt-5 w-full rounded-full bg-brand px-4 py-3 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
       >
         {busy ? "Входим…" : "Войти"}
       </button>
@@ -111,8 +110,8 @@ function BrandIllustration() {
     <svg viewBox="0 0 360 300" className="w-full max-w-[320px]" aria-hidden>
       <defs>
         <linearGradient id="lg-card" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="100%" stopColor="#eaf2fd" />
+          <stop offset="0%" stopColor="var(--color-surface)" />
+          <stop offset="100%" stopColor="var(--color-brand-soft)" />
         </linearGradient>
       </defs>
 
@@ -122,25 +121,25 @@ function BrandIllustration() {
       {/* Карточка сделки */}
       <g transform="translate(30,40)">
         <rect width="230" height="150" rx="16" fill="url(#lg-card)" />
-        <rect x="20" y="22" width="90" height="10" rx="5" fill="#175ba9" opacity="0.35" />
-        <rect x="20" y="40" width="60" height="8" rx="4" fill="#77869c" opacity="0.35" />
-        <rect x="20" y="70" width="190" height="1" fill="#e3ebf5" />
+        <rect x="20" y="22" width="90" height="10" rx="5" fill="var(--color-brand-deep)" opacity="0.35" />
+        <rect x="20" y="40" width="60" height="8" rx="4" fill="var(--color-mute)" opacity="0.35" />
+        <rect x="20" y="70" width="190" height="1" fill="var(--color-line)" />
 
         {/* Столбики графика поступлений */}
-        <g fill="#2f80ed">
+        <g fill="var(--color-brand)">
           <rect x="20" y="118" width="14" height="16" rx="3" opacity="0.55" />
           <rect x="42" y="104" width="14" height="30" rx="3" opacity="0.7" />
           <rect x="64" y="94" width="14" height="40" rx="3" opacity="0.85" />
           <rect x="86" y="112" width="14" height="22" rx="3" opacity="0.6" />
           <rect x="108" y="86" width="14" height="48" rx="3" />
         </g>
-        <circle cx="175" cy="108" r="26" fill="none" stroke="#2f80ed" strokeWidth="8" opacity="0.25" />
+        <circle cx="175" cy="108" r="26" fill="none" stroke="var(--color-brand)" strokeWidth="8" opacity="0.25" />
         <circle
           cx="175"
           cy="108"
           r="26"
           fill="none"
-          stroke="#2f80ed"
+          stroke="var(--color-brand)"
           strokeWidth="8"
           strokeDasharray="120 163"
           strokeLinecap="round"
@@ -149,11 +148,11 @@ function BrandIllustration() {
 
       {/* Плавающая карточка платежа */}
       <g transform="translate(190,190)">
-        <rect width="140" height="60" rx="14" fill="#ffffff" />
-        <circle cx="24" cy="30" r="14" fill="#e7f6ee" />
-        <path d="M18 30l4 4 8-8" stroke="#1e8e5a" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        <rect x="48" y="18" width="70" height="9" rx="4.5" fill="#172640" opacity="0.55" />
-        <rect x="48" y="34" width="50" height="8" rx="4" fill="#77869c" opacity="0.4" />
+        <rect width="140" height="60" rx="14" fill="var(--color-surface)" />
+        <circle cx="24" cy="30" r="14" fill="var(--color-good-soft)" />
+        <path d="M18 30l4 4 8-8" stroke="var(--color-good)" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <rect x="48" y="18" width="70" height="9" rx="4.5" fill="var(--color-ink)" opacity="0.55" />
+        <rect x="48" y="34" width="50" height="8" rx="4" fill="var(--color-mute)" opacity="0.4" />
       </g>
     </svg>
   );
@@ -161,13 +160,13 @@ function BrandIllustration() {
 
 function BrandPanel() {
   return (
-    <div className="relative hidden shrink-0 items-center justify-center overflow-hidden bg-brand px-10 lg:flex lg:w-[42%]">
+    <div className="relative m-3 hidden shrink-0 items-center justify-center overflow-hidden rounded-[32px] bg-brand bg-gradient-to-br from-brand-hi to-brand px-10 lg:flex lg:w-[42%]">
       <div className="relative z-10 flex flex-col items-center text-center">
         <BrandIllustration />
-        <h2 className="mt-8 text-xl font-semibold text-white">
+        <h2 className="mt-8 text-xl font-semibold text-on-brand">
           Рассрочки под контролем
         </h2>
-        <p className="mt-2 max-w-xs text-sm text-white/80">
+        <p className="mt-2 max-w-xs text-sm text-on-brand/80">
           Сделки, платежи и клиенты — в одном окне, без таблиц и путаницы.
         </p>
       </div>

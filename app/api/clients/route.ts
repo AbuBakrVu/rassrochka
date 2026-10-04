@@ -1,11 +1,12 @@
 import { handle, str, optionalStr, isoDate } from "@/app/api/_lib/handler";
 import { createClient } from "@/lib/queries";
+import { audit } from "@/lib/audit";
 
 export async function POST(request: Request) {
   return handle(
     request,
-    ({ tenant, body }) =>
-      createClient(tenant.dbName, {
+    async ({ tenant, body, user }) => {
+      const client = await createClient(tenant.dbName, {
         lastName: str(body, "lastName", { max: 100 }),
         firstName: str(body, "firstName", { max: 100 }),
         middleName: optionalStr(body, "middleName") || undefined,
@@ -18,7 +19,11 @@ export async function POST(request: Request) {
         registrationAddress: optionalStr(body, "registrationAddress") || undefined,
         livingAddress: optionalStr(body, "livingAddress") || undefined,
         inn: optionalStr(body, "inn") || undefined,
-      }),
+        consent: (body as { consent?: unknown }).consent === true,
+      });
+      await audit(tenant.dbName, user.id, "client.create", client.id, `Добавлен клиент ${client.id} · ${client.name}`);
+      return client;
+    },
     { roles: ["admin", "manager"] }
   );
 }

@@ -65,7 +65,7 @@ export default function RegistryPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Поиск по имени или телефону"
-                className="w-full rounded-[10px] border border-line bg-surface py-2 pr-3 pl-9 text-sm outline-none focus:border-brand"
+                className="w-full rounded-[14px] border border-line bg-surface py-2 pr-3 pl-9 text-sm outline-none focus:border-brand"
               />
             </label>
 

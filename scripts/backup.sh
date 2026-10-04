@@ -49,6 +49,9 @@ done
 if [ -n "${RCLONE_REMOTE:-}" ]; then
   rclone copy "$BACKUP_DIR" "$RCLONE_REMOTE" --include "*-$STAMP.*"
   echo "  ✓ отправлено в $RCLONE_REMOTE"
+  # В хранилище копии живут дольше, чем на сервере: по умолчанию 90 дней
+  rclone delete "$RCLONE_REMOTE" --min-age "${REMOTE_KEEP_DAYS:-90}d" \
+    --include "*.dump*" --include "globals-*"
 else
   echo "  ВНИМАНИЕ: RCLONE_REMOTE не задан — копия осталась только на сервере"
 fi

@@ -34,7 +34,14 @@ export default function NotificationsMenu() {
   const items = buildNotifications(deals);
   const unread = !seen && items.length > 0;
 
-  useEffect(() => setOpen(false), [pathname]);
+  // Закрываем меню при переходе в другой раздел — прямо во время
+  // отрисовки, а не эффектом после неё (рекомендация React для «сбросить
+  // состояние при смене значения»)
+  const [shownAt, setShownAt] = useState(pathname);
+  if (shownAt !== pathname) {
+    setShownAt(pathname);
+    setOpen(false);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -62,7 +69,7 @@ export default function NotificationsMenu() {
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label={`Уведомления${unread ? ` — есть новые (${items.length})` : ""}`}
-        className="relative rounded-[10px] border border-line bg-surface p-2.5 text-mute hover:text-ink"
+        className="relative flex h-11 w-11 items-center justify-center rounded-full bg-surface text-mute shadow-card hover:text-ink"
       >
         <Bell size={17} />
         {unread && (
@@ -76,7 +83,7 @@ export default function NotificationsMenu() {
       {open && (
         <div
           role="menu"
-          className="fixed top-16 right-3 left-3 z-30 max-w-80 overflow-hidden rounded-[12px] border border-line bg-surface shadow-pop sm:absolute sm:top-full sm:right-0 sm:left-auto sm:mt-2 sm:w-80"
+          className="fixed top-16 right-3 left-3 z-30 max-w-80 overflow-hidden rounded-[16px] border border-line bg-surface shadow-pop sm:absolute sm:top-full sm:right-0 sm:left-auto sm:mt-2 sm:w-80"
         >
           <div className="border-b border-line px-4 py-3">
             <h3 className="text-sm font-semibold">Уведомления</h3>
@@ -106,7 +113,7 @@ export default function NotificationsMenu() {
                       className="flex items-start gap-3 px-4 py-3 hover:bg-canvas"
                     >
                       <span
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ${meta.bg} ${meta.text}`}
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[14px] ${meta.bg} ${meta.text}`}
                       >
                         <meta.icon size={15} aria-hidden />
                       </span>

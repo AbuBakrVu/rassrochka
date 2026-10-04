@@ -24,7 +24,7 @@ export default function CopyLinkButton({ path }: { path: string }) {
   return (
     <button
       onClick={copy}
-      className={`flex w-full items-center justify-center gap-2 rounded-[10px] border px-4 py-2.5 text-sm font-medium transition-colors ${
+      className={`flex w-full items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium transition-colors ${
         copied
           ? "border-good bg-good-soft text-good"
           : "border-line text-brand-deep hover:border-brand hover:bg-brand-soft"

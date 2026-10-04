@@ -15,6 +15,34 @@ import { PageHeader, Card } from "@/components/ui";
 import { buildRoute, type RouteKind } from "@/lib/data";
 import { money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
+import { todayIso } from "@/lib/status";
+
+// Отметки «сделано» живут до конца дня: в localStorage этого браузера под
+// ключом с датой и сотрудником — завтра маршрут начинается с чистого листа.
+// Раньше они пропадали при любом обновлении страницы.
+const doneKey = (userId: number) => `route-done:${userId}:${todayIso()}`;
+
+function readDone(userId: number): Set<string> {
+  try {
+    const raw = localStorage.getItem(doneKey(userId));
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeDone(userId: number, done: Set<string>) {
+  try {
+    // Вчерашние отметки больше не нужны — убираем, чтобы не копились
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(`route-done:${userId}:`) && k !== doneKey(userId)) localStorage.removeItem(k);
+    }
+    localStorage.setItem(doneKey(userId), JSON.stringify([...done]));
+  } catch {
+    // приватный режим — отметки просто не сохранятся
+  }
+}
 
 const kindMeta: Record<
   RouteKind,
@@ -39,17 +67,20 @@ const tabs = [
 ] as const;
 
 export default function RoutePage() {
-  const { deals, paidPayments } = useData();
+  const { deals, paidPayments, user } = useData();
   const items = useMemo(() => buildRoute(deals, paidPayments), [deals, paidPayments]);
-  const [done, setDone] = useState<Set<string>>(new Set());
+  // Страница рисуется только в браузере после загрузки данных (DataProvider),
+  // поэтому localStorage доступен уже при первой отрисовке
+  const [done, setDone] = useState<Set<string>>(() => readDone(user.id));
   const [tab, setTab] = useState<(typeof tabs)[number]["key"]>("left");
 
-  const toggle = (key: string) =>
-    setDone((s) => {
-      const next = new Set(s);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
+  const toggle = (key: string) => {
+    const next = new Set(done);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setDone(next);
+    writeDone(user.id, next);
+  };
 
   const list = items.filter((it) => {
     if (tab === "left") return !done.has(it.key);
@@ -117,9 +148,9 @@ export default function RoutePage() {
                 role="tab"
                 aria-selected={tab === t.key}
                 onClick={() => setTab(t.key)}
-                className={`flex items-center gap-2 rounded-[10px] px-3.5 py-2 text-sm transition-colors ${
+                className={`flex items-center gap-2 rounded-full px-3.5 py-2 text-sm transition-colors ${
                   tab === t.key
-                    ? "bg-brand font-medium text-white"
+                    ? "bg-brand font-medium text-on-brand"
                     : "border border-line bg-surface text-mute hover:text-ink"
                 }`}
               >
@@ -127,7 +158,7 @@ export default function RoutePage() {
                 <span
                   className={`rounded-full px-1.5 py-0.5 text-xs ${
                     tab === t.key
-                      ? "bg-white/20 text-white"
+                      ? "bg-on-brand/20 text-on-brand"
                       : "bg-canvas text-mute"
                   }`}
                 >
@@ -175,7 +206,7 @@ export default function RoutePage() {
                       }
                       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
                         isDone
-                          ? "border-good bg-good text-white"
+                          ? "border-good bg-good text-on-brand"
                           : "border-line text-transparent hover:border-brand"
                       }`}
                     >
@@ -183,7 +214,7 @@ export default function RoutePage() {
                     </button>
 
                     <span
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${tone.bg} ${tone.text}`}
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] ${tone.bg} ${tone.text}`}
                     >
                       <meta.icon size={16} aria-hidden />
                     </span>

@@ -27,12 +27,16 @@ export default function CommandPalette() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
+        setQuery("");
         setOpen((v) => !v);
       } else if (e.key === "Escape") {
         setOpen(false);
       }
     };
-    const onOpenRequest = () => setOpen(true);
+    const onOpenRequest = () => {
+      setQuery("");
+      setOpen(true);
+    };
     document.addEventListener("keydown", onKey);
     window.addEventListener("open-command-palette", onOpenRequest);
     return () => {
@@ -42,7 +46,6 @@ export default function CommandPalette() {
   }, []);
 
   useEffect(() => {
-    if (open) setQuery("");
     document.body.style.overflow = open ? "hidden" : "";
   }, [open]);
 
@@ -85,7 +88,7 @@ export default function CommandPalette() {
     <div className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-[10vh] sm:pt-[14vh]">
       <button
         aria-label="Закрыть поиск"
-        className="absolute inset-0 bg-ink/30"
+        className="absolute inset-0 bg-scrim"
         onClick={() => setOpen(false)}
       />
       <div
@@ -130,7 +133,7 @@ export default function CommandPalette() {
                     <button
                       key={c.id}
                       onClick={() => go(`/clients/${c.id}`)}
-                      className="flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left hover:bg-canvas"
+                      className="flex w-full items-center gap-3 rounded-[14px] px-2.5 py-2 text-left hover:bg-canvas"
                     >
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-deep">
                         {initials(c.name)}
@@ -162,9 +165,9 @@ export default function CommandPalette() {
                     <button
                       key={d.id}
                       onClick={() => go(`/deals/${d.id}`)}
-                      className="flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left hover:bg-canvas"
+                      className="flex w-full items-center gap-3 rounded-[14px] px-2.5 py-2 text-left hover:bg-canvas"
                     >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-brand-soft text-brand">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[14px] bg-brand-soft text-brand">
                         <Package size={14} aria-hidden />
                       </span>
                       <span className="min-w-0 flex-1">

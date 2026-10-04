@@ -74,7 +74,7 @@ export default function BlacklistPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Поиск по имени или телефону"
-                className="w-full rounded-[10px] border border-line bg-surface py-2 pr-3 pl-9 text-sm outline-none focus:border-brand"
+                className="w-full rounded-[14px] border border-line bg-surface py-2 pr-3 pl-9 text-sm outline-none focus:border-brand"
               />
             </label>
 
@@ -122,7 +122,7 @@ export default function BlacklistPage() {
                             <button
                               onClick={() => remove(c.id, c.name)}
                               disabled={busy === c.id}
-                              className="inline-flex items-center gap-1.5 rounded-[8px] border border-line px-3 py-1.5 text-xs text-mute transition-colors hover:border-good/40 hover:text-good disabled:opacity-50"
+                              className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs text-mute transition-colors hover:border-good/40 hover:text-good disabled:opacity-50"
                             >
                               <ShieldOff size={13} aria-hidden />
                               Убрать

@@ -28,6 +28,10 @@ services:
       CONTROL_DB: nasiya_control
       APP_DOMAIN: ${APP_DOMAIN}
       NODE_ENV: production
+      # Часовой пояс компании: от него зависит «сегодня» — просрочки, дата
+      # платежа по умолчанию. Без него контейнер живёт по UTC, и ночью по
+      # Москве (до 03:00) система считала бы, что ещё вчера
+      TZ: ${TZ:-Europe/Moscow}
     depends_on:
       db:
         condition: service_healthy
@@ -41,10 +45,14 @@ services:
   db:
     image: postgres:16-alpine   # версия 16 — на ней проверена схема
     restart: unless-stopped
+    # Тот же часовой пояс, что у приложения: current_date и now() в
+    # запросах совпадают с «сегодня» компании
+    command: ["postgres", "-c", "timezone=${TZ:-Europe/Moscow}"]
     environment:
       POSTGRES_USER: nasiya
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: postgres
+      TZ: ${TZ:-Europe/Moscow}
     volumes:
       - pg_data:/var/lib/postgresql/data
     # Порт наружу НЕ пробрасываем: база доступна только внутренней сети

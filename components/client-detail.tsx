@@ -12,26 +12,28 @@ import {
   MessageCircle,
   Wallet,
   Link2,
-  ShieldCheck,
   ShieldAlert,
   ShieldOff,
-  Plus,
-  Minus,
   SearchX,
+  IdCard,
+  Plus,
 } from "lucide-react";
-import { Card, Badge, EmptyState } from "@/components/ui";
+import { Card, Badge, EmptyState, ProgressRing } from "@/components/ui";
 import ClientDeals, { type DealCardData } from "@/components/client-deals";
 import CopyLinkButton from "@/components/copy-link";
+import { ClientCreditCard } from "@/components/client-credit";
+import AttachmentsCard from "@/components/attachments-card";
+import ConsentCard from "@/components/consent-card";
+import NewDealModal from "@/components/new-deal-modal";
 import { useData } from "@/lib/store";
 import {
   clientById,
   dealsOfClient,
   dealState,
   paidCount,
-  assessRisk,
   type Client,
 } from "@/lib/data";
-import { scheduleForDeal, money, longDate } from "@/lib/schedule";
+import { scheduleForDeal, paidTotal, money, longDate } from "@/lib/schedule";
 
 const statusTone: Record<Client["status"], "green" | "red" | "gray" | "blue"> = {
   active: "green",
@@ -47,10 +49,11 @@ const initials = (name: string) =>
     .join("");
 
 export default function ClientDetail({ id }: { id: string }) {
-  const { clients, deals, paidPayments, setClientBlacklisted } = useData();
+  const { clients, deals, paidPayments, setClientBlacklisted, user } = useData();
   const router = useRouter();
   const client = clientById(clients, id);
   const [blacklistOpen, setBlacklistOpen] = useState(false);
+  const [dealOpen, setDealOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const removeFromBlacklist = async () => {
@@ -82,15 +85,12 @@ export default function ClientDetail({ id }: { id: string }) {
   }
 
   const clientDeals = dealsOfClient(deals, client.id);
-  const risk = assessRisk(deals, client.id);
 
   // Считаем графики один раз и используем для карточек, сводки и истории
   const computed = clientDeals.map((deal) => {
     const paid = paidCount(deal, paidPayments);
     const schedule = scheduleForDeal(deal, paid);
-    const paidSum = schedule
-      .filter((p) => p.status === "paid")
-      .reduce((s, p) => s + p.amount, 0);
+    const paidSum = paidTotal(schedule);
     const next = schedule.find((p) => p.status === "due");
     return { deal, paid, schedule, paidSum, next };
   });
@@ -120,7 +120,9 @@ export default function ClientDetail({ id }: { id: string }) {
     (s, { deal, paidSum }) => s + (deal.amount - paidSum),
     0
   );
-  const paidTotal = computed.reduce((s, c) => s + c.paidSum, 0);
+  const paidAll = computed.reduce((s, c) => s + c.paidSum, 0);
+  const paidPct =
+    paidAll + portfolio > 0 ? Math.round((paidAll / (paidAll + portfolio)) * 100) : 0;
   const closedCount = computed.filter(
     ({ deal }) => dealState(deal) === "closed"
   ).length;
@@ -141,7 +143,7 @@ export default function ClientDetail({ id }: { id: string }) {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Link
           href="/clients"
-          className="flex items-center gap-1.5 rounded-[10px] border border-line bg-surface px-3.5 py-2 text-sm text-mute hover:text-ink"
+          className="flex items-center gap-1.5 rounded-full border border-line/70 bg-surface px-4 py-2 text-sm text-mute shadow-card hover:text-ink"
         >
           <ArrowLeft size={15} aria-hidden /> Все клиенты
         </Link>
@@ -154,7 +156,7 @@ export default function ClientDetail({ id }: { id: string }) {
       <Card className="p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand text-lg font-semibold text-white">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand text-lg font-semibold text-on-brand">
               {initials(client.name)}
             </span>
             <div className="min-w-0">
@@ -189,12 +191,12 @@ export default function ClientDetail({ id }: { id: string }) {
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             {client.blacklistedAt ? (
               <button
                 onClick={removeFromBlacklist}
                 disabled={busy}
-                className="flex items-center gap-2 rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute transition-colors hover:border-good/40 hover:text-good disabled:opacity-50"
+                className="flex items-center gap-2 rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute transition-colors hover:border-good/40 hover:text-good disabled:opacity-50"
               >
                 <ShieldOff size={16} aria-hidden />
                 Убрать из ЧС
@@ -202,10 +204,19 @@ export default function ClientDetail({ id }: { id: string }) {
             ) : (
               <button
                 onClick={() => setBlacklistOpen(true)}
-                className="flex items-center gap-2 rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute transition-colors hover:border-danger/40 hover:text-danger"
+                className="flex items-center gap-2 rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute transition-colors hover:border-danger/40 hover:text-danger"
               >
                 <ShieldAlert size={16} aria-hidden />
                 В чёрный список
+              </button>
+            )}
+            {user.role !== "accountant" && (
+              <button
+                onClick={() => setDealOpen(true)}
+                className="flex items-center gap-2 rounded-full border border-line px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand"
+              >
+                <Plus size={16} aria-hidden />
+                Новая сделка
               </button>
             )}
             <button
@@ -216,7 +227,7 @@ export default function ClientDetail({ id }: { id: string }) {
                   "noopener,noreferrer"
                 )
               }
-              className="flex items-center gap-2 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+              className="flex items-center gap-2 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
             >
               <MessageCircle size={16} aria-hidden />
               Написать клиенту
@@ -225,22 +236,26 @@ export default function ClientDetail({ id }: { id: string }) {
         </div>
 
         {/* Ключевые цифры */}
-        <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-5 sm:grid-cols-4">
-          {[
-            ["Остаток по рассрочкам", money(portfolio), ""],
-            ["Выплачено всего", money(paidTotal), "text-good"],
-            ["Активных сделок", String(activeDeals.length), ""],
-            ["Закрытых сделок", String(closedCount), ""],
-          ].map(([label, value, cls]) => (
-            <div key={label}>
-              <p className="text-sm text-mute">{label}</p>
-              <p
-                className={`mt-0.5 text-lg font-semibold tracking-tight ${cls}`}
-              >
-                {value}
-              </p>
-            </div>
-          ))}
+        <div className="mt-5 flex flex-col gap-5 border-t border-line pt-5 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-4">
+            <ProgressRing pct={paidPct} size={76} stroke={8}>
+              <span className="text-base font-semibold tracking-tight">{paidPct}%</span>
+            </ProgressRing>
+            <p className="text-sm text-mute sm:hidden">выплачено от всех рассрочек клиента</p>
+          </div>
+          <div className="grid flex-1 grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+            {[
+              ["Остаток по рассрочкам", money(portfolio), ""],
+              ["Выплачено всего", money(paidAll), "text-good"],
+              ["Активных сделок", String(activeDeals.length), ""],
+              ["Закрытых сделок", String(closedCount), ""],
+            ].map(([label, value, cls]) => (
+              <div key={label}>
+                <p className="text-sm text-mute">{label}</p>
+                <p className={`mt-0.5 text-lg font-semibold tracking-tight ${cls}`}>{value}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </Card>
 
@@ -273,7 +288,7 @@ export default function ClientDetail({ id }: { id: string }) {
           {client.nextDealId && (
             <button
               onClick={() => router.push(`/deals/${client.nextDealId}`)}
-              className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-card hover:bg-brand-deep"
+              className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
             >
               Выполнить
             </button>
@@ -289,82 +304,21 @@ export default function ClientDetail({ id }: { id: string }) {
 
         {/* Правая колонка */}
         <div className="flex flex-col gap-4">
-          <Card className="p-5">
-            <div className="mb-1 flex items-center gap-2">
-              <ShieldCheck
-                size={16}
-                className={
-                  risk.tone === "green"
-                    ? "text-good"
-                    : risk.tone === "yellow"
-                      ? "text-warn"
-                      : "text-danger"
-                }
-                aria-hidden
-              />
-              <h2 className="font-semibold">Оценка надёжности</h2>
-            </div>
-            <p className="mb-3 text-sm text-mute">
-              Считается по истории сделок клиента, не по кредитной истории
-            </p>
-            <div className="flex items-center gap-3">
-              <div
-                className="h-2 flex-1 overflow-hidden rounded-full bg-line"
-                role="progressbar"
-                aria-valuenow={risk.score}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label="Оценка надёжности клиента"
-              >
-                <div
-                  className={`h-full rounded-full ${
-                    risk.tone === "green"
-                      ? "bg-good"
-                      : risk.tone === "yellow"
-                        ? "bg-warn"
-                        : "bg-danger"
-                  }`}
-                  style={{ width: `${risk.score}%` }}
-                />
-              </div>
-              <span className="text-sm font-semibold tabular-nums">
-                {risk.score}
-              </span>
-            </div>
-            <div className="mt-3">
-              <Badge
-                tone={
-                  risk.tone === "green"
-                    ? "green"
-                    : risk.tone === "yellow"
-                      ? "yellow"
-                      : "red"
-                }
-              >
-                {risk.label}
-              </Badge>
-            </div>
-            <ul className="mt-3 flex flex-col gap-1.5">
-              {risk.reasons.map((r) => (
-                <li key={r.text} className="flex items-start gap-2 text-sm">
-                  <span
-                    className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
-                      r.positive
-                        ? "bg-good-soft text-good"
-                        : "bg-danger-soft text-danger"
-                    }`}
-                  >
-                    {r.positive ? (
-                      <Plus size={10} aria-hidden />
-                    ) : (
-                      <Minus size={10} aria-hidden />
-                    )}
-                  </span>
-                  <span className="text-mute">{r.text}</span>
-                </li>
-              ))}
-            </ul>
-          </Card>
+          <ClientCreditCard client={client} />
+
+          <ConsentCard client={client} />
+
+          <AttachmentsCard
+            title="Документы клиента"
+            icon={IdCard}
+            clientId={client.id}
+            kinds={[
+              { kind: "passport", label: "Паспорт" },
+              { kind: "document", label: "Документ" },
+              { kind: "other", label: "Другое" },
+            ]}
+            hint="Фото паспорта (разворот и прописка), справки, подписанное согласие."
+          />
 
           <Card className="p-5">
             <h2 className="mb-1 font-semibold">История платежей</h2>
@@ -379,7 +333,7 @@ export default function ClientDetail({ id }: { id: string }) {
                     key={`${h.dealId}-${h.n}`}
                     className="flex items-center gap-3 py-2.5"
                   >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-good-soft text-good">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[14px] bg-good-soft text-good">
                       <Wallet size={15} aria-hidden />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -451,6 +405,8 @@ export default function ClientDetail({ id }: { id: string }) {
         </div>
       </div>
 
+      {dealOpen && <NewDealModal initialClient={client} onClose={() => setDealOpen(false)} />}
+
       {blacklistOpen && (
         <BlacklistModal
           clientName={client.name}
@@ -493,7 +449,7 @@ function BlacklistModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <button aria-label="Закрыть окно" className="absolute inset-0 bg-ink/35" onClick={onClose} />
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <form
         onSubmit={submit}
         role="dialog"
@@ -514,7 +470,7 @@ function BlacklistModal({
               Причина (необязательно)
             </span>
             <textarea
-              className="min-h-24 w-full resize-y rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface"
+              className="min-h-24 w-full resize-y rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Например: не платит третий месяц подряд"
@@ -531,13 +487,13 @@ function BlacklistModal({
           <p className="mr-auto text-sm" role="status" aria-live="polite">
             {error ? <span className="text-danger">{error}</span> : saving ? "Сохраняем…" : ""}
           </p>
-          <button type="button" onClick={onClose} className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
             Отмена
           </button>
           <button
             type="submit"
             disabled={saving}
-            className="rounded-[10px] bg-danger px-4 py-2.5 text-sm font-medium text-white shadow-card hover:opacity-90 disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-full bg-danger px-4 py-2.5 text-sm font-medium text-white shadow-card hover:opacity-90 disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Добавить в список
           </button>
