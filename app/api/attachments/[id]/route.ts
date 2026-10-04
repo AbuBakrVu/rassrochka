@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { handle, sessionFor } from "@/app/api/_lib/handler";
 import { deleteAttachment, loadAttachment } from "@/lib/attachments";
 import { audit } from "@/lib/audit";
+import { assertClientInScope, assertDealInScope } from "@/lib/scope";
 
 // Файл клиента — только сотрудникам, которые видят клиентов (не бухгалтеру:
 // паспортные данные ему не положены, см. loadBootstrap)
@@ -11,9 +12,11 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
-    const { tenant } = await sessionFor(request, { roles: ["admin", "manager"] });
+    const { tenant, user } = await sessionFor(request, { perm: "clients.personal" });
     const file = await loadAttachment(tenant.dbName, id);
     if (!file) return NextResponse.json({ error: "Файл не найден" }, { status: 404 });
+    if (file.clientId) await assertClientInScope(tenant.dbName, user, file.clientId);
+    if (file.dealId) await assertDealInScope(tenant.dbName, user, file.dealId);
     return new Response(new Uint8Array(file.data), {
       headers: {
         "Content-Type": file.contentType,
@@ -44,6 +47,9 @@ export async function DELETE(
   return handle(
     request,
     async ({ tenant, user }) => {
+      const existing = await loadAttachment(tenant.dbName, id);
+      if (existing?.clientId) await assertClientInScope(tenant.dbName, user, existing.clientId);
+      if (existing?.dealId) await assertDealInScope(tenant.dbName, user, existing.dealId);
       const file = await deleteAttachment(tenant.dbName, id);
       if (file) {
         const owner = file.clientId ? `клиент ${file.clientId}` : `сделка ${file.dealId}`;
@@ -51,6 +57,6 @@ export async function DELETE(
       }
       return { ok: file !== null };
     },
-    { roles: ["admin", "manager"] }
+    { perm: "clients.edit" }
   );
 }

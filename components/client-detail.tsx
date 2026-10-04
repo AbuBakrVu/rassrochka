@@ -26,6 +26,7 @@ import AttachmentsCard from "@/components/attachments-card";
 import ConsentCard from "@/components/consent-card";
 import NewDealModal from "@/components/new-deal-modal";
 import { useData } from "@/lib/store";
+import { can } from "@/lib/permissions";
 import {
   clientById,
   dealsOfClient,
@@ -210,7 +211,7 @@ export default function ClientDetail({ id }: { id: string }) {
                 В чёрный список
               </button>
             )}
-            {user.role !== "accountant" && (
+            {can(user, "deals.edit") && (
               <button
                 onClick={() => setDealOpen(true)}
                 className="flex items-center gap-2 rounded-full border border-line px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand"

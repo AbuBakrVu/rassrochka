@@ -15,14 +15,16 @@ import {
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui";
 import { money } from "@/lib/schedule";
 import { todayIso } from "@/lib/derive";
-import { useData, type Coinvestor } from "@/lib/store";
+import { useData, type Coinvestor, type NewCoinvestorInput } from "@/lib/store";
+import { can } from "@/lib/permissions";
+import AccrualFields, { accrualPayload, type AccrualMode } from "@/components/accrual-fields";
 
 const field =
   "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 export default function CoinvestorsPage() {
   const { coinvestors, cash, user, addCoinvestor } = useData();
-  const isAdmin = user.role === "admin";
+  const isAdmin = can(user, "coinvestors");
   const [addOpen, setAddOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [onlyActive, setOnlyActive] = useState(true);
@@ -211,7 +213,7 @@ function CoinvestorTable({ rows }: { rows: Coinvestor[] }) {
           <tr className="border-b border-line text-left text-xs text-mute">
             <th className="px-5 py-3 font-medium">Соинвестор</th>
             <th className="px-5 py-3 font-medium">Капитал</th>
-            <th className="px-5 py-3 font-medium">Доля прибыли</th>
+            <th className="px-5 py-3 font-medium">Условия</th>
             <th className="px-5 py-3 font-medium">Начислено</th>
             <th className="px-5 py-3 font-medium">К выплате</th>
             <th className="px-5 py-3 font-medium">Статус</th>
@@ -230,7 +232,9 @@ function CoinvestorTable({ rows }: { rows: Coinvestor[] }) {
                 <p className="text-xs text-mute">{c.phone}</p>
               </td>
               <td className="px-5 py-3.5">{money(c.capital)}</td>
-              <td className="px-5 py-3.5">{c.profitSharePct}%</td>
+              <td className="px-5 py-3.5">
+                {c.accrualMode === "fixed" ? `${c.monthlyRatePct}% в мес.` : `${c.profitSharePct}% прибыли`}
+              </td>
               <td className="px-5 py-3.5">{money(c.accrued)}</td>
               <td className="px-5 py-3.5 font-medium">
                 {c.owed > 0 ? money(c.owed) : "—"}
@@ -256,16 +260,11 @@ function AddModal({
   onCreate,
 }: {
   onClose: () => void;
-  onCreate: (input: {
-    name: string;
-    phone: string;
-    profitSharePct: number;
-    startedAt: string;
-    openingCapital?: number;
-  }) => Promise<void>;
+  onCreate: (input: NewCoinvestorInput) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [mode, setMode] = useState<AccrualMode>("profit_share");
   const [percent, setPercent] = useState("");
   const [openingCapital, setOpeningCapital] = useState("");
   const [startedAt, setStartedAt] = useState(todayIso());
@@ -283,7 +282,7 @@ function AddModal({
       await onCreate({
         name: name.trim(),
         phone,
-        profitSharePct: Number(percent),
+        ...accrualPayload(mode, percent),
         startedAt,
         ...(Number(openingCapital) > 0 ? { openingCapital: Number(openingCapital) } : {}),
       });
@@ -307,7 +306,7 @@ function AddModal({
           <h2 id="coinvestor-title" className="font-semibold tracking-tight">
             Добавить соинвестора
           </h2>
-          <p className="text-sm text-mute">Доля — процент от реальной прибыли кассы</p>
+          <p className="text-sm text-mute">Доход — доля от прибыли или фиксированный % на капитал</p>
         </div>
 
         <div className="flex flex-col gap-3 px-5 py-4">
@@ -321,22 +320,11 @@ function AddModal({
             </span>
             <input className={field} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 911 000-00-00" />
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium">Доля прибыли, %</span>
-              <input
-                inputMode="decimal"
-                className={field}
-                value={percent}
-                onChange={(e) => setPercent(e.target.value.replace(/[^\d.]/g, ""))}
-                placeholder="10"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium">Дата вложения</span>
-              <input type="date" className={field} value={startedAt} onChange={(e) => setStartedAt(e.target.value)} />
-            </label>
-          </div>
+          <AccrualFields mode={mode} percent={percent} onMode={setMode} onPercent={setPercent} />
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium">Дата вложения</span>
+            <input type="date" className={field} value={startedAt} onChange={(e) => setStartedAt(e.target.value)} />
+          </label>
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium">
               Стартовый капитал <span className="text-xs text-mute">необязательно</span>

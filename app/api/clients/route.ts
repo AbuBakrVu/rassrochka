@@ -1,4 +1,5 @@
-import { handle, str, optionalStr, isoDate } from "@/app/api/_lib/handler";
+import { handle, str, optionalStr, optionalNum, isoDate } from "@/app/api/_lib/handler";
+import { branchForWrite } from "@/lib/scope";
 import { createClient } from "@/lib/queries";
 import { audit } from "@/lib/audit";
 
@@ -20,11 +21,14 @@ export async function POST(request: Request) {
         livingAddress: optionalStr(body, "livingAddress") || undefined,
         inn: optionalStr(body, "inn") || undefined,
         consent: (body as { consent?: unknown }).consent === true,
+        branchId: await branchForWrite(
+          tenant.dbName, user, optionalNum(body, "branchId", { min: 1, integer: true })
+        ),
       });
       await audit(tenant.dbName, user.id, "client.create", client.id, `Добавлен клиент ${client.id} · ${client.name}`);
       return client;
     },
-    { roles: ["admin", "manager"] }
+    { perm: "clients.edit" }
   );
 }
 

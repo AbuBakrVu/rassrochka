@@ -38,7 +38,7 @@ export async function PATCH(
         throw err;
       }
     },
-    { roles: ["admin", "manager"] }
+    { perm: "deals.edit", dealId: id }
   );
 }
 

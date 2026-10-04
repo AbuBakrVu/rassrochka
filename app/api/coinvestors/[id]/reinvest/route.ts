@@ -19,6 +19,6 @@ export async function POST(
       await audit(tenant.dbName, user.id, "coinvestor.reinvest", id, `Реинвестирована прибыль соинвестора ${id}: ${rub(input.amount)}`);
       return result;
     },
-    { adminOnly: true }
+    { perm: "coinvestors" }
   );
 }

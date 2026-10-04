@@ -1,8 +1,8 @@
 import { BadRequestError, handle, optionalStr, str } from "@/app/api/_lib/handler";
 import { setEmployeeActive, updateEmployee } from "@/lib/queries";
 import { audit, employeeName } from "@/lib/audit";
-
-const ROLE_TITLE = { admin: "администратор", manager: "менеджер", accountant: "бухгалтер" } as const;
+import { branchName } from "@/lib/org";
+import { roleInput } from "../role-input";
 
 export async function PATCH(
   request: Request,
@@ -40,10 +40,7 @@ export async function PATCH(
         return { ok: true };
       }
 
-      const role = str(body, "role", { max: 10 });
-      if (role !== "admin" && role !== "manager" && role !== "accountant") {
-        throw new BadRequestError("Роль должна быть admin, manager или accountant");
-      }
+      const { role, roleId, branchId, title } = await roleInput(tenant.dbName, body);
       if (userId === user.id && role !== "admin") {
         throw new BadRequestError("Нельзя понизить самого себя — попросите другого администратора");
       }
@@ -54,8 +51,13 @@ export async function PATCH(
           name,
           phone: optionalStr(body, "phone"),
           role,
+          roleId,
+          branchId,
         });
-        await audit(tenant.dbName, user.id, "employee.update", null, `Изменены данные сотрудника ${name}, роль ${ROLE_TITLE[role]}`);
+        await audit(
+          tenant.dbName, user.id, "employee.update", null,
+          `Изменены данные сотрудника ${name}, роль ${title}, ${await branchName(tenant.dbName, branchId)}`
+        );
         return updated;
       } catch (err) {
         if (err instanceof Error && err.message === "LAST_ADMIN") {

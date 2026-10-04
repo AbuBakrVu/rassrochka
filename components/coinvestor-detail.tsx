@@ -22,7 +22,10 @@ import {
 import { Card, Badge, EmptyState } from "@/components/ui";
 import { money, longDate } from "@/lib/schedule";
 import { todayIso } from "@/lib/derive";
-import { useData } from "@/lib/store";
+import { useData, type UpdateCoinvestorInput } from "@/lib/store";
+import { can } from "@/lib/permissions";
+import AccrualFields, { accrualPayload, type AccrualMode } from "@/components/accrual-fields";
+import CopyLinkButton from "@/components/copy-link";
 
 const field =
   "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
@@ -42,9 +45,10 @@ export default function CoinvestorDetail({ id }: { id: string }) {
     recordCoinvestorPayout,
     reinvestCoinvestorProfit,
     adjustCoinvestorCapital,
+    regenerateCoinvestorLink,
   } = useData();
   const investor = coinvestors.find((c) => c.id === id);
-  const isAdmin = user.role === "admin";
+  const isAdmin = can(user, "coinvestors");
 
   const [modal, setModal] = useState<ModalKind>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -214,7 +218,11 @@ export default function CoinvestorDetail({ id }: { id: string }) {
               </div>
               <p className="mt-1 flex items-center gap-1.5 text-sm text-mute">
                 <Phone size={13} aria-hidden />
-                {investor.phone} · доля {investor.profitSharePct}% · с {longDate(new Date(investor.startedAt))} г.
+                {investor.phone} ·{" "}
+                {investor.accrualMode === "fixed"
+                  ? `${investor.monthlyRatePct}% в месяц на капитал`
+                  : `доля ${investor.profitSharePct}% от прибыли`}{" "}
+                · с {longDate(new Date(investor.startedAt))} г.
               </p>
             </div>
           </div>
@@ -281,6 +289,14 @@ export default function CoinvestorDetail({ id }: { id: string }) {
           )}
         </div>
 
+        {isAdmin && (
+          <InvestorLink
+            name={investor.name}
+            phone={investor.phone}
+            token={investor.portalToken}
+            onRegenerate={() => regenerateCoinvestorLink(investor.id)}
+          />
+        )}
       </Card>
 
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -416,7 +432,8 @@ export default function CoinvestorDetail({ id }: { id: string }) {
         <EditModal
           name={investor.name}
           phone={investor.phone}
-          profitSharePct={investor.profitSharePct}
+          mode={investor.accrualMode}
+          percent={investor.accrualMode === "fixed" ? investor.monthlyRatePct : investor.profitSharePct}
           onClose={() => setModal(null)}
           onSubmit={(input) => updateCoinvestor(investor.id, input)}
         />
@@ -626,18 +643,21 @@ function AmountModal({
 function EditModal({
   name: initialName,
   phone: initialPhone,
-  profitSharePct: initialPct,
+  mode: initialMode,
+  percent: initialPct,
   onClose,
   onSubmit,
 }: {
   name: string;
   phone: string;
-  profitSharePct: number;
+  mode: AccrualMode;
+  percent: number;
   onClose: () => void;
-  onSubmit: (input: { name: string; phone: string; profitSharePct: number }) => Promise<unknown>;
+  onSubmit: (input: UpdateCoinvestorInput) => Promise<unknown>;
 }) {
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone === "—" ? "" : initialPhone);
+  const [mode, setMode] = useState<AccrualMode>(initialMode);
   const [percent, setPercent] = useState(String(initialPct));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -650,7 +670,7 @@ function EditModal({
     setSaving(true);
     setError(null);
     try {
-      await onSubmit({ name: name.trim(), phone, profitSharePct: Number(percent) });
+      await onSubmit({ name: name.trim(), phone, ...accrualPayload(mode, percent) });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить");
@@ -681,15 +701,12 @@ function EditModal({
             <span className="mb-1.5 block text-sm font-medium">Телефон</span>
             <input className={field} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 911 000-00-00" />
           </label>
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium">Доля прибыли, %</span>
-            <input
-              inputMode="decimal"
-              className={field}
-              value={percent}
-              onChange={(e) => setPercent(e.target.value.replace(/[^\d.]/g, ""))}
-            />
-          </label>
+          <AccrualFields mode={mode} percent={percent} onMode={setMode} onPercent={setPercent} />
+          {mode === "fixed" && initialMode !== "fixed" && (
+            <p className="rounded-[12px] bg-brand-soft px-3 py-2 text-xs text-brand-deep">
+              Процент начнёт начисляться с текущего месяца — прошлые месяцы задним числом не начисляются.
+            </p>
+          )}
         </div>
 
         <footer className="flex items-center gap-3 border-t border-line px-5 py-4">
@@ -708,6 +725,84 @@ function EditModal({
           </button>
         </footer>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Личная ссылка соинвестора на его кабинет: капитал, начисления по месяцам,
+ * выплаты. Перевыпуск делает старую ссылку недействительной.
+ */
+function InvestorLink({
+  name,
+  phone,
+  token,
+  onRegenerate,
+}: {
+  name: string;
+  phone: string;
+  token: string;
+  onRegenerate: () => Promise<string>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const path = `/investor/${token}`;
+  const digits = phone.replace(/\D/g, "");
+
+  const regenerate = async () => {
+    if (!confirm("Выпустить новую ссылку? Старая перестанет открываться.")) return;
+    setBusy(true);
+    try {
+      await onRegenerate();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось перевыпустить ссылку");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const share = () => {
+    const text = `Здравствуйте, ${name}! Ваш кабинет соинвестора — капитал, начисления и выплаты: ${window.location.origin}${path}`;
+    window.open(`https://wa.me/${digits}?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+  };
+
+  return (
+    <div className="mt-5 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">Кабинет соинвестора</p>
+        <p className="text-xs text-mute">
+          Личная ссылка без входа: капитал, начисления по месяцам и выплаты — без клиентов и сделок компании.
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="w-52">
+          <CopyLinkButton path={path} />
+        </div>
+        {digits.length >= 10 && (
+          <button
+            type="button"
+            onClick={share}
+            className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-brand-deep hover:border-brand hover:bg-brand-soft"
+          >
+            Отправить в WhatsApp
+          </button>
+        )}
+        <a
+          href={path}
+          target="_blank"
+          rel="noopener"
+          className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
+        >
+          Открыть
+        </a>
+        <button
+          type="button"
+          onClick={regenerate}
+          disabled={busy}
+          className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-danger disabled:opacity-50"
+        >
+          Новая ссылка
+        </button>
+      </div>
     </div>
   );
 }

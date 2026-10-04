@@ -27,6 +27,6 @@ export async function GET(request: Request) {
 
       return loadAudit(tenant.dbName, { userId, group, from, to, q });
     },
-    { adminOnly: true }
+    { perm: "journal" }
   );
 }

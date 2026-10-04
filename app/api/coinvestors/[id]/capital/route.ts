@@ -36,6 +36,6 @@ export async function POST(
         throw err;
       }
     },
-    { adminOnly: true }
+    { perm: "coinvestors" }
   );
 }

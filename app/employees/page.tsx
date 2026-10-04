@@ -11,10 +11,12 @@ import {
   FileSearch,
   UserPlus2,
   Pencil,
+  MapPin,
 } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
 import { money } from "@/lib/schedule";
-import { useData, type Employee, type EmployeeRole } from "@/lib/store";
+import { useData, type Branch, type CustomRole, type Employee, type EmployeeRole } from "@/lib/store";
+import { ROLE_LABEL, roleTitle } from "@/lib/permissions";
 import { computeEmployees } from "@/lib/derive";
 import { ruPlural, type RouteKind } from "@/lib/data";
 
@@ -25,15 +27,25 @@ const kindMeta: Record<RouteKind, { label: string; icon: typeof PhoneCall; text:
   request: { label: "Новая заявка", icon: UserPlus2, text: "text-brand" },
 };
 
-const ROLE_LABEL: Record<EmployeeRole, string> = {
-  admin: "Администратор",
-  manager: "Менеджер",
-  accountant: "Бухгалтер",
-};
+interface RoleBranch {
+  role: EmployeeRole;
+  roleId?: number;
+  branchId: number | null;
+}
 
 export default function EmployeesPage() {
-  const { deals, paidPayments, employees, user, addEmployee, updateEmployee, setEmployeeActive } =
-    useData();
+  const {
+    deals, paidPayments, employees: allEmployees, user, addEmployee, updateEmployee, setEmployeeActive,
+    branches, roles, branchView, multiBranch,
+  } = useData();
+  // В выбранном филиале — его сотрудники и те, у кого доступ ко всем
+  const employees = useMemo(
+    () =>
+      branchView === "all"
+        ? allEmployees
+        : allEmployees.filter((e) => e.branchId === undefined || e.branchId === branchView),
+    [allEmployees, branchView]
+  );
   const stats = useMemo(
     () => computeEmployees(employees, deals, paidPayments),
     [employees, deals, paidPayments]
@@ -91,9 +103,17 @@ export default function EmployeesPage() {
                   </h2>
                   <p className="flex items-center gap-1.5 text-sm text-mute">
                     <Briefcase size={13} className="shrink-0" aria-hidden />
-                    {ROLE_LABEL[s.employee.role]}
+                    {roleTitle(s.employee, roles)}
                     {!s.employee.active && " · доступ закрыт"}
                   </p>
+                  {multiBranch && (
+                    <p className="flex items-center gap-1.5 text-sm text-mute">
+                      <MapPin size={13} className="shrink-0" aria-hidden />
+                      {s.employee.branchId === undefined
+                        ? "Все филиалы"
+                        : (branches.find((b) => b.id === s.employee.branchId)?.name ?? "—")}
+                    </p>
+                  )}
                 </div>
                 {isAdmin && (
                   <button
@@ -212,6 +232,8 @@ export default function EmployeesPage() {
 
       {inviteOpen && (
         <InviteModal
+          branches={branches}
+          roles={roles}
           onClose={() => setInviteOpen(false)}
           onCreate={async (input) => {
             const { password } = await addEmployee(input);
@@ -228,6 +250,8 @@ export default function EmployeesPage() {
       {editing && (
         <EditEmployeeModal
           employee={editing}
+          branches={branches}
+          roles={roles}
           onClose={() => setEditing(null)}
           onSave={async (input) => {
             await updateEmployee(editing.id, input);
@@ -242,22 +266,106 @@ export default function EmployeesPage() {
 const field =
   "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
+/**
+ * Роль и филиал сотрудника. Роль — встроенная или своя из Настройки → Роли;
+ * филиал — только если их больше одного, «Все филиалы» видят всю компанию.
+ */
+function RoleBranchFields({
+  value,
+  onChange,
+  branches,
+  roles,
+}: {
+  value: RoleBranch;
+  onChange: (v: RoleBranch) => void;
+  branches: Branch[];
+  roles: CustomRole[];
+}) {
+  const roleKey = value.role === "custom" ? `custom:${value.roleId}` : value.role;
+  const hint =
+    value.role === "admin"
+      ? "Видит всё во всех филиалах, приглашает сотрудников и меняет настройки."
+      : value.role === "accountant"
+        ? "Видит финансы и аналитику, ведёт ручные операции кассы."
+        : value.role === "manager"
+          ? "Ведёт клиентов и сделки, принимает платежи."
+          : "Права роли настраиваются в Настройки → Роли.";
+
+  return (
+    <>
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium">Роль</span>
+        <select
+          className={field}
+          value={roleKey}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v.startsWith("custom:")) onChange({ ...value, role: "custom", roleId: Number(v.slice(7)) });
+            else onChange({ ...value, role: v as EmployeeRole, roleId: undefined });
+          }}
+        >
+          {(["manager", "accountant", "admin"] as const).map((r) => (
+            <option key={r} value={r}>
+              {ROLE_LABEL[r]}
+            </option>
+          ))}
+          {roles.length > 0 && (
+            <optgroup label="Свои роли">
+              {roles.map((r) => (
+                <option key={r.id} value={`custom:${r.id}`}>
+                  {r.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+        <span className="mt-1.5 block text-xs text-mute">{hint}</span>
+      </label>
+      {branches.length > 1 && value.role !== "admin" && (
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium">Филиал</span>
+          <select
+            className={field}
+            value={value.branchId ?? ""}
+            onChange={(e) => onChange({ ...value, branchId: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">Все филиалы</option>
+            {branches
+              .filter((b) => b.active || b.id === value.branchId)
+              .map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+          </select>
+          <span className="mt-1.5 block text-xs text-mute">
+            С филиалом сотрудник видит и ведёт только его клиентов, сделки и кассу.
+          </span>
+        </label>
+      )}
+    </>
+  );
+}
+
 function InviteModal({
   onClose,
   onCreate,
+  branches,
+  roles,
 }: {
   onClose: () => void;
   onCreate: (input: {
     name: string;
     email: string;
     phone: string;
-    role: EmployeeRole;
-  }) => Promise<void>;
+  } & RoleBranch) => Promise<void>;
+  branches: Branch[];
+  roles: CustomRole[];
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<EmployeeRole>("manager");
+  const [access, setAccess] = useState<RoleBranch>({ role: "manager", branchId: null });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -269,7 +377,7 @@ function InviteModal({
     setSaving(true);
     setError(null);
     try {
-      await onCreate({ name: name.trim(), email: email.trim(), phone, role });
+      await onCreate({ name: name.trim(), email: email.trim(), phone, ...access });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось создать");
       setSaving(false);
@@ -310,30 +418,7 @@ function InviteModal({
             </span>
             <input className={field} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 911 000-00-00" />
           </label>
-          <div>
-            <span className="mb-1.5 block text-sm font-medium">Роль</span>
-            <div className="flex gap-2">
-              {(["manager", "accountant", "admin"] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRole(r)}
-                  aria-pressed={role === r}
-                  className={`flex-1 rounded-full border px-3 py-2.5 text-sm transition-colors ${
-                    role === r
-                      ? "border-brand bg-brand-soft font-medium text-brand-deep"
-                      : "border-line bg-canvas text-mute hover:border-brand/40"
-                  }`}
-                >
-                  {ROLE_LABEL[r]}
-                </button>
-              ))}
-            </div>
-            <p className="mt-1.5 text-xs text-mute">
-              Администратор может приглашать и отключать сотрудников. Бухгалтер
-              видит только кассу и аналитику.
-            </p>
-          </div>
+          <RoleBranchFields value={access} onChange={setAccess} branches={branches} roles={roles} />
         </div>
 
         <footer className="flex items-center gap-3 border-t border-line px-5 py-4">
@@ -360,14 +445,22 @@ function EditEmployeeModal({
   employee,
   onClose,
   onSave,
+  branches,
+  roles,
 }: {
   employee: Employee;
   onClose: () => void;
-  onSave: (input: { name: string; phone: string; role: EmployeeRole }) => Promise<void>;
+  onSave: (input: { name: string; phone: string } & RoleBranch) => Promise<void>;
+  branches: Branch[];
+  roles: CustomRole[];
 }) {
   const [name, setName] = useState(employee.name);
   const [phone, setPhone] = useState(employee.phone === "—" ? "" : employee.phone);
-  const [role, setRole] = useState<EmployeeRole>(employee.role);
+  const [access, setAccess] = useState<RoleBranch>({
+    role: employee.role,
+    roleId: employee.roleId,
+    branchId: employee.branchId ?? null,
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -379,7 +472,7 @@ function EditEmployeeModal({
     setSaving(true);
     setError(null);
     try {
-      await onSave({ name: name.trim(), phone, role });
+      await onSave({ name: name.trim(), phone, ...access });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить");
       setSaving(false);
@@ -414,26 +507,7 @@ function EditEmployeeModal({
             </span>
             <input className={field} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 911 000-00-00" />
           </label>
-          <div>
-            <span className="mb-1.5 block text-sm font-medium">Роль</span>
-            <div className="flex gap-2">
-              {(["manager", "accountant", "admin"] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRole(r)}
-                  aria-pressed={role === r}
-                  className={`flex-1 rounded-full border px-3 py-2.5 text-sm transition-colors ${
-                    role === r
-                      ? "border-brand bg-brand-soft font-medium text-brand-deep"
-                      : "border-line bg-canvas text-mute hover:border-brand/40"
-                  }`}
-                >
-                  {ROLE_LABEL[r]}
-                </button>
-              ))}
-            </div>
-          </div>
+          <RoleBranchFields value={access} onChange={setAccess} branches={branches} roles={roles} />
         </div>
 
         <footer className="flex items-center gap-3 border-t border-line px-5 py-4">

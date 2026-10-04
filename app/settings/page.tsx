@@ -7,6 +7,8 @@ import { useData } from "@/lib/store";
 import { nav } from "@/components/shell";
 import BrandingSettings from "@/components/branding-settings";
 import ApplySettingsCard from "@/components/apply-settings";
+import BranchesSettings from "@/components/branches-settings";
+import RolesSettings from "@/components/roles-settings";
 
 // "/settings" сюда не входит — иначе можно было бы случайно скрыть сам
 // пункт, которым управляется видимость остальных, и остаться без доступа.
@@ -14,6 +16,8 @@ const HIDEABLE = nav.filter((n) => n.href !== "/settings");
 
 const TABS = [
   { key: "branding", label: "Оформление" },
+  { key: "branches", label: "Филиалы" },
+  { key: "roles", label: "Роли" },
   { key: "nav", label: "Разделы меню" },
   { key: "credit", label: "Лимиты клиентов" },
   { key: "apply", label: "Онлайн-заявка" },
@@ -162,6 +166,8 @@ export default function SettingsPage() {
               )}
             </Card>
           )}
+          {tab === "branches" && <BranchesSettings />}
+          {tab === "roles" && <RolesSettings />}
           {tab === "credit" && <CreditLimitCard />}
           {tab === "apply" && <ApplySettingsCard />}
 

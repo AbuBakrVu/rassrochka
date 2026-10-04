@@ -26,6 +26,8 @@ import type {
 } from "./store";
 import type { DealEvent } from "./events";
 import { listSavedFilters, type SavedFilter } from "./saved-filters";
+import { can, isPermission, type Permission, type RoleKind } from "./permissions";
+import { fixedAccrual, periodLabel, periodsToAccrue } from "./coinvestor-accrual";
 
 // ── Формы строк БД ─────────────────────────────────────────────────────
 
@@ -60,6 +62,7 @@ interface DealRow extends Record<string, unknown> {
   last_reminder_stage: string | null;
   last_reminder_due_date: string | null;
   source: string;
+  branch_id: number;
 }
 
 interface ClientRow extends Record<string, unknown> {
@@ -84,6 +87,7 @@ interface ClientRow extends Record<string, unknown> {
   credit_limit: number | null;
   consent_at?: Date | null;
   consent_source?: "paper" | "online" | null;
+  branch_id: number;
 }
 
 interface CashRow extends Record<string, unknown> {
@@ -98,6 +102,7 @@ interface CashRow extends Record<string, unknown> {
   installment_number: number | null;
   method: "cash" | "card" | "transfer" | null;
   reverses_id: number | null;
+  branch_id: number | null;
 }
 
 interface CoinvestorRow extends Record<string, unknown> {
@@ -107,6 +112,9 @@ interface CoinvestorRow extends Record<string, unknown> {
   profit_share_pct: number;
   started_at: string;
   active: boolean;
+  portal_token: string;
+  accrual_mode: "profit_share" | "fixed";
+  monthly_rate_pct: number;
 }
 
 interface CoinvestorCapitalRow extends Record<string, unknown> {
@@ -210,6 +218,7 @@ function toDeal(row: DealRow, today: string): Deal {
     markupPct: row.markup_pct,
     manager: row.manager_initials ?? "—",
     managerId: row.manager_id,
+    branchId: row.branch_id,
     portalToken: row.portal_token,
     guarantors: row.guarantors ?? [],
     ...(row.original_months && row.restructured_months && row.restructured_from
@@ -225,6 +234,7 @@ function toDeal(row: DealRow, today: string): Deal {
     ...(row.city ? { city: row.city } : {}),
     ...(row.down_payment ? { downPayment: row.down_payment } : {}),
     ...(row.source === "online" ? { online: true } : {}),
+    ...(row.source === "import" ? { imported: true } : {}),
     ...(Number(row.credit) > 0 ? { credit: Number(row.credit) } : {}),
     ...(row.reminder_template_id ? { reminderTemplateId: String(row.reminder_template_id) } : {}),
     ...(row.last_reminder_stage
@@ -248,6 +258,7 @@ function toCashTx(r: CashRow): CashTx {
     ...(r.note ? { note: r.note } : {}),
     ...(r.installment_number !== null ? { installmentNumber: r.installment_number } : {}),
     ...(r.reverses_id !== null ? { reversesId: String(r.reverses_id) } : {}),
+    ...(r.branch_id !== null && r.branch_id !== undefined ? { branchId: r.branch_id } : {}),
   };
 }
 
@@ -294,6 +305,7 @@ function toClient(row: ClientRow, deals: Deal[], today: string): Client {
       : {}),
     ...(row.blacklist_reason ? { blacklistReason: row.blacklist_reason } : {}),
     portalToken: row.portal_token,
+    branchId: row.branch_id,
     ...(row.credit_limit !== null && row.credit_limit !== undefined
       ? { creditLimit: Number(row.credit_limit) }
       : {}),
@@ -319,7 +331,7 @@ const DEALS_SELECT = `
          d.original_months, d.restructured_months, d.restructured_from,
          d.down_payment, d.reminder_template_id, d.source,
          d.last_reminder_stage, d.last_reminder_due_date,
-         d.manager_id, u.initials as manager_initials,
+         d.manager_id, u.initials as manager_initials, d.branch_id,
          (
            select coalesce(json_agg(json_build_object('id', g.id, 'name', g.name)), '[]')
            from deal_guarantors dg
@@ -341,14 +353,44 @@ export interface Employee {
   initials: string;
   email: string;
   phone: string;
-  role: "admin" | "manager" | "accountant";
+  role: RoleKind;
+  /** Своя роль (role = "custom"). */
+  roleId?: number;
+  /** Филиал сотрудника; нет — все филиалы. */
+  branchId?: number;
   since: string;
   active: boolean;
 }
 
+export interface Branch {
+  id: number;
+  name: string;
+  address?: string;
+  active: boolean;
+}
+
+export interface CustomRole {
+  id: number;
+  name: string;
+  permissions: Permission[];
+}
+
+export interface BootstrapUser {
+  id: number;
+  name: string;
+  initials: string;
+  email: string;
+  role: RoleKind;
+  roleName?: string;
+  permissions: Permission[];
+  branchId: number | null;
+}
+
 export interface Bootstrap {
-  user: { id: number; name: string; initials: string; email: string; role: string };
+  user: BootstrapUser;
   employees: Employee[];
+  branches: Branch[];
+  roles: CustomRole[];
   deals: Deal[];
   clients: Client[];
   paidPayments: Record<string, number>;
@@ -420,6 +462,9 @@ function toCoinvestor(
     name: row.name,
     phone: row.phone,
     profitSharePct: row.profit_share_pct,
+    accrualMode: row.accrual_mode,
+    monthlyRatePct: row.monthly_rate_pct,
+    portalToken: row.portal_token,
     startedAt: row.started_at,
     active: row.active,
     capital,
@@ -519,41 +564,60 @@ function withoutPersonalData(c: Client): Client {
  * Всё состояние компании одним запросом — прямая замена чтения localStorage.
  * При сотнях сделок это дешевле, чем множить запросы по страницам; когда
  * данных станет много, разделим по разделам.
+ *
+ * Меню прячет разделы, но в браузер приходит всё, что отдал этот запрос, —
+ * поэтому лишнее отрезается здесь, а не в интерфейсе: чужие филиалы,
+ * соинвесторы и персональные данные клиентов — по правам сотрудника.
  */
-export async function loadBootstrap(
-  dbName: string,
-  currentUser: { id: number; name: string; initials: string; email: string; role: string }
-): Promise<Bootstrap> {
+export async function loadBootstrap(dbName: string, currentUser: BootstrapUser): Promise<Bootstrap> {
   const today = todayIso();
+  const may = (p: Permission) => can(currentUser, p);
+  // Соинвесторы (их капитал и доходы) — тем, кто ими управляет, и тем,
+  // кто ведёт кассу: выплаты и доходность — их работа
+  const seesInvestors = may("coinvestors") || may("cash.edit");
+  // Паспорт, адреса, ИНН, контакты и документы клиентов
+  const seesPersonalData = may("clients.personal");
+  const branch = currentUser.branchId;
+
+  // Фиксированный процент соинвесторам начисляется за прошедшие месяцы
+  // при первом же чтении после конца месяца — отдельного планировщика нет
+  if (seesInvestors) await accrueFixedCoinvestors(dbName);
 
   const [
-    dealRows, clientRows, cashRows, eventRows, settingRows, userRows,
+    allDealRows, clientRows, cashRows, eventRows, settingRows, userRows,
     coinvestorRows, capitalRows, profitRows, templateRows, savedFilters, contactRows, attachments,
+    branchRows, roleRows,
   ] =
     await Promise.all([
       query<DealRow>(dbName, DEALS_SQL),
       query<ClientRow>(dbName, "select * from clients order by created_at desc"),
-      query<CashRow>(dbName, "select * from cash_tx order by occurred_at, id"),
+      query<CashRow>(
+        dbName,
+        branch === null
+          ? "select * from cash_tx order by occurred_at, id"
+          : "select * from cash_tx where branch_id = $1 order by occurred_at, id",
+        branch === null ? [] : [branch]
+      ),
       query<EventRow>(dbName, "select * from deal_events order by occurred_at desc"),
       query<{ key: string; value: unknown }>(dbName, "select key, value from settings"),
       query<{
         id: number; name: string; initials: string; email: string;
-        phone: string | null; role: "admin" | "manager" | "accountant"; active: boolean;
-        created_at: Date;
+        phone: string | null; role: RoleKind; role_id: number | null; branch_id: number | null;
+        active: boolean; created_at: Date;
       }>(
         dbName,
-        `select id, name, initials, email, phone, role, active, created_at
+        `select id, name, initials, email, phone, role, role_id, branch_id, active, created_at
          from users order by active desc, name`
       ),
-      query<CoinvestorRow>(dbName, "select * from coinvestors order by created_at desc"),
-      query<CoinvestorCapitalRow>(
-        dbName,
-        "select * from coinvestor_capital_tx order by occurred_at desc, id desc"
-      ),
-      query<CoinvestorProfitRow>(
-        dbName,
-        "select * from coinvestor_profit_tx order by occurred_at desc, id desc"
-      ),
+      seesInvestors
+        ? query<CoinvestorRow>(dbName, "select * from coinvestors order by created_at desc")
+        : Promise.resolve([] as CoinvestorRow[]),
+      seesInvestors
+        ? query<CoinvestorCapitalRow>(dbName, "select * from coinvestor_capital_tx order by occurred_at desc, id desc")
+        : Promise.resolve([] as CoinvestorCapitalRow[]),
+      seesInvestors
+        ? query<CoinvestorProfitRow>(dbName, "select * from coinvestor_profit_tx order by occurred_at desc, id desc")
+        : Promise.resolve([] as CoinvestorProfitRow[]),
       query<TemplateRow>(dbName, "select * from message_templates order by created_at"),
       listSavedFilters(dbName, currentUser.id),
       // Журнал звонков до миграции 022 отсутствует — тогда просто пусто
@@ -562,18 +626,31 @@ export async function loadBootstrap(
         "select * from contact_log order by created_at desc limit 5000"
       ).catch(() => [] as ContactRow[]),
       listAttachments(dbName),
+      query<{ id: number; name: string; address: string | null; active: boolean }>(
+        dbName,
+        "select id, name, address, active from branches order by id"
+      ),
+      query<{ id: number; name: string; permissions: string[] }>(
+        dbName,
+        "select id, name, permissions from roles order by name"
+      ),
     ]);
 
-  // Данные по ролям. Меню прячет разделы, но в браузер приходит всё, что
-  // отдал этот запрос, — поэтому лишнее отрезается здесь, а не в интерфейсе:
-  //   соинвесторы (их капитал и доходы) — администратору и бухгалтеру;
-  //   паспортные данные, адреса, ИНН и контакты клиентов — не бухгалтеру,
-  //   ему для кассы и аналитики хватает имени.
-  const seesInvestors = currentUser.role === "admin" || currentUser.role === "accountant";
-  const seesPersonalData = currentUser.role !== "accountant";
+  // Филиал сотрудника: его сделки; клиенты — заведённые в нём, купившие в
+  // нём или поручители по его сделкам
+  const dealRows = branch === null ? allDealRows : allDealRows.filter((r) => r.branch_id === branch);
+  const dealIds = new Set(dealRows.map((r) => r.id));
+  const visibleClientIds = new Set<string>();
+  for (const r of dealRows) {
+    visibleClientIds.add(r.client_id);
+    for (const g of r.guarantors ?? []) visibleClientIds.add(g.id);
+  }
+  const visibleClients =
+    branch === null ? clientRows : clientRows.filter((c) => c.branch_id === branch || visibleClientIds.has(c.id));
+  const clientIds = new Set(visibleClients.map((c) => c.id));
 
-  const coinvestorCapitalTx = seesInvestors ? capitalRows.map(toCapitalTx) : [];
-  const coinvestorProfitTx = seesInvestors ? profitRows.map(toProfitTx) : [];
+  const coinvestorCapitalTx = capitalRows.map(toCapitalTx);
+  const coinvestorProfitTx = profitRows.map(toProfitTx);
 
   const deals = dealRows.map((r) => toDeal(r, today));
 
@@ -593,34 +670,48 @@ export async function loadBootstrap(
       email: u.email,
       phone: u.phone ?? "—",
       role: u.role,
+      ...(u.role_id !== null ? { roleId: u.role_id } : {}),
+      ...(u.branch_id !== null ? { branchId: u.branch_id } : {}),
       since: sinceLabel(isoDate(u.created_at)),
       active: u.active,
     })),
+    branches: branchRows.map((b) => ({
+      id: b.id,
+      name: b.name,
+      active: b.active,
+      ...(b.address ? { address: b.address } : {}),
+    })),
+    roles: roleRows.map((r) => ({ id: r.id, name: r.name, permissions: r.permissions.filter(isPermission) })),
     deals,
-    clients: clientRows.map((r) => {
+    clients: visibleClients.map((r) => {
       const client = toClient(r, deals, today);
       return seesPersonalData ? client : withoutPersonalData(client);
     }),
     paidPayments,
     cash: cashRows.map(toCashTx),
-    events: eventRows.map((r) => ({
-      id: String(r.id),
-      dealId: r.deal_id,
-      date: isoDate(r.occurred_at),
-      text: r.text,
-    })),
-    coinvestors: seesInvestors
-      ? coinvestorRows.map((r) => toCoinvestor(r, coinvestorCapitalTx, coinvestorProfitTx))
-      : [],
+    events: eventRows
+      .filter((r) => dealIds.has(r.deal_id))
+      .map((r) => ({
+        id: String(r.id),
+        dealId: r.deal_id,
+        date: isoDate(r.occurred_at),
+        text: r.text,
+      })),
+    coinvestors: coinvestorRows.map((r) => toCoinvestor(r, coinvestorCapitalTx, coinvestorProfitTx)),
     coinvestorCapitalTx,
     coinvestorProfitTx,
     templates: templateRows.map(toTemplate),
     savedFilters,
-    contacts: currentUser.role === "accountant" ? [] : contactRows.map(toContact),
-    // Фото паспорта и документы — персональные данные, бухгалтеру не нужны
-    attachments: seesPersonalData ? attachments : [],
+    contacts: may("collections") || may("deals")
+      ? contactRows.filter((r) => dealIds.has(r.deal_id)).map(toContact)
+      : [],
+    // Фото паспорта и документы — персональные данные
+    attachments: seesPersonalData
+      ? attachments.filter((a) => (a.clientId ? clientIds.has(a.clientId) : a.dealId ? dealIds.has(a.dealId) : false))
+      : [],
     settings: {
-      cashOpeningBalance: Number(opening?.value ?? 0),
+      // Стартовый остаток — общий на компанию; у филиала касса — только его движение
+      cashOpeningBalance: branch === null ? Number(opening?.value ?? 0) : 0,
       hiddenNavItems: Array.isArray(hiddenNav?.value) ? (hiddenNav.value as string[]) : [],
       // Ключа нет только до миграции 018 — тогда лимиты выключены
       clientDefaultLimit: Number(defaultLimit?.value ?? 0),
@@ -661,6 +752,8 @@ export interface NewClientInput {
   /** Клиент подписал согласие на обработку ПДн. */
   consent?: boolean;
   consentSource?: "paper" | "online";
+  /** Не указан — первый филиал (триггер в базе). */
+  branchId?: number;
 }
 
 export async function createClient(
@@ -675,9 +768,9 @@ export async function createClient(
     `insert into clients (
        name, phone, middle_name, birth_date, passport_series, passport_number,
        passport_issued_by, passport_issued_at, registration_address,
-       living_address, inn, consent_at, consent_source
+       living_address, inn, consent_at, consent_source, branch_id
      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-               case when $12::boolean then now() end, case when $12::boolean then $13 end)
+               case when $12::boolean then now() end, case when $12::boolean then $13 end, $14)
      returning *`,
     [
       name,
@@ -693,6 +786,7 @@ export async function createClient(
       input.inn || null,
       input.consent === true,
       input.consentSource ?? "paper",
+      input.branchId ?? null,
     ]
   );
   if (!row) throw new Error("Клиент не создан");
@@ -871,6 +965,8 @@ export interface NewDealInput {
   /** id клиентов-поручителей — до 5, проверяется в API-роуте. */
   guarantorIds?: string[];
   downPayment?: number;
+  /** Не указан — филиал клиента (триггер в базе). */
+  branchId?: number;
 }
 
 export async function createDeal(
@@ -880,9 +976,9 @@ export async function createDeal(
   const id = await transaction(dbName, async (client) => {
     const { rows } = await client.query<{ id: string; product: string }>(
       `insert into deals (client_id, product, amount, months, markup_pct, opened_at,
-                          manager_id, stage, description, category, city, down_payment)
+                          manager_id, stage, description, category, city, down_payment, branch_id)
        values ($1, $2, $3, $4, $5, $6,
-               (select id from users where id = $7 and active), 'new', $8, $9, $10, $11)
+               (select id from users where id = $7 and active), 'new', $8, $9, $10, $11, $12)
        returning id, product`,
       [
         input.clientId,
@@ -896,6 +992,7 @@ export async function createDeal(
         input.category || null,
         input.city || null,
         input.downPayment || null,
+        input.branchId ?? null,
       ]
     );
     const deal = rows[0];
@@ -1053,13 +1150,16 @@ async function issueDealCash(client: PoolClient, dealId: string): Promise<void> 
     down_payment: number | null;
     product: string;
     client_name: string;
+    source: string;
   }>(
-    `select d.amount, d.markup_pct, d.down_payment, d.product, c.name as client_name
+    `select d.amount, d.markup_pct, d.down_payment, d.product, c.name as client_name, d.source
      from deals d join clients c on c.id = d.client_id where d.id = $1`,
     [dealId]
   );
   const deal = rows[0];
-  if (!deal) return;
+  // Перенесённая из Excel сделка выдана ещё в старой системе — закупки и
+  // первого взноса в этой кассе не было
+  if (!deal || deal.source === "import") return;
   const today = todayIso();
 
   const { rows: has } = await client.query<{ purchase: boolean; down: boolean }>(
@@ -1784,6 +1884,8 @@ export interface CashAdjustmentInput {
   amount: number;
   title: string;
   date: string;
+  /** Касса филиала; не указан — общая касса компании. */
+  branchId?: number;
 }
 
 export async function addCashAdjustment(
@@ -1792,10 +1894,10 @@ export async function addCashAdjustment(
 ): Promise<CashTx> {
   const row = await queryOne<CashRow>(
     dbName,
-    `insert into cash_tx (kind, amount, occurred_at, title)
-     values ('adjustment', $1, $2, $3)
+    `insert into cash_tx (kind, amount, occurred_at, title, branch_id)
+     values ('adjustment', $1, $2, $3, $4)
      returning id, kind, amount, occurred_at, deal_id, title, note`,
-    [input.amount, input.date, input.title]
+    [input.amount, input.date, input.title, input.branchId ?? null]
   );
   if (!row) throw new Error("Операция не создана");
 
@@ -1862,7 +1964,7 @@ async function accrueCoinvestorProfit(
   if (marginPerInstallment <= 0) return;
 
   const { rows: investors } = await client.query<{ id: string; name: string; profit_share_pct: number }>(
-    "select id, name, profit_share_pct from coinvestors where active"
+    "select id, name, profit_share_pct from coinvestors where active and accrual_mode = 'profit_share'"
   );
 
   for (const investor of investors) {
@@ -1876,10 +1978,65 @@ async function accrueCoinvestorProfit(
   }
 }
 
+/**
+ * Фиксированный процент: начисления за закончившиеся месяцы, которых ещё
+ * нет. Вызывается при чтении (bootstrap, кабинет соинвестора) — отдельный
+ * планировщик не нужен, а уникальный индекс по (соинвестор, месяц) не даст
+ * начислить месяц дважды, даже если два запроса придут одновременно.
+ */
+export async function accrueFixedCoinvestors(dbName: string, onlyId?: string): Promise<void> {
+  const investors = await query<{ id: string; monthly_rate_pct: number; fixed_since: string | null; started_at: string }>(
+    dbName,
+    `select id, monthly_rate_pct, fixed_since, started_at from coinvestors
+     where active and accrual_mode = 'fixed' and monthly_rate_pct > 0 ${onlyId ? "and id = $1" : ""}`,
+    onlyId ? [onlyId] : []
+  );
+  if (investors.length === 0) return;
+  const today = todayIso();
+
+  for (const inv of investors) {
+    const done = await query<{ period: string }>(
+      dbName,
+      "select period from coinvestor_profit_tx where coinvestor_id = $1 and kind = 'accrual' and period is not null",
+      [inv.id]
+    );
+    const periods = periodsToAccrue(inv.fixed_since ?? inv.started_at, today, new Set(done.map((d) => d.period)));
+    if (periods.length === 0) continue;
+
+    const capital = await query<{ occurred_at: string; kind: string; amount: number }>(
+      dbName,
+      "select occurred_at, kind, amount from coinvestor_capital_tx where coinvestor_id = $1",
+      [inv.id]
+    );
+    const moves = capital.map((c) => ({
+      date: c.occurred_at,
+      delta: c.kind === "withdrawal" ? -Number(c.amount) : Number(c.amount),
+    }));
+
+    for (const period of periods) {
+      const amount = fixedAccrual(moves, period, Number(inv.monthly_rate_pct));
+      if (amount <= 0) continue;
+      // Начисление датируем последним днём месяца, за который оно
+      const end = new Date(Date.UTC(Number(period.slice(0, 4)), Number(period.slice(5, 7)), 0))
+        .toISOString()
+        .slice(0, 10);
+      await query(
+        dbName,
+        `insert into coinvestor_profit_tx (coinvestor_id, kind, amount, occurred_at, note, period)
+         values ($1, 'accrual', $2, $3::date + time '23:59', $4, $5)
+         on conflict do nothing`,
+        [inv.id, amount, end, `${inv.monthly_rate_pct}% за ${periodLabel(period)}`, period]
+      );
+    }
+  }
+}
+
 export interface NewCoinvestorInput {
   name: string;
   phone: string;
   profitSharePct: number;
+  accrualMode: "profit_share" | "fixed";
+  monthlyRatePct: number;
   startedAt: string;
   /** Необязательный стартовый взнос — если указан, сразу заводит запись в журнале капитала. */
   openingCapital?: number;
@@ -1891,10 +2048,11 @@ export async function createCoinvestor(
 ): Promise<Coinvestor> {
   const id = await transaction(dbName, async (client) => {
     const { rows } = await client.query<{ id: string }>(
-      `insert into coinvestors (name, phone, profit_share_pct, started_at)
-       values ($1, $2, $3, $4)
+      `insert into coinvestors (name, phone, profit_share_pct, started_at,
+                                accrual_mode, monthly_rate_pct, fixed_since)
+       values ($1, $2, $3, $4, $5, $6, case when $5 = 'fixed' then $4::date end)
        returning id`,
-      [input.name, input.phone || "—", input.profitSharePct, input.startedAt]
+      [input.name, input.phone || "—", input.profitSharePct, input.startedAt, input.accrualMode, input.monthlyRatePct]
     );
     const coinvestorId = rows[0].id;
 
@@ -1921,6 +2079,8 @@ export interface UpdateCoinvestorInput {
   name: string;
   phone: string;
   profitSharePct: number;
+  accrualMode: "profit_share" | "fixed";
+  monthlyRatePct: number;
 }
 
 export async function updateCoinvestor(
@@ -1930,8 +2090,15 @@ export async function updateCoinvestor(
 ): Promise<Coinvestor> {
   const row = await queryOne<{ id: string }>(
     dbName,
-    "update coinvestors set name = $2, phone = $3, profit_share_pct = $4 where id = $1 returning id",
-    [id, input.name, input.phone || "—", input.profitSharePct]
+    // Переход на фиксированный процент начисляет с текущего месяца — не
+    // задним числом за всё время с начала сотрудничества
+    `update coinvestors set name = $2, phone = $3, profit_share_pct = $4,
+            monthly_rate_pct = $6,
+            fixed_since = case when $5 = 'fixed' and accrual_mode <> 'fixed' then date_trunc('month', $7::date)::date
+                               else fixed_since end,
+            accrual_mode = $5
+     where id = $1 returning id`,
+    [id, input.name, input.phone || "—", input.profitSharePct, input.accrualMode, input.monthlyRatePct, todayIso()]
   );
   if (!row) throw new Error(`Соинвестор ${id} не найден`);
   return loadCoinvestor(dbName, id);
@@ -2083,6 +2250,107 @@ export async function adjustCoinvestorCapital(
   });
 
   return loadCoinvestor(dbName, coinvestorId);
+}
+
+export async function regenerateCoinvestorToken(dbName: string, id: string): Promise<string> {
+  const row = await queryOne<{ portal_token: string }>(
+    dbName,
+    "update coinvestors set portal_token = encode(gen_random_bytes(16), 'hex') where id = $1 returning portal_token",
+    [id]
+  );
+  if (!row) throw new Error(`Соинвестор ${id} не найден`);
+  return row.portal_token;
+}
+
+// ── Кабинет соинвестора (/investor/<токен>) ────────────────────────────
+
+export interface InvestorPortal {
+  name: string;
+  accrualMode: "profit_share" | "fixed";
+  profitSharePct: number;
+  monthlyRatePct: number;
+  startedAt: string;
+  active: boolean;
+  capital: number;
+  accrued: number;
+  paidOut: number;
+  reinvested: number;
+  owed: number;
+  /** Начислено по месяцам — последние 12, от старых к новым ("2026-09"). */
+  months: { month: string; amount: number }[];
+  /** Движения капитала и выплаты — без начислений по отдельным платежам. */
+  history: { id: string; date: string; kind: "deposit" | "withdrawal" | "reinvest" | "payout"; amount: number; note?: string }[];
+}
+
+/**
+ * Всё, что соинвестор видит по своей ссылке — только его собственные суммы,
+ * без клиентов и сделок компании. Неизвестный токен — undefined.
+ */
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+export async function loadInvestorPortal(dbName: string, token: string): Promise<InvestorPortal | undefined> {
+  if (!/^[0-9a-f]{32}$/.test(token)) return undefined;
+  const row = await queryOne<CoinvestorRow>(dbName, "select * from coinvestors where portal_token = $1", [token]);
+  if (!row) return undefined;
+
+  await accrueFixedCoinvestors(dbName, row.id);
+  const investor = await loadCoinvestor(dbName, row.id);
+
+  const [capitalRows, profitRows] = await Promise.all([
+    query<CoinvestorCapitalRow>(dbName, "select * from coinvestor_capital_tx where coinvestor_id = $1", [row.id]),
+    query<CoinvestorProfitRow>(dbName, "select * from coinvestor_profit_tx where coinvestor_id = $1", [row.id]),
+  ]);
+
+  const byMonth = new Map<string, number>();
+  const today = todayIso();
+  for (let i = 11; i >= 0; i--) {
+    const iso = addMonthsIso(`${today.slice(0, 7)}-01`, -i);
+    byMonth.set(iso.slice(0, 7), 0);
+  }
+  for (const p of profitRows) {
+    if (p.kind !== "accrual") continue;
+    const month = isoDate(p.occurred_at).slice(0, 7);
+    if (byMonth.has(month)) byMonth.set(month, byMonth.get(month)! + Number(p.amount));
+  }
+
+  const history: InvestorPortal["history"] = [
+    ...capitalRows
+      .filter((c) => c.kind !== "reinvest")
+      .map((c) => ({
+        id: `c${c.id}`,
+        date: c.occurred_at,
+        kind: c.kind,
+        amount: Number(c.amount),
+        ...(c.note ? { note: c.note } : {}),
+      })),
+    ...profitRows
+      .filter((p) => p.kind !== "accrual")
+      .map((p) => ({
+        id: `p${p.id}`,
+        date: isoDate(p.occurred_at),
+        kind: p.kind as "payout" | "reinvest",
+        amount: Number(p.amount),
+      })),
+  ].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+
+  const sum = (kind: string) =>
+    profitRows.filter((p) => p.kind === kind).reduce((s, p) => s + Number(p.amount), 0);
+
+  return {
+    name: row.name,
+    accrualMode: row.accrual_mode,
+    profitSharePct: Number(row.profit_share_pct),
+    monthlyRatePct: Number(row.monthly_rate_pct),
+    startedAt: row.started_at,
+    active: row.active,
+    capital: round2(investor.capital),
+    accrued: round2(investor.accrued),
+    paidOut: round2(sum("payout")),
+    reinvested: round2(sum("reinvest")),
+    owed: round2(investor.owed),
+    months: [...byMonth].map(([month, amount]) => ({ month, amount: Math.round(amount * 100) / 100 })),
+    history: history.slice(0, 100),
+  };
 }
 
 // ── Шаблоны сообщений ──────────────────────────────────────────────────
@@ -2599,7 +2867,11 @@ export interface NewEmployeeInput {
   name: string;
   email: string;
   phone: string;
-  role: "admin" | "manager" | "accountant";
+  role: RoleKind;
+  /** Своя роль — при role = "custom". */
+  roleId: number | null;
+  /** null — все филиалы. */
+  branchId: number | null;
 }
 
 /**
@@ -2623,8 +2895,8 @@ export async function createEmployee(
   const row = await queryOne<{ id: number }>(
     dbName,
     `insert into users (email, password_hash, name, initials, role, phone,
-                        must_change_password)
-     values ($1, $2, $3, $4, $5, $6, true)
+                        must_change_password, role_id, branch_id)
+     values ($1, $2, $3, $4, $5, $6, true, $7, $8)
      returning id`,
     [
       input.email,
@@ -2633,6 +2905,8 @@ export async function createEmployee(
       initialsFrom(input.name),
       input.role,
       input.phone || null,
+      input.role === "custom" ? input.roleId : null,
+      input.role === "admin" ? null : input.branchId,
     ]
   );
   if (!row) throw new Error("Сотрудник не создан");
@@ -2666,7 +2940,9 @@ export async function setEmployeeActive(
 export interface UpdateEmployeeInput {
   name: string;
   phone: string;
-  role: "admin" | "manager" | "accountant";
+  role: RoleKind;
+  roleId: number | null;
+  branchId: number | null;
 }
 
 /** Правки карточки сотрудника: имя, телефон, роль. Почта — логин, её не меняем отсюда. */
@@ -2692,12 +2968,17 @@ export async function updateEmployee(
 
     const { rows } = await client.query<{
       id: number; name: string; initials: string; email: string;
-      phone: string | null; role: "admin" | "manager" | "accountant"; active: boolean; created_at: Date;
+      phone: string | null; role: RoleKind; role_id: number | null; branch_id: number | null;
+      active: boolean; created_at: Date;
     }>(
-      `update users set name = $2, initials = $3, phone = $4, role = $5
+      `update users set name = $2, initials = $3, phone = $4, role = $5, role_id = $6, branch_id = $7
        where id = $1
-       returning id, name, initials, email, phone, role, active, created_at`,
-      [userId, input.name, initialsFrom(input.name), input.phone || null, input.role]
+       returning id, name, initials, email, phone, role, role_id, branch_id, active, created_at`,
+      [
+        userId, input.name, initialsFrom(input.name), input.phone || null, input.role,
+        input.role === "custom" ? input.roleId : null,
+        input.role === "admin" ? null : input.branchId,
+      ]
     );
     const row = rows[0];
     if (!row) throw new Error(`Сотрудник ${userId} не найден`);
@@ -2709,6 +2990,8 @@ export async function updateEmployee(
       email: row.email,
       phone: row.phone ?? "—",
       role: row.role,
+      ...(row.role_id !== null ? { roleId: row.role_id } : {}),
+      ...(row.branch_id !== null ? { branchId: row.branch_id } : {}),
       since: sinceLabel(isoDate(row.created_at)),
       active: row.active,
     };

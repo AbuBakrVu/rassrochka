@@ -11,6 +11,9 @@ export async function GET(request: Request) {
       initials: user.initials,
       email: user.email,
       role: user.role,
+      ...(user.roleName ? { roleName: user.roleName } : {}),
+      permissions: user.permissions,
+      branchId: user.branchId,
     })
   );
 }

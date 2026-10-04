@@ -38,6 +38,7 @@ import PayoffCalculator from "@/components/payoff-calculator";
 import ContactModal from "@/components/contact-modal";
 import { OUTCOME_LABEL } from "@/lib/collections";
 import AttachmentsCard from "@/components/attachments-card";
+import { can } from "@/lib/permissions";
 
 export default function DealDetail({ id }: { id: string }) {
   const {
@@ -57,6 +58,9 @@ export default function DealDetail({ id }: { id: string }) {
   const [reassigning, setReassigning] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  // Кнопки, на которые у роли нет прав, не показываем — сервер их всё равно отклонит
+  const canEdit = can(user, "deals.edit");
+  const canPay = can(user, "payments.accept");
 
   useEffect(() => {
     const reset = () => setPrintMode(null);
@@ -396,7 +400,7 @@ export default function DealDetail({ id }: { id: string }) {
               <p className="mt-2 text-sm text-ink">{deal.nextStep}</p>
             )}
             <div className="mt-auto pt-5">
-              {!active ? (
+              {!canEdit && !(active && canPay) ? null : !active ? (
                 // Заявка: одобрить и выдать (закупка уходит из кассы) или отклонить
                 <div className="flex flex-col gap-2">
                   <button
@@ -434,14 +438,14 @@ export default function DealDetail({ id }: { id: string }) {
                 monthly={monthly}
                 canRestructure={active}
                 primaryLabel={active ? "Принять платёж" : "Продолжить работу"}
-                onPrimary={active ? () => acceptPayment(deal.id) : undefined}
+                onPrimary={active && canPay ? () => acceptPayment(deal.id) : undefined}
                 onRestructure={async (input) => {
                   await restructureDeal(deal.id, input);
                 }}
                 onCloseEarly={active ? async () => { await closeDeal(deal.id); } : undefined}
               />
               )}
-              {active && (
+              {active && canEdit && (
                 <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm">
                   <button type="button" onClick={() => setCalcOpen(true)} className="font-medium text-brand hover:text-brand-deep">
                     Досрочное погашение
@@ -553,7 +557,7 @@ export default function DealDetail({ id }: { id: string }) {
               </div>
               <button
                 onClick={() => acceptPayment(deal.id)}
-                disabled={!active || paid >= deal.months}
+                disabled={!active || !canPay || paid >= deal.months}
                 title="Принять ближайший платёж по графику"
                 className="rounded-full border border-line px-4 py-2 text-sm font-medium text-mute transition-colors hover:border-brand hover:text-brand-deep disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -608,7 +612,7 @@ export default function DealDetail({ id }: { id: string }) {
                         Отменить
                       </button>
                     )}
-                    {active && p.status !== "paid" && p.n === paid + 1 && (
+                    {active && canPay && p.status !== "paid" && p.n === paid + 1 && (
                       <button
                         onClick={() => acceptPayment(deal.id)}
                         className="rounded-full bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep"
@@ -669,7 +673,7 @@ export default function DealDetail({ id }: { id: string }) {
                             <ReceiptText size={13} aria-hidden /> Квитанция
                           </button>
                         )}
-                        {active && p.status !== "paid" && p.n === paid + 1 && (
+                        {active && canPay && p.status !== "paid" && p.n === paid + 1 && (
                           <button
                             onClick={() => acceptPayment(deal.id)}
                             className="rounded-full bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep hover:bg-brand hover:text-on-brand"

@@ -25,6 +25,6 @@ export async function PATCH(
       );
       return { ok: true };
     },
-    { roles: ["admin", "manager"] }
+    { perm: "clients.edit", clientId: id }
   );
 }

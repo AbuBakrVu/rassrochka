@@ -31,6 +31,6 @@ export async function POST(
       await audit(tenant.dbName, user.id, "deal.contact", id, `Звонок по сделке ${id}: ${OUTCOME_LABEL[outcome].toLowerCase()}`);
       return contact;
     },
-    { roles: ["admin", "manager"] }
+    { perm: "deals.edit", dealId: id }
   );
 }
