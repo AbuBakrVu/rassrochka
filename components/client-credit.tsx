@@ -183,7 +183,7 @@ export function ClientCreditCard({ client }: { client: Client }) {
                 autoFocus
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                className="w-full rounded-[10px] border border-line bg-canvas px-3 py-2 text-sm outline-none focus:border-brand focus:bg-surface"
+                className="w-full rounded-[14px] border border-line bg-canvas px-3 py-2 text-sm outline-none focus:border-brand focus:bg-surface"
               />
             </label>
             {error && <p className="text-sm text-danger">{error}</p>}
@@ -191,7 +191,7 @@ export function ClientCreditCard({ client }: { client: Client }) {
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded-[10px] bg-brand px-3.5 py-2 text-sm font-medium text-on-brand hover:bg-brand-deep disabled:opacity-60"
+                className="rounded-full bg-brand px-3.5 py-2 text-sm font-medium text-on-brand hover:bg-brand-deep disabled:opacity-60"
               >
                 Сохранить
               </button>
@@ -200,7 +200,7 @@ export function ClientCreditCard({ client }: { client: Client }) {
                   type="button"
                   disabled={saving}
                   onClick={() => void save(null)}
-                  className="rounded-[10px] border border-line px-3.5 py-2 text-sm font-medium text-mute hover:text-ink"
+                  className="rounded-full border border-line px-3.5 py-2 text-sm font-medium text-mute hover:text-ink"
                 >
                   Считать автоматически
                 </button>
@@ -238,7 +238,7 @@ export function ClientCreditSummary({
   const afterDeal = credit.available === null ? null : credit.available - amount;
   const over = afterDeal !== null && afterDeal < 0;
   return (
-    <div className="mt-2 rounded-[12px] border border-line bg-canvas/60 px-4 py-3">
+    <div className="mt-2 rounded-[16px] border border-line bg-canvas/60 px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={credit.risk.tone}>
           {credit.risk.label} · {credit.risk.score}

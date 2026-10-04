@@ -13,7 +13,7 @@ import { APPLY_DEFAULTS, type ApplySettings } from "@/lib/apply";
 const TERM_OPTIONS = [2, 3, 4, 5, 6, 8, 9, 10, 12, 18, 24];
 
 const input =
-  "w-28 rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-28 rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 export default function ApplySettingsCard() {
   const { user } = useData();
@@ -155,7 +155,7 @@ export default function ApplySettingsCard() {
             type="button"
             onClick={save}
             disabled={!dirty || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             {saving ? "Сохраняем…" : "Сохранить"}
           </button>
@@ -180,7 +180,7 @@ export default function ApplySettingsCard() {
               href="/apply"
               target="_blank"
               rel="noopener"
-              className="flex items-center gap-2 rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
+              className="flex items-center gap-2 rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
             >
               <ExternalLink size={15} aria-hidden /> Открыть
             </a>
@@ -191,7 +191,7 @@ export default function ApplySettingsCard() {
               readOnly
               value={embed}
               onFocus={(e) => e.currentTarget.select()}
-              className="min-h-20 w-full resize-none rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 font-mono text-xs"
+              className="min-h-20 w-full resize-none rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 font-mono text-xs"
             />
           </label>
           <p className="mt-2 text-xs text-mute">

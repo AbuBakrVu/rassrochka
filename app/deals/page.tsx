@@ -142,7 +142,7 @@ export default function DealsPage() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Клиент, товар или номер"
               aria-label="Поиск по сделкам"
-              className="w-full rounded-full border border-line/70 bg-surface/85 py-2.5 pr-4 pl-9 text-sm shadow-card backdrop-blur-xl outline-none focus:border-brand sm:w-64"
+              className="w-full rounded-full border border-line/70 bg-surface py-2.5 pr-4 pl-9 text-sm shadow-card outline-none focus:border-brand sm:w-64"
             />
           </label>
           <button
@@ -151,7 +151,7 @@ export default function DealsPage() {
             className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm shadow-card transition-colors ${
               overdueOnly
                 ? "bg-danger font-medium text-white"
-                : "border border-line/70 bg-surface/85 text-mute backdrop-blur-xl hover:text-ink"
+                : "border border-line/70 bg-surface text-mute hover:text-ink"
             }`}
           >
             <AlertTriangle size={15} aria-hidden />
@@ -172,7 +172,7 @@ export default function DealsPage() {
               setManagerId(e.target.value === "all" ? "all" : Number(e.target.value))
             }
             aria-label="Фильтр по менеджеру"
-            className="rounded-full border border-line/70 bg-surface/85 px-4 py-2.5 text-sm text-mute shadow-card backdrop-blur-xl hover:text-ink"
+            className="rounded-full border border-line/70 bg-surface px-4 py-2.5 text-sm text-mute shadow-card hover:text-ink"
           >
             <option value="all">Все менеджеры</option>
             {employees.map((e) => (
@@ -187,7 +187,7 @@ export default function DealsPage() {
             className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm shadow-card transition-colors sm:ml-auto ${
               selecting
                 ? "bg-brand font-medium text-on-brand"
-                : "border border-line/70 bg-surface/85 text-mute backdrop-blur-xl hover:text-ink"
+                : "border border-line/70 bg-surface text-mute hover:text-ink"
             }`}
           >
             <CheckSquare size={15} aria-hidden />
@@ -211,7 +211,7 @@ export default function DealsPage() {
         {bulkResult && (
           <div
             role="status"
-            className={`mb-4 flex items-start justify-between gap-3 rounded-[12px] border px-4 py-3 text-sm ${
+            className={`mb-4 flex items-start justify-between gap-3 rounded-[16px] border px-4 py-3 text-sm ${
               bulkResult.failed.length ? "border-warn/40 bg-warn-soft" : "border-good/30 bg-good-soft"
             }`}
           >
@@ -265,7 +265,7 @@ export default function DealsPage() {
                   className={`flex w-[85vw] max-w-sm shrink-0 snap-start flex-col rounded-[22px] border p-2 transition-colors sm:w-80 lg:w-auto lg:max-w-none lg:min-w-72 lg:flex-1 ${
                     isDragOver
                       ? "border-brand bg-brand-soft"
-                      : "border-line/60 bg-lane/70 backdrop-blur-xl"
+                      : "border-line/60 bg-lane/70"
                   }`}
                   aria-label={`Этап «${stage.title}»`}
                 >
@@ -408,7 +408,7 @@ export default function DealsPage() {
       </div>
 
       {selecting && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 px-4 py-3 shadow-pop backdrop-blur sm:px-8 lg:left-[88px]">
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface px-4 py-3 shadow-pop sm:px-8 lg:left-[88px]">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-sm font-medium">
               Выбрано: {[...selected].filter((id) => visibleDeals.some((d) => d.id === id)).length}
@@ -421,7 +421,7 @@ export default function DealsPage() {
                 if (stage) runBulk({ action: "stage", stage });
               }}
               aria-label="Перенести выбранные в этап"
-              className="rounded-[10px] border border-line bg-surface px-3 py-2 text-sm disabled:opacity-50"
+              className="rounded-full border border-line bg-surface px-3 py-2 text-sm disabled:opacity-50"
             >
               <option value="">Перенести в этап…</option>
               {stages.map((s) => (
@@ -439,7 +439,7 @@ export default function DealsPage() {
                   if (id) runBulk({ action: "manager", managerId: id });
                 }}
                 aria-label="Назначить ответственного выбранным"
-                className="rounded-[10px] border border-line bg-surface px-3 py-2 text-sm disabled:opacity-50"
+                className="rounded-full border border-line bg-surface px-3 py-2 text-sm disabled:opacity-50"
               >
                 <option value="">Назначить ответственного…</option>
                 {employees
@@ -454,7 +454,7 @@ export default function DealsPage() {
             {bulkBusy && <span className="text-sm text-mute">Применяем…</span>}
             <button
               onClick={stopSelecting}
-              className="ml-auto rounded-[10px] border border-line px-3.5 py-2 text-sm text-mute hover:text-ink"
+              className="ml-auto rounded-full border border-line px-3.5 py-2 text-sm text-mute hover:text-ink"
             >
               Отмена
             </button>

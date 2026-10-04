@@ -84,7 +84,7 @@ export default function AttachmentsCard({
                 target="_blank"
                 rel="noopener"
                 title={`${a.name} · ${sizeLabel(a.size)}`}
-                className="block aspect-square overflow-hidden rounded-[10px] border border-line bg-canvas hover:border-brand"
+                className="block aspect-square overflow-hidden rounded-[14px] border border-line bg-canvas hover:border-brand"
               >
                 {a.contentType.startsWith("image/") ? (
                   // eslint-disable-next-line @next/next/no-img-element -- файл из нашего API, оптимизатор Next не нужен
@@ -97,14 +97,14 @@ export default function AttachmentsCard({
                 )}
               </a>
               {kinds.length > 1 && (
-                <span className="pointer-events-none absolute bottom-1 left-1 rounded-md bg-surface/90 px-1.5 py-0.5 text-[10px] font-medium">
+                <span className="pointer-events-none absolute bottom-1 left-1 rounded-md bg-surface px-1.5 py-0.5 text-[10px] font-medium">
                   {labelOf(a.kind)}
                 </span>
               )}
               <button
                 onClick={() => remove(a)}
                 aria-label={`Удалить ${a.name}`}
-                className="absolute top-1 right-1 rounded-lg bg-surface/90 p-1 text-danger opacity-0 group-hover:opacity-100 focus:opacity-100 max-sm:opacity-100"
+                className="absolute top-1 right-1 rounded-lg bg-surface p-1 text-danger opacity-0 group-hover:opacity-100 focus:opacity-100 max-sm:opacity-100"
               >
                 <Trash2 size={13} aria-hidden />
               </button>

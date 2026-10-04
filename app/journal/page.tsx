@@ -164,7 +164,7 @@ export default function JournalPage() {
   };
 
   const field =
-    "rounded-[10px] border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
+    "rounded-full border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-brand";
 
   return (
     <>
@@ -212,7 +212,7 @@ export default function JournalPage() {
           <button
             onClick={exportCsv}
             disabled={!entries || entries.length === 0}
-            className="flex items-center gap-1.5 rounded-[10px] border border-line bg-surface px-3.5 py-2 text-sm text-mute transition-colors hover:border-brand/40 hover:text-ink disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-2 text-sm text-mute transition-colors hover:border-brand/40 hover:text-ink disabled:opacity-50"
           >
             <Download size={15} aria-hidden />
             Экспорт
@@ -225,7 +225,7 @@ export default function JournalPage() {
           ) : entries === null ? (
             <div className="flex flex-col gap-3 p-5" aria-busy="true">
               {Array.from({ length: 5 }, (_, i) => (
-                <div key={i} className="h-10 animate-pulse rounded-[10px] bg-canvas" />
+                <div key={i} className="h-10 animate-pulse rounded-[14px] bg-canvas" />
               ))}
             </div>
           ) : entries.length === 0 ? (

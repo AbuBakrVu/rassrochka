@@ -50,7 +50,7 @@ function Field({
 }
 
 const input =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 function Section({
   title,
@@ -183,7 +183,7 @@ export default function NewClientModal({
             type="button"
             onClick={onClose}
             aria-label="Закрыть"
-            className="rounded-[10px] p-2 text-mute hover:bg-canvas hover:text-ink"
+            className="rounded-full p-2 text-mute hover:bg-canvas hover:text-ink"
           >
             <X size={18} />
           </button>
@@ -313,7 +313,7 @@ export default function NewClientModal({
             </Field>
           </Section>
 
-          <label className="flex items-start gap-3 rounded-[12px] border border-line bg-canvas px-4 py-3 text-sm">
+          <label className="flex items-start gap-3 rounded-[16px] border border-line bg-canvas px-4 py-3 text-sm">
             <input
               type="checkbox"
               checked={consent}
@@ -386,14 +386,14 @@ export default function NewClientModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
+            className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
           >
             Отмена
           </button>
           <button
             type="submit"
             disabled={!ready || saved || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             {saved
               ? "Клиент создан"

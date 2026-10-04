@@ -104,7 +104,7 @@ export default function PaymentReceipt({ token, id }: { token: string; id: strin
           </Link>
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 rounded-[10px] border border-line bg-surface px-3.5 py-2 text-sm font-medium hover:border-brand hover:text-brand-deep"
+            className="flex items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-2 text-sm font-medium hover:border-brand hover:text-brand-deep"
           >
             <Printer size={15} aria-hidden /> Сохранить PDF
           </button>
@@ -113,7 +113,7 @@ export default function PaymentReceipt({ token, id }: { token: string; id: strin
         <article className="rounded-card border border-line bg-surface p-6 shadow-card print:border-black/20 print:shadow-none">
           <header className="flex items-start justify-between gap-3 border-b border-line pb-4">
             <div className="flex items-center gap-2.5">
-              <BrandMark className="h-10 w-10 rounded-[12px]" iconSize={17} />
+              <BrandMark className="h-10 w-10 rounded-[16px]" iconSize={17} />
               <div>
                 <p className="text-sm font-semibold tracking-tight">{data.companyName}</p>
                 <p className="text-xs text-mute">Квитанция об оплате</p>

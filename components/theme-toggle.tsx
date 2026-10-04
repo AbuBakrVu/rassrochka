@@ -78,7 +78,7 @@ export default function ThemeToggle({
       onClick={next}
       title={`${label} — нажмите, чтобы сменить`}
       aria-label={`Тема оформления: ${label.toLowerCase()}. Сменить`}
-      className={`shrink-0 rounded-[10px] p-2 transition-colors ${className}`}
+      className={`shrink-0 rounded-full p-2 transition-colors ${className}`}
     >
       <Icon size={17} aria-hidden />
     </button>

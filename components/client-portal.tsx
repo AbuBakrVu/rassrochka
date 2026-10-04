@@ -81,7 +81,7 @@ function Header({ subtitle, id }: { subtitle: string; id?: string }) {
   return (
     <header className="flex items-center justify-between">
       <div className="flex items-center gap-2.5">
-        <BrandMark className="h-10 w-10 rounded-[12px]" iconSize={17} />
+        <BrandMark className="h-10 w-10 rounded-[16px]" iconSize={17} />
         <div>
           <p className="text-sm font-semibold tracking-tight">{brandName}</p>
           <p className="text-xs text-mute">{subtitle}</p>
@@ -149,7 +149,7 @@ function NextPaymentHero({
       </p>
       <a
         href={`/api/portal/${encodeURIComponent(token)}/calendar`}
-        className="mt-4 flex items-center justify-center gap-2 rounded-[10px] border border-line px-3 py-2.5 text-sm font-medium hover:border-brand hover:text-brand-deep"
+        className="mt-4 flex items-center justify-center gap-2 rounded-full border border-line px-3 py-2.5 text-sm font-medium hover:border-brand hover:text-brand-deep"
       >
         <CalendarPlus size={15} aria-hidden /> Добавить платежи в календарь
       </a>
@@ -214,13 +214,13 @@ function ContactSection({
         <div className="mt-3 grid grid-cols-2 gap-2">
           <a
             href={`tel:${managerPhone.replace(/\D/g, "")}`}
-            className="flex items-center justify-center gap-2 rounded-[10px] border border-line px-3 py-2.5 text-sm font-medium hover:border-brand hover:text-brand-deep"
+            className="flex items-center justify-center gap-2 rounded-full border border-line px-3 py-2.5 text-sm font-medium hover:border-brand hover:text-brand-deep"
           >
             <Phone size={15} aria-hidden /> Позвонить
           </a>
           <a
             href={`https://wa.me/${managerPhone.replace(/\D/g, "")}`}
-            className="flex items-center justify-center gap-2 rounded-[10px] bg-brand px-3 py-2.5 text-sm font-medium text-on-brand hover:bg-brand-deep"
+            className="flex items-center justify-center gap-2 rounded-full bg-brand px-3 py-2.5 text-sm font-medium text-on-brand hover:bg-brand-deep"
           >
             <MessageCircle size={15} aria-hidden /> Написать
           </a>

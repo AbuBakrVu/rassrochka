@@ -148,7 +148,7 @@ export default function RoutePage() {
                 role="tab"
                 aria-selected={tab === t.key}
                 onClick={() => setTab(t.key)}
-                className={`flex items-center gap-2 rounded-[10px] px-3.5 py-2 text-sm transition-colors ${
+                className={`flex items-center gap-2 rounded-full px-3.5 py-2 text-sm transition-colors ${
                   tab === t.key
                     ? "bg-brand font-medium text-on-brand"
                     : "border border-line bg-surface text-mute hover:text-ink"
@@ -214,7 +214,7 @@ export default function RoutePage() {
                     </button>
 
                     <span
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${tone.bg} ${tone.text}`}
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] ${tone.bg} ${tone.text}`}
                     >
                       <meta.icon size={16} aria-hidden />
                     </span>

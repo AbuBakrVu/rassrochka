@@ -6,7 +6,7 @@ import { Suspense } from "react";
 import { BrandMark, useBrandName } from "@/components/branding";
 
 const field =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-full border border-transparent bg-surface px-4 py-3 text-sm shadow-card outline-none transition-colors focus:border-brand";
 
 function LoginForm() {
   const router = useRouter();
@@ -51,7 +51,7 @@ function LoginForm() {
   return (
     <form onSubmit={submit} className="w-full max-w-sm">
       <div className="mb-8 flex items-center gap-2.5">
-        <BrandMark className="h-11 w-11 rounded-[12px]" />
+        <BrandMark className="h-11 w-11 rounded-[16px]" />
         <p className="font-semibold tracking-tight">{brandName}</p>
       </div>
 
@@ -92,7 +92,7 @@ function LoginForm() {
       <button
         type="submit"
         disabled={busy || !email || !password}
-        className="mt-5 w-full rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+        className="mt-5 w-full rounded-full bg-brand px-4 py-3 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
       >
         {busy ? "Входим…" : "Войти"}
       </button>
@@ -160,7 +160,7 @@ function BrandIllustration() {
 
 function BrandPanel() {
   return (
-    <div className="relative hidden shrink-0 items-center justify-center overflow-hidden bg-brand px-10 lg:flex lg:w-[42%]">
+    <div className="relative m-3 hidden shrink-0 items-center justify-center overflow-hidden rounded-[32px] bg-brand bg-gradient-to-br from-brand-hi to-brand px-10 lg:flex lg:w-[42%]">
       <div className="relative z-10 flex flex-col items-center text-center">
         <BrandIllustration />
         <h2 className="mt-8 text-xl font-semibold text-on-brand">

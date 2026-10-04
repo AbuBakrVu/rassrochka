@@ -152,7 +152,7 @@ export default function AnalyticsPage() {
             <Card key={label} className="p-5">
               <div className="flex items-start justify-between">
                 <p className="text-sm text-mute">{label}</p>
-                <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand-soft text-brand">
+                <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-brand-soft text-brand">
                   <Icon size={17} aria-hidden />
                 </span>
               </div>
@@ -238,7 +238,7 @@ export default function AnalyticsPage() {
               return (
                 <div
                   key={b.key}
-                  className="rounded-[12px] border border-line px-4 py-3.5"
+                  className="rounded-[16px] border border-line px-4 py-3.5"
                 >
                   <div className="flex items-center justify-between">
                     <span
@@ -261,7 +261,7 @@ export default function AnalyticsPage() {
                         <Link
                           key={i.dealId}
                           href={`/deals/${i.dealId}`}
-                          className="block rounded-[8px] px-1.5 py-1 text-sm transition-colors hover:bg-canvas"
+                          className="block rounded-[10px] px-1.5 py-1 text-sm transition-colors hover:bg-canvas"
                         >
                           <span className="block truncate text-ink">
                             {i.clientName}

@@ -14,7 +14,7 @@ export default function AnalyticsTabs() {
   const pathname = usePathname();
   return (
     <nav aria-label="Разделы аналитики" className="px-4 pt-3 sm:px-8">
-      <div className="inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-line/70 bg-surface/80 p-1 shadow-card backdrop-blur-xl">
+      <div className="inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-line/70 bg-surface p-1 shadow-card">
         {TABS.map((t) => {
           const active = pathname === t.href;
           return (

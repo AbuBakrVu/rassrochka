@@ -70,7 +70,7 @@ const cities = [
 const terms = [3, 4, 6, 9, 12, 18, 24];
 
 const input =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 const money = (n: number) =>
   new Intl.NumberFormat("ru-RU").format(Math.round(n)) + " ₽";
@@ -125,7 +125,7 @@ function StepHead({
 }) {
   return (
     <div className="mb-5 flex items-start gap-3">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-brand-soft text-brand">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px] bg-brand-soft text-brand">
         <Icon size={19} aria-hidden />
       </span>
       <div>
@@ -321,7 +321,7 @@ export default function NewDealModal({
           <button
             onClick={onClose}
             aria-label="Закрыть"
-            className="rounded-[10px] p-2 text-mute hover:bg-canvas hover:text-ink"
+            className="rounded-full p-2 text-mute hover:bg-canvas hover:text-ink"
           >
             <X size={18} />
           </button>
@@ -345,7 +345,7 @@ export default function NewDealModal({
                     onClick={() => i < step && setStep(i)}
                     disabled={i > step}
                     aria-current={current ? "step" : undefined}
-                    className={`flex min-w-0 items-center gap-2 rounded-[10px] px-2 py-1.5 text-sm whitespace-nowrap ${
+                    className={`flex min-w-0 items-center gap-2 rounded-[14px] px-2 py-1.5 text-sm whitespace-nowrap ${
                       i < step ? "hover:bg-surface" : "cursor-default"
                     }`}
                   >
@@ -429,7 +429,7 @@ export default function NewDealModal({
                             key={label}
                             onClick={() => setCategory(label)}
                             aria-pressed={on}
-                            className={`flex items-center gap-2.5 rounded-[10px] border px-3 py-2.5 text-left text-sm transition-colors ${
+                            className={`flex items-center gap-2.5 rounded-full border px-3 py-2.5 text-left text-sm transition-colors ${
                               on
                                 ? "border-brand bg-brand-soft font-medium text-brand-deep"
                                 : "border-line bg-canvas text-mute hover:border-brand/40 hover:text-ink"
@@ -476,7 +476,7 @@ export default function NewDealModal({
                       {photos.map((p, i) => (
                         <div
                           key={p.url}
-                          className="group relative aspect-square overflow-hidden rounded-[10px] border border-line"
+                          className="group relative aspect-square overflow-hidden rounded-[14px] border border-line"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
@@ -490,14 +490,14 @@ export default function NewDealModal({
                               setPhotos((s) => s.filter((_, j) => j !== i));
                             }}
                             aria-label={`Удалить фото ${p.name}`}
-                            className="absolute top-1 right-1 rounded-lg bg-surface/90 p-1 text-danger opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            className="absolute top-1 right-1 rounded-lg bg-surface p-1 text-danger opacity-0 group-hover:opacity-100 focus:opacity-100"
                           >
                             <Trash2 size={13} />
                           </button>
                         </div>
                       ))}
                       {photos.length < 8 && (
-                        <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-[10px] border border-dashed border-line bg-canvas text-mute transition-colors hover:border-brand hover:text-brand">
+                        <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-[14px] border border-dashed border-line bg-canvas text-mute transition-colors hover:border-brand hover:text-brand">
                           <ImagePlus size={18} aria-hidden />
                           <span className="text-[11px]">Добавить</span>
                           <input
@@ -564,7 +564,7 @@ export default function NewDealModal({
                     <div className="mb-1.5 flex items-center justify-between">
                       <Label hint="необязательно">Первоначальный взнос</Label>
                       <div
-                        className="flex rounded-[10px] border border-line bg-canvas p-0.5"
+                        className="flex rounded-[14px] border border-line bg-canvas p-0.5"
                         role="group"
                         aria-label="Единица взноса"
                       >
@@ -653,7 +653,7 @@ export default function NewDealModal({
                     </label>
                   </div>
 
-                  <div className="flex items-center gap-2.5 rounded-[12px] bg-brand-soft px-4 py-3 text-sm">
+                  <div className="flex items-center gap-2.5 rounded-[16px] bg-brand-soft px-4 py-3 text-sm">
                     <CalendarDays
                       size={16}
                       className="shrink-0 text-brand"
@@ -667,7 +667,7 @@ export default function NewDealModal({
 
                   <div>
                     <Label>Касса</Label>
-                    <div className="flex items-center justify-between rounded-[12px] border border-line bg-canvas px-4 py-3">
+                    <div className="flex items-center justify-between rounded-[16px] border border-line bg-canvas px-4 py-3">
                       <span className="flex items-center gap-2.5 text-sm font-medium">
                         <Wallet size={16} className="text-brand" aria-hidden />
                         Основная
@@ -686,7 +686,7 @@ export default function NewDealModal({
                           key={e.id}
                           onClick={() => setManager(e.id)}
                           aria-pressed={manager === e.id}
-                          className={`flex items-center gap-2 rounded-[10px] border px-3 py-2.5 text-left text-sm transition-colors ${
+                          className={`flex items-center gap-2 rounded-full border px-3 py-2.5 text-left text-sm transition-colors ${
                             manager === e.id
                               ? "border-brand bg-brand-soft font-medium text-brand-deep"
                               : "border-line bg-canvas text-mute hover:border-brand/40 hover:text-ink"
@@ -721,7 +721,7 @@ export default function NewDealModal({
                   <div>
                     <Label required>Клиент</Label>
                     {client ? (
-                      <div className="flex items-center gap-3 rounded-[12px] border border-brand bg-brand-soft px-4 py-3">
+                      <div className="flex items-center gap-3 rounded-[16px] border border-brand bg-brand-soft px-4 py-3">
                         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-semibold text-on-brand">
                           {client.name
                             .split(" ")
@@ -748,7 +748,7 @@ export default function NewDealModal({
                       </div>
                     ) : null}
                     {client?.blacklistedAt && (
-                      <div className="mt-2 flex items-start gap-2.5 rounded-[10px] border border-danger-soft bg-danger-soft px-4 py-3 text-sm text-danger">
+                      <div className="mt-2 flex items-start gap-2.5 rounded-[16px] border border-danger-soft bg-danger-soft px-4 py-3 text-sm text-danger">
                         <ShieldAlert size={16} className="mt-0.5 shrink-0" aria-hidden />
                         <div>
                           <p className="font-medium">Клиент в чёрном списке</p>
@@ -790,7 +790,7 @@ export default function NewDealModal({
                             onChange={(e) => setClientQuery(e.target.value)}
                           />
                         </div>
-                        <ul className="mt-2 max-h-56 divide-y divide-line overflow-y-auto rounded-[12px] border border-line">
+                        <ul className="mt-2 max-h-56 divide-y divide-line overflow-y-auto rounded-[16px] border border-line">
                           {found.length === 0 ? (
                             <li className="px-4 py-6 text-center text-sm text-mute">
                               Никого не нашли. Заведите нового клиента ниже.
@@ -878,7 +878,7 @@ export default function NewDealModal({
 
                   <button
                     onClick={() => setClientFormOpen(true)}
-                    className="flex items-center gap-3 rounded-[12px] border border-dashed border-line px-4 py-3.5 text-left transition-colors hover:border-brand hover:bg-brand-soft"
+                    className="flex items-center gap-3 rounded-[16px] border border-dashed border-line px-4 py-3.5 text-left transition-colors hover:border-brand hover:bg-brand-soft"
                   >
                     <UserPlus size={18} className="text-brand" aria-hidden />
                     <span>
@@ -902,9 +902,9 @@ export default function NewDealModal({
                   text="Проверьте данные перед созданием"
                 />
                 <div className="flex flex-col gap-4">
-                  <div className="rounded-[12px] border border-line">
+                  <div className="rounded-[16px] border border-line">
                     <div className="flex items-center gap-3 border-b border-line px-4 py-3.5">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-brand-soft text-brand">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-brand-soft text-brand">
                         <Package size={18} aria-hidden />
                       </span>
                       <div className="min-w-0">
@@ -935,7 +935,7 @@ export default function NewDealModal({
                     </dl>
                   </div>
 
-                  <div className="rounded-[12px] border border-line px-4 py-3.5">
+                  <div className="rounded-[16px] border border-line px-4 py-3.5">
                     <p className="text-sm text-mute">Клиент</p>
                     <p className="mt-0.5 font-medium">{client?.name}</p>
                     <p className="text-sm text-mute">{client?.phone}</p>
@@ -950,7 +950,7 @@ export default function NewDealModal({
                     </p>
                   </div>
 
-                  <div className="flex gap-3 rounded-[12px] bg-brand-soft px-4 py-3.5">
+                  <div className="flex gap-3 rounded-[16px] bg-brand-soft px-4 py-3.5">
                     <ShieldCheck
                       size={18}
                       className="mt-0.5 shrink-0 text-brand"
@@ -1009,7 +1009,7 @@ export default function NewDealModal({
               </div>
             </dl>
 
-            <div className="mt-4 flex items-center justify-between rounded-[12px] bg-brand px-4 py-3.5 text-on-brand lg:block lg:py-4 lg:text-center">
+            <div className="mt-4 flex items-center justify-between rounded-[20px] bg-brand bg-gradient-to-b from-brand-hi to-brand px-4 shadow-[0_14px_28px_-14px_var(--glow)] py-3.5 text-on-brand lg:block lg:py-4 lg:text-center">
               <p className="text-xs tracking-wide text-on-brand/80 uppercase">
                 Ежемесячный платёж
               </p>
@@ -1022,13 +1022,13 @@ export default function NewDealModal({
             </div>
 
             <div className="mt-3 hidden grid-cols-2 gap-3 lg:grid">
-              <div className="rounded-[12px] border border-line bg-surface px-3 py-3 text-center">
+              <div className="rounded-[16px] border border-line bg-surface px-3 py-3 text-center">
                 <p className="text-xs text-mute">Прибыль</p>
                 <p className="mt-0.5 font-semibold text-good">
                   {money(calc.markupSum)}
                 </p>
               </div>
-              <div className="rounded-[12px] border border-line bg-surface px-3 py-3 text-center">
+              <div className="rounded-[16px] border border-line bg-surface px-3 py-3 text-center">
                 <p className="text-xs text-mute">Доходность</p>
                 <p className="mt-0.5 font-semibold">
                   {calc.roi.toFixed(1).replace(".", ",")}%
@@ -1089,7 +1089,7 @@ export default function NewDealModal({
           {step > 0 && (
             <button
               onClick={() => setStep((s) => s - 1)}
-              className="flex items-center gap-1.5 rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
+              className="flex items-center gap-1.5 rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
             >
               <ArrowLeft size={15} aria-hidden /> Назад
             </button>
@@ -1098,7 +1098,7 @@ export default function NewDealModal({
             <button
               onClick={() => setStep((s) => s + 1)}
               disabled={!stepReady[step]}
-              className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+              className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
             >
               Далее <ArrowRight size={15} aria-hidden />
             </button>
@@ -1106,7 +1106,7 @@ export default function NewDealModal({
             <button
               onClick={create}
               disabled={created || saving}
-              className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:bg-line disabled:text-mute"
+              className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:bg-line disabled:text-mute"
             >
               <Check size={15} aria-hidden />
               {created ? "Сделка создана" : saving ? "Сохраняем…" : "Создать сделку"}

@@ -107,7 +107,7 @@ export default function ClientDeals({ deals }: { deals: DealCardData[] }) {
             <li key={d.id}>
               <Link
                 href={`/deals/${d.id}`}
-                className="block rounded-[12px] border border-line p-4 transition-colors hover:border-brand hover:bg-canvas"
+                className="block rounded-[16px] border border-line p-4 transition-colors hover:border-brand hover:bg-canvas"
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">

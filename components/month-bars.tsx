@@ -85,7 +85,7 @@ export default function MonthBars({
       </svg>
       {hovered && (
         <div
-          className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-[10px] border border-line bg-surface px-3 py-2 text-xs whitespace-nowrap shadow-pop"
+          className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-full border border-line bg-surface px-3 py-2 text-xs whitespace-nowrap shadow-pop"
           style={{ left: `${Math.min(Math.max(((hover! + 0.5) / bars.length) * 100, 12), 88)}%` }}
           role="status"
         >

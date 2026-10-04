@@ -69,7 +69,7 @@ export default function SettingsPage() {
         <div
           role="tablist"
           aria-label="Разделы настроек"
-          className="inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-line/70 bg-surface/80 p-1 shadow-card backdrop-blur-xl"
+          className="inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-line/70 bg-surface p-1 shadow-card"
         >
           {TABS.map((t) => (
             <button
@@ -116,7 +116,7 @@ export default function SettingsPage() {
                         disabled={!isAdmin}
                         aria-pressed={!isHidden}
                         title={isHidden ? "Скрыт из меню" : "Показан в меню"}
-                        className={`flex items-center gap-1.5 rounded-[8px] border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                           isHidden
                             ? "border-line bg-canvas text-mute"
                             : "border-brand/30 bg-brand-soft text-brand-deep"
@@ -154,7 +154,7 @@ export default function SettingsPage() {
                     type="button"
                     onClick={save}
                     disabled={!dirty || saving}
-                    className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+                    className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
                   >
                     Сохранить
                   </button>
@@ -219,7 +219,7 @@ function CreditLimitCard() {
             value={value}
             disabled={!isAdmin}
             onChange={(e) => setValue(e.target.value)}
-            className="w-48 rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface disabled:opacity-60"
+            className="w-48 rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface disabled:opacity-60"
           />
         </label>
         {isAdmin && (
@@ -227,7 +227,7 @@ function CreditLimitCard() {
             type="button"
             onClick={save}
             disabled={!dirty || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             {saving ? "Сохраняем…" : "Сохранить"}
           </button>

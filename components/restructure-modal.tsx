@@ -15,7 +15,7 @@ const reasons = [
 ];
 
 const input =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 export type RestructureSubmit = (input: {
   months: number;
@@ -109,14 +109,14 @@ export default function RestructureModal({
             type="button"
             onClick={onClose}
             aria-label="Закрыть"
-            className="rounded-[10px] p-2 text-mute hover:bg-canvas hover:text-ink"
+            className="rounded-full p-2 text-mute hover:bg-canvas hover:text-ink"
           >
             <X size={18} />
           </button>
         </header>
 
         <div className="flex flex-col gap-5 overflow-y-auto px-6 py-5">
-          <div className="rounded-[12px] bg-canvas px-4 py-3">
+          <div className="rounded-[16px] bg-canvas px-4 py-3">
             <p className="text-sm text-mute">Остаток к пересчёту</p>
             <p className="text-lg font-semibold tracking-tight">
               {money(remaining)}
@@ -178,7 +178,7 @@ export default function RestructureModal({
               {reasons.map((r) => (
                 <label
                   key={r}
-                  className={`flex cursor-pointer items-center gap-2.5 rounded-[10px] border px-3.5 py-2.5 text-sm transition-colors ${
+                  className={`flex cursor-pointer items-center gap-2.5 rounded-full border px-3.5 py-2.5 text-sm transition-colors ${
                     reason === r
                       ? "border-brand bg-brand-soft font-medium text-brand-deep"
                       : "border-line bg-canvas text-ink hover:border-brand/40"
@@ -212,7 +212,7 @@ export default function RestructureModal({
           </label>
 
           {newMonthly !== null && (
-            <div className="rounded-[12px] bg-brand-soft px-4 py-3.5">
+            <div className="rounded-[16px] bg-brand-soft px-4 py-3.5">
               <p className="text-xs font-medium tracking-wide text-brand-deep uppercase">
                 Новый ежемесячный платёж
               </p>
@@ -268,14 +268,14 @@ export default function RestructureModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
+            className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
           >
             Отмена
           </button>
           <button
             type="submit"
             disabled={!ready || saving || saved}
-            className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             <Check size={15} aria-hidden />
             {saved ? "Сохранено" : "Сохранить новый график"}

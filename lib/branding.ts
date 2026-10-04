@@ -10,7 +10,7 @@ import { resolveTenant } from "./tenant";
 import { isHexColor } from "./brand-color";
 
 export interface Branding {
-  /** "#rrggbb" или null — стандартная бирюзовая тема. */
+  /** "#rrggbb" или null — стандартная лавандовая тема. */
   color: string | null;
   /** Меняется при каждой загрузке логотипа — входит в адрес картинки, чтобы браузер не показал старую. null — логотипа нет. */
   logoVersion: string | null;

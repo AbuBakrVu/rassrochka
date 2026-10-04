@@ -25,7 +25,7 @@ import { todayIso } from "@/lib/derive";
 import { useData } from "@/lib/store";
 
 const field =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 type ModalKind = "payout" | "reinvest" | "deposit" | "withdraw" | "edit" | null;
 
@@ -192,7 +192,7 @@ export default function CoinvestorDetail({ id }: { id: string }) {
     <div className="mx-auto max-w-5xl px-4 py-6 sm:px-8">
       <button
         onClick={() => router.push("/coinvestors")}
-        className="mb-4 flex items-center gap-1.5 rounded-[10px] border border-line bg-surface px-3.5 py-2 text-sm text-mute hover:text-ink"
+        className="mb-4 flex items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-2 text-sm text-mute hover:text-ink"
       >
         <ArrowLeft size={15} aria-hidden /> Все соинвесторы
       </button>
@@ -226,13 +226,13 @@ export default function CoinvestorDetail({ id }: { id: string }) {
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
                 disabled={busy}
-                className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:opacity-60"
+                className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:opacity-60"
               >
                 Действия
                 <ChevronDown size={15} className={`transition-transform ${menuOpen ? "rotate-180" : ""}`} aria-hidden />
               </button>
               {menuOpen && (
-                <div role="menu" className="absolute top-full right-0 z-30 mt-2 w-64 overflow-hidden rounded-[12px] border border-line bg-surface p-1.5 shadow-pop">
+                <div role="menu" className="absolute top-full right-0 z-30 mt-2 w-64 overflow-hidden rounded-[16px] border border-line bg-surface p-1.5 shadow-pop">
                   {actions.map(({ key, icon: Icon, label, disabled }) => (
                     <button
                       key={key}
@@ -242,7 +242,7 @@ export default function CoinvestorDetail({ id }: { id: string }) {
                         setMenuOpen(false);
                         setModal(key);
                       }}
-                      className="flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-sm font-medium text-ink hover:bg-brand-soft hover:text-brand-deep disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                      className="flex w-full items-center gap-2.5 rounded-[14px] px-3 py-2.5 text-left text-sm font-medium text-ink hover:bg-brand-soft hover:text-brand-deep disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                     >
                       <Icon size={16} className="text-brand" aria-hidden />
                       {label}
@@ -255,7 +255,7 @@ export default function CoinvestorDetail({ id }: { id: string }) {
                       setMenuOpen(false);
                       toggleActive();
                     }}
-                    className="flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-sm font-medium text-ink hover:bg-canvas"
+                    className="flex w-full items-center gap-2.5 rounded-[14px] px-3 py-2.5 text-left text-sm font-medium text-ink hover:bg-canvas"
                   >
                     {investor.active ? (
                       <Ban size={16} className="text-mute" aria-hidden />
@@ -270,7 +270,7 @@ export default function CoinvestorDetail({ id }: { id: string }) {
                       setMenuOpen(false);
                       remove();
                     }}
-                    className="flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-sm font-medium text-danger hover:bg-danger-soft"
+                    className="flex w-full items-center gap-2.5 rounded-[14px] px-3 py-2.5 text-left text-sm font-medium text-danger hover:bg-danger-soft"
                   >
                     <Trash2 size={16} aria-hidden />
                     Удалить соинвестора
@@ -327,7 +327,7 @@ export default function CoinvestorDetail({ id }: { id: string }) {
             key={key}
             onClick={() => setFilter(key)}
             aria-pressed={filter === key}
-            className={`rounded-[10px] px-3.5 py-2 text-sm transition-colors ${
+            className={`rounded-full px-3.5 py-2 text-sm transition-colors ${
               filter === key
                 ? "bg-brand font-medium text-on-brand"
                 : "border border-line bg-surface text-mute hover:text-ink"
@@ -350,7 +350,7 @@ export default function CoinvestorDetail({ id }: { id: string }) {
             {list.map((r) => (
               <li key={r.id} className="flex items-center gap-3 px-5 py-3 sm:px-6">
                 <span
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] ${
                     r.group === "capital" ? "bg-brand-soft text-brand" : "bg-good-soft text-good"
                   }`}
                 >
@@ -440,7 +440,7 @@ function StatCard({
     <Card className="p-4">
       <div className="flex items-start justify-between">
         <p className="text-xs text-mute">{label}</p>
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-brand-soft text-brand">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[14px] bg-brand-soft text-brand">
           <Icon size={15} aria-hidden />
         </span>
       </div>
@@ -607,13 +607,13 @@ function AmountModal({
           <p className="mr-auto text-sm" role="status" aria-live="polite">
             {error ? <span className="text-danger">{error}</span> : saving ? "Проводим…" : ""}
           </p>
-          <button type="button" onClick={onClose} className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
             Отмена
           </button>
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             {submitLabel}
           </button>
@@ -696,13 +696,13 @@ function EditModal({
           <p className="mr-auto text-sm" role="status" aria-live="polite">
             {error ? <span className="text-danger">{error}</span> : saving ? "Сохраняем…" : ""}
           </p>
-          <button type="button" onClick={onClose} className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
             Отмена
           </button>
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Сохранить
           </button>

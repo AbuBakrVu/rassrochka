@@ -58,7 +58,7 @@ export default function PayoffCalculator({
           inputMode="decimal"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          className="w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:bg-surface"
+          className="w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:bg-surface"
         />
       </label>
 

@@ -143,7 +143,7 @@ export default function ClientDetail({ id }: { id: string }) {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Link
           href="/clients"
-          className="flex items-center gap-1.5 rounded-full border border-line/70 bg-surface/85 px-4 py-2 text-sm text-mute shadow-card backdrop-blur-xl hover:text-ink"
+          className="flex items-center gap-1.5 rounded-full border border-line/70 bg-surface px-4 py-2 text-sm text-mute shadow-card hover:text-ink"
         >
           <ArrowLeft size={15} aria-hidden /> Все клиенты
         </Link>
@@ -333,7 +333,7 @@ export default function ClientDetail({ id }: { id: string }) {
                     key={`${h.dealId}-${h.n}`}
                     className="flex items-center gap-3 py-2.5"
                   >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-good-soft text-good">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[14px] bg-good-soft text-good">
                       <Wallet size={15} aria-hidden />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -470,7 +470,7 @@ function BlacklistModal({
               Причина (необязательно)
             </span>
             <textarea
-              className="min-h-24 w-full resize-y rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface"
+              className="min-h-24 w-full resize-y rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Например: не платит третий месяц подряд"
@@ -487,13 +487,13 @@ function BlacklistModal({
           <p className="mr-auto text-sm" role="status" aria-live="polite">
             {error ? <span className="text-danger">{error}</span> : saving ? "Сохраняем…" : ""}
           </p>
-          <button type="button" onClick={onClose} className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
             Отмена
           </button>
           <button
             type="submit"
             disabled={saving}
-            className="rounded-[10px] bg-danger px-4 py-2.5 text-sm font-medium text-white shadow-card hover:opacity-90 disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-full bg-danger px-4 py-2.5 text-sm font-medium text-white shadow-card hover:opacity-90 disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Добавить в список
           </button>

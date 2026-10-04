@@ -74,44 +74,41 @@ function useNavItems() {
 const isActive = (href: string, pathname: string) =>
   href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-/** Подпись в полосе меню: видна, только когда полоса раскрыта (наведение или клавиатура). */
-const railLabel =
-  "whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/rail:opacity-100 group-has-[:focus-visible]/rail:opacity-100";
+/** Подсказка с названием раздела — всплывает справа от круглой кнопки меню. */
+const railTip =
+  "pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-ink opacity-0 shadow-pop transition-opacity duration-150 group-hover/item:opacity-100 group-focus-visible/item:opacity-100";
+
+/** Круглая кнопка меню: обводка, у активной — градиент основного цвета с подсветкой. */
+const railCircle = (active: boolean) =>
+  `flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors ${
+    active
+      ? "bg-brand text-on-brand"
+      : "border border-line bg-surface/60 text-ink hover:border-brand/40 hover:text-brand-deep"
+  }`;
 
 /**
- * Десктопное меню — тёмная полоса иконок (как «Dashboards V2»), которая при
- * наведении раскрывается поверх контента и показывает подписи. В узком виде
- * активный пункт — светлая вкладка цвета фона, «врезанная» в полосу
- * (вогнутые скругления — радиальные градиенты в ::before/::after); в
- * раскрытом — светлая плашка внутри панели, потому что край панели тогда
- * лежит уже над контентом, а не над фоном.
+ * Десктопное меню — колонка круглых иконок, как в референсе. Подписи —
+ * всплывающими подсказками при наведении и фокусе с клавиатуры.
  */
 function RailNav({ pathname }: { pathname: string }) {
   const items = useNavItems();
 
   return (
-    <nav className="flex flex-1 flex-col gap-1.5 py-2" aria-label="Основные разделы">
+    <nav className="my-auto flex flex-col items-center gap-2.5 py-4" aria-label="Основные разделы">
       {items.map(({ href, label, icon: Icon }) => {
         const active = isActive(href, pathname);
         return (
           <Link
             key={href}
             href={href}
+            aria-label={label}
             aria-current={active ? "page" : undefined}
-            className={`relative flex h-11 shrink-0 items-center gap-3 text-sm transition-colors ${
-              active
-                ? "ml-3 rounded-l-[16px] bg-canvas pl-2 font-medium text-ink before:pointer-events-none before:absolute before:-top-4 before:right-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_0_0,transparent_15.5px,var(--color-canvas)_16px)] after:pointer-events-none after:absolute after:-bottom-4 after:right-0 after:h-4 after:w-4 after:bg-[radial-gradient(circle_at_0_100%,transparent_15.5px,var(--color-canvas)_16px)] group-hover/rail:mr-3 group-hover/rail:rounded-[16px] group-hover/rail:before:hidden group-hover/rail:after:hidden group-has-[:focus-visible]/rail:mr-3 group-has-[:focus-visible]/rail:rounded-[16px] group-has-[:focus-visible]/rail:before:hidden group-has-[:focus-visible]/rail:after:hidden"
-                : "mx-4 rounded-[14px] px-1 text-rail-mute hover:bg-rail-hover hover:text-rail-fg"
-            }`}
+            className="group/item relative rounded-full"
           >
-            <span
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] ${
-                active ? "bg-brand text-on-brand shadow-card" : ""
-              }`}
-            >
-              <Icon size={18} strokeWidth={1.9} aria-hidden />
+            <span className={`${railCircle(active)} ${active ? "rail-active" : ""}`}>
+              <Icon size={18} strokeWidth={1.7} aria-hidden />
             </span>
-            <span className={railLabel}>{label}</span>
+            <span className={railTip}>{label}</span>
           </Link>
         );
       })}
@@ -160,11 +157,11 @@ function MobileTabBar({ pathname, onMore }: { pathname: string; onMore: () => vo
   const moreActive = !tabs.some((t) => isActive(t.href, pathname));
 
   const cell =
-    "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-[16px] py-1.5 text-[11px] font-medium transition-colors";
+    "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-full py-1 text-[11px] font-medium transition-colors";
   return (
     <nav
       aria-label="Быстрые разделы"
-      className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 flex gap-1 rounded-[24px] bg-rail p-1.5 shadow-pop lg:hidden print:hidden"
+      className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 flex gap-1 rounded-full bg-surface p-1.5 shadow-pop lg:hidden print:hidden"
     >
       {tabs.map(({ href, label, icon: Icon }) => {
         const active = isActive(href, pathname);
@@ -173,11 +170,11 @@ function MobileTabBar({ pathname, onMore }: { pathname: string; onMore: () => vo
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
-            className={`${cell} ${active ? "bg-canvas text-ink" : "text-rail-mute hover:text-rail-fg"}`}
+            className={`${cell} ${active ? "text-ink" : "text-mute hover:text-ink"}`}
           >
             <span
-              className={`flex h-7 w-7 items-center justify-center rounded-full ${
-                active ? "bg-brand text-on-brand" : ""
+              className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                active ? "rail-active bg-brand text-on-brand" : ""
               }`}
             >
               <Icon size={17} aria-hidden />
@@ -188,7 +185,7 @@ function MobileTabBar({ pathname, onMore }: { pathname: string; onMore: () => vo
       })}
       <button
         onClick={onMore}
-        className={`${cell} ${moreActive ? "bg-canvas text-ink" : "text-rail-mute hover:text-rail-fg"}`}
+        className={`${cell} ${moreActive ? "text-ink" : "text-mute hover:text-ink"}`}
       >
         <span className="flex h-7 w-7 items-center justify-center rounded-full">
           <MoreHorizontal size={17} aria-hidden />
@@ -225,43 +222,27 @@ function useSignOut() {
   return { busy, signOut };
 }
 
-/** Низ тёмной полосы: тема, выход, аватар — с подписями в раскрытом виде. */
+/** Низ колонки меню: тема и выход — такие же круглые кнопки. */
 function RailFooter() {
-  const { user } = useData();
   const { busy, signOut } = useSignOut();
 
   return (
-    <div className="flex flex-col gap-1 px-4 pt-2 pb-4">
-      {/* Иконки подвала — в тех же 36px-ячейках, что и пункты меню, чтобы
-          иконки и подписи стояли на одной линии с разделами */}
-      <div className="flex items-center gap-3 px-1 text-sm text-rail-mute">
-        <span className="flex w-9 shrink-0 justify-center">
-          <ThemeToggle className="text-rail-mute hover:bg-rail-hover hover:text-rail-fg" />
-        </span>
-        <span className={railLabel} aria-hidden>
-          Тема оформления
-        </span>
-      </div>
+    <div className="flex flex-col items-center gap-2.5 pt-2 pb-6">
+      <span className="group/item relative">
+        <ThemeToggle className={`${railCircle(false)} p-0`} />
+        <span className={railTip}>Тема оформления</span>
+      </span>
       <button
         onClick={signOut}
         disabled={busy}
         aria-label="Выйти из аккаунта"
-        className="flex h-10 items-center gap-3 rounded-[14px] px-1 text-sm text-rail-mute transition-colors hover:bg-rail-hover hover:text-danger disabled:opacity-50"
+        className="group/item relative rounded-full disabled:opacity-50"
       >
-        <span className="flex w-9 shrink-0 justify-center">
+        <span className={`${railCircle(false)} hover:text-danger`}>
           <LogOut size={17} aria-hidden />
         </span>
-        <span className={railLabel}>Выйти</span>
+        <span className={railTip}>Выйти</span>
       </button>
-      <div className="mt-1 flex items-center gap-3 pl-0.5">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-canvas text-xs font-semibold text-ink">
-          {user.initials}
-        </span>
-        <span className={`min-w-0 ${railLabel}`}>
-          <span className="block truncate text-sm font-medium text-rail-fg">{user.name}</span>
-          <span className="block truncate text-xs text-rail-mute">{user.email}</span>
-        </span>
-      </div>
     </div>
   );
 }
@@ -285,7 +266,7 @@ function DrawerFooter() {
         disabled={busy}
         title="Выйти"
         aria-label="Выйти из аккаунта"
-        className="shrink-0 rounded-[10px] p-2 text-mute transition-colors hover:bg-canvas hover:text-danger disabled:opacity-50"
+        className="shrink-0 rounded-full p-2 text-mute transition-colors hover:bg-canvas hover:text-danger disabled:opacity-50"
       >
         <LogOut size={17} aria-hidden />
       </button>
@@ -326,14 +307,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             поверх контента (контент не сдвигается). Небольшая задержка на
             раскрытие — чтобы меню не «выпрыгивало», когда курсор просто
             пересекает полосу. С клавиатуры раскрывается по Tab. */}
-        <aside className="group/rail fixed inset-y-3 left-3 z-40 hidden w-[76px] flex-col overflow-hidden rounded-[28px] bg-rail shadow-pop transition-[width] delay-0 duration-200 ease-out hover:w-60 hover:delay-150 has-[:focus-visible]:w-60 lg:flex [@media(max-height:760px)]:overflow-y-auto">
+        <aside className="fixed inset-y-0 left-0 z-40 hidden w-[92px] flex-col items-center lg:flex [@media(max-height:820px)]:overflow-y-auto">
           <Link
             href="/"
             aria-label={`${brandName} — на главную`}
-            className="mx-4 mt-5 mb-4 flex h-11 shrink-0 items-center gap-3 rounded-full"
+            className="mt-6 flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
           >
-            <BrandMark tone="canvas" className="h-11 w-11 rounded-full" />
-            <span className={`truncate text-lg font-semibold tracking-tight text-rail-fg ${railLabel}`}>{brandName}</span>
+            <BrandMark className="h-12 w-12 rounded-full" />
           </Link>
           <RailNav pathname={pathname} />
           <RailFooter />
@@ -350,13 +330,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-surface shadow-pop">
               <div className="flex items-center justify-between px-5 py-4">
                 <div className="flex items-center gap-2.5">
-                  <BrandMark className="h-8 w-8 rounded-[10px]" iconSize={16} />
+                  <BrandMark className="h-8 w-8 rounded-[14px]" iconSize={16} />
                   <span className="truncate font-semibold">{brandName}</span>
                 </div>
                 <button
                   onClick={() => setOpen(false)}
                   aria-label="Закрыть"
-                  className="rounded-[10px] p-2 text-mute hover:bg-canvas"
+                  className="rounded-full p-2 text-mute hover:bg-canvas"
                 >
                   <X size={18} />
                 </button>
@@ -367,13 +347,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <div className="flex min-w-0 flex-1 flex-col lg:pl-[88px]">
+        <div className="flex min-w-0 flex-1 flex-col lg:pl-[92px]">
           {/* Мобильная шапка */}
-          <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-line/70 bg-surface/80 px-4 py-3 backdrop-blur-xl lg:hidden">
+          <header className="sticky top-0 z-20 flex items-center gap-3 bg-canvas/90 px-4 py-3 backdrop-blur lg:hidden">
             <button
               onClick={() => setOpen(true)}
               aria-label="Открыть меню"
-              className="rounded-[10px] p-2 text-ink hover:bg-canvas"
+              className="rounded-full p-2 text-ink hover:bg-canvas"
             >
               <Menu size={20} />
             </button>

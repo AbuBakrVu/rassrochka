@@ -87,7 +87,7 @@ export default function CollectionsPage() {
         </div>
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <div className="inline-flex gap-1 rounded-full border border-line/70 bg-surface/80 p-1 shadow-card" role="tablist">
+          <div className="inline-flex gap-1 rounded-full border border-line/70 bg-surface p-1 shadow-card" role="tablist">
             {(
               [
                 ["today", "На сегодня"],

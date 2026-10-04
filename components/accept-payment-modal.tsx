@@ -26,7 +26,7 @@ const money = (n: number) =>
   new Intl.NumberFormat("ru-RU").format(Math.round(n)) + " ₽";
 
 const input =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 const methods = [
   { key: "cash", label: "Наличные", icon: Banknote },
@@ -45,12 +45,15 @@ const digits = (s: string) => s.replace(/\D/g, "");
 
 export default function AcceptPaymentModal({
   onClose,
+  initialDealId,
 }: {
   onClose: () => void;
+  /** Сделка уже выбрана — например, из «Ближайших оплат» на главной. */
+  initialDealId?: string;
 }) {
   const { deals, clients, paidPayments, acceptPayment, cash } = useData();
   const [query, setQuery] = useState("");
-  const [deal, setDeal] = useState<Deal | null>(null);
+  const [deal, setDeal] = useState<Deal | null>(() => deals.find((d) => d.id === initialDealId) ?? null);
   const [amountInput, setAmountInput] = useState("");
   const [method, setMethod] =
     useState<(typeof methods)[number]["key"]>("cash");
@@ -117,6 +120,14 @@ export default function AcceptPaymentModal({
         remaining: deal.amount,
       })
     : null;
+
+  // Сделка пришла готовой — подставляем сумму ближайшего взноса один раз,
+  // во время отрисовки (без эффекта, который дописывал бы состояние позже)
+  const [prefilled, setPrefilled] = useState(!initialDealId);
+  if (!prefilled && selected) {
+    setPrefilled(true);
+    setAmountInput(String(Math.round(selected.nextAmount)));
+  }
 
   const pick = (d: Deal) => {
     setDeal(d);
@@ -213,7 +224,7 @@ export default function AcceptPaymentModal({
               <button
                 onClick={() => setDeal(null)}
                 aria-label="Назад к поиску"
-                className="rounded-[10px] p-1.5 text-mute hover:bg-canvas hover:text-ink"
+                className="rounded-[16px] p-1.5 text-mute hover:bg-canvas hover:text-ink"
               >
                 <ArrowLeft size={17} />
               </button>
@@ -235,7 +246,7 @@ export default function AcceptPaymentModal({
           <button
             onClick={onClose}
             aria-label="Закрыть"
-            className="rounded-[10px] p-2 text-mute hover:bg-canvas hover:text-ink"
+            className="rounded-full p-2 text-mute hover:bg-canvas hover:text-ink"
           >
             <X size={18} />
           </button>
@@ -316,7 +327,7 @@ export default function AcceptPaymentModal({
           /* Шаг 2 — платёж */
           <form onSubmit={submit} className="flex min-h-0 flex-col">
             <div className="flex flex-col gap-5 overflow-y-auto px-6 py-5">
-              <div className="flex items-center gap-3 rounded-[12px] bg-canvas px-4 py-3">
+              <div className="flex items-center gap-3 rounded-[16px] bg-canvas px-4 py-3">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-semibold text-on-brand">
                   {initials(selected!.deal.client)}
                 </span>
@@ -385,7 +396,7 @@ export default function AcceptPaymentModal({
                       type="button"
                       onClick={() => setMethod(key)}
                       aria-pressed={method === key}
-                      className={`flex items-center justify-center gap-2 rounded-[10px] border px-3 py-2.5 text-sm transition-colors ${
+                      className={`flex items-center justify-center gap-2 rounded-full border px-3 py-2.5 text-sm transition-colors ${
                         method === key
                           ? "border-brand bg-brand-soft font-medium text-brand-deep"
                           : "border-line bg-canvas text-mute hover:text-ink"
@@ -414,7 +425,7 @@ export default function AcceptPaymentModal({
                 />
               </label>
 
-              <div className="flex items-center gap-2.5 rounded-[12px] bg-brand-soft px-4 py-3 text-sm">
+              <div className="flex items-center gap-2.5 rounded-[16px] bg-brand-soft px-4 py-3 text-sm">
                 <CalendarDays
                   size={16}
                   className="shrink-0 text-brand"
@@ -446,7 +457,7 @@ export default function AcceptPaymentModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
+                className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
               >
                 {saved ? "Готово" : "Отмена"}
               </button>
@@ -455,7 +466,7 @@ export default function AcceptPaymentModal({
                   type="button"
                   onClick={sendReceipt}
                   disabled={newPayments.length === 0 || !payer}
-                  className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+                  className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
                 >
                   <ReceiptText size={15} aria-hidden />
                   Отправить квитанцию
@@ -464,7 +475,7 @@ export default function AcceptPaymentModal({
                 <button
                   type="submit"
                   disabled={!ready}
-                  className="flex items-center gap-1.5 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+                  className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
                 >
                   <Check size={15} aria-hidden />
                   Принять платёж

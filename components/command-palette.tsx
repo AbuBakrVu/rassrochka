@@ -133,7 +133,7 @@ export default function CommandPalette() {
                     <button
                       key={c.id}
                       onClick={() => go(`/clients/${c.id}`)}
-                      className="flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left hover:bg-canvas"
+                      className="flex w-full items-center gap-3 rounded-[14px] px-2.5 py-2 text-left hover:bg-canvas"
                     >
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-deep">
                         {initials(c.name)}
@@ -165,9 +165,9 @@ export default function CommandPalette() {
                     <button
                       key={d.id}
                       onClick={() => go(`/deals/${d.id}`)}
-                      className="flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left hover:bg-canvas"
+                      className="flex w-full items-center gap-3 rounded-[14px] px-2.5 py-2 text-left hover:bg-canvas"
                     >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-brand-soft text-brand">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[14px] bg-brand-soft text-brand">
                         <Package size={14} aria-hidden />
                       </span>
                       <span className="min-w-0 flex-1">

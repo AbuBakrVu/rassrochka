@@ -139,7 +139,7 @@ export default function ApplyForm({
       <form onSubmit={submit} className="mx-auto flex max-w-md flex-col gap-4 px-4 py-6">
         {!embedded && (
           <header className="flex items-center gap-2.5">
-            <BrandMark className="h-10 w-10 rounded-[12px]" iconSize={17} />
+            <BrandMark className="h-10 w-10 rounded-[16px]" iconSize={17} />
             <div>
               <p className="text-sm font-semibold tracking-tight">{brandName}</p>
               <p className="text-xs text-mute">Покупка в рассрочку</p>

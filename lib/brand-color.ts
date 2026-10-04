@@ -4,16 +4,16 @@
 // тёмный, смотря что читается лучше.
 //
 // Без серверных зависимостей: тот же расчёт и в корневом layout (стиль
-// приходит в первом HTML, страница не мигает бирюзовым), и в браузере —
+// приходит в первом HTML, страница не мигает стандартным цветом), и в браузере —
 // для предпросмотра в настройках и применения сразу после сохранения.
 
 /** Стандартный цвет темы — как --primary в app/globals.css. Только для образцов и сравнения. */
-export const DEFAULT_BRAND = "#075e54";
+export const DEFAULT_BRAND = "#5b6cf0";
 
 export const BRAND_PRESETS: { name: string; hex: string }[] = [
-  { name: "Бирюзовый (по умолчанию)", hex: DEFAULT_BRAND },
+  { name: "Лавандовый (по умолчанию)", hex: DEFAULT_BRAND },
   { name: "Синий", hex: "#1D5FD6" },
-  { name: "Индиго", hex: "#4F46E5" },
+  { name: "Бирюзовый", hex: "#075E54" },
   { name: "Фиолетовый", hex: "#7C3AED" },
   { name: "Изумрудный", hex: "#047857" },
   { name: "Оранжевый", hex: "#D9480F" },
@@ -75,6 +75,8 @@ export function brandWarning(hex: string): string | null {
 
 export interface BrandShades {
   brand: string;
+  /** Верх градиента главной кнопки — светлее основного. */
+  hi: string;
   onBrand: string;
   deep: string;
   soft: string;
@@ -87,6 +89,7 @@ export function lightShades(hex: string): BrandShades {
   const soft = mix(hex, "#ffffff", 0.88);
   return {
     brand: hex,
+    hi: mix(hex, "#ffffff", 0.28),
     onBrand: textOn(hex),
     deep: mix(hex, "#000000", l > 0.3 ? 0.35 : 0.22),
     soft,
@@ -128,13 +131,14 @@ function fromHsl(h: number, s: number, l: number): string {
  */
 export function darkShades(hex: string): BrandShades {
   // Стандартный цвет: как --primary тёмной темы в globals.css
-  let brand = hex.toLowerCase() === DEFAULT_BRAND ? "#00a884" : hex;
+  let brand = hex.toLowerCase() === DEFAULT_BRAND ? "#8592f7" : hex;
   const [h, sat, light] = toHsl(brand);
   for (let l = light; luminance(brand) < 0.25 && l < 0.8; l += 0.02) {
     brand = fromHsl(h, Math.min(1, sat * 1.05), l);
   }
   return {
     brand,
+    hi: mix(brand, "#ffffff", 0.18),
     onBrand: textOn(brand),
     deep: mix(brand, "#ffffff", 0.22),
     soft: mix(brand, "#1a252c", 0.78),
@@ -159,10 +163,12 @@ export function brandCss(color: string | null | undefined): string {
       `--primary:${s.brand}`,
       `--primary-foreground:${s.onBrand}`,
       `--primary-deep:${s.deep}`,
+      `--primary-hi:${s.hi}`,
+      `--glow:${s.brand}73`,
+      `--chart-1:${s.brand}`,
       `--secondary:${s.soft}`,
       `--secondary-foreground:${s.onSoft}`,
       `--ring:${s.brand}`,
-      `--chart-2:${s.brand}`,
       `--sidebar-primary:${s.brand}`,
       `--sidebar-primary-foreground:${s.onBrand}`,
       `--sidebar-accent:${s.soft}`,

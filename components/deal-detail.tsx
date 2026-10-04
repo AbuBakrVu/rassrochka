@@ -244,7 +244,7 @@ export default function DealDetail({ id }: { id: string }) {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Link
           href="/deals"
-          className="flex items-center gap-1.5 rounded-full border border-line/70 bg-surface/85 px-4 py-2 text-sm text-mute shadow-card backdrop-blur-xl hover:text-ink"
+          className="flex items-center gap-1.5 rounded-full border border-line/70 bg-surface px-4 py-2 text-sm text-mute shadow-card hover:text-ink"
         >
           <ArrowLeft size={15} aria-hidden /> Все сделки
         </Link>
@@ -664,7 +664,7 @@ export default function DealDetail({ id }: { id: string }) {
                           <button
                             onClick={() => sendReceipt(p.n)}
                             title="Отправить клиенту квитанцию об этом платеже в WhatsApp"
-                            className="mr-2 inline-flex items-center gap-1 rounded-[10px] border border-line px-2.5 py-1.5 text-xs font-medium text-mute hover:border-brand hover:text-brand-deep"
+                            className="mr-2 inline-flex items-center gap-1 rounded-[14px] border border-line px-2.5 py-1.5 text-xs font-medium text-mute hover:border-brand hover:text-brand-deep"
                           >
                             <ReceiptText size={13} aria-hidden /> Квитанция
                           </button>
@@ -672,7 +672,7 @@ export default function DealDetail({ id }: { id: string }) {
                         {active && p.status !== "paid" && p.n === paid + 1 && (
                           <button
                             onClick={() => acceptPayment(deal.id)}
-                            className="rounded-[10px] bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep hover:bg-brand hover:text-on-brand"
+                            className="rounded-full bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep hover:bg-brand hover:text-on-brand"
                           >
                             Отметить оплату
                           </button>
@@ -682,7 +682,7 @@ export default function DealDetail({ id }: { id: string }) {
                             onClick={undoPayment}
                             disabled={undoing}
                             title="Отменить этот платёж — например, если приняли по ошибке"
-                            className="rounded-[10px] border border-line px-3 py-1.5 text-xs font-medium text-mute hover:border-danger/40 hover:text-danger disabled:opacity-50"
+                            className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-mute hover:border-danger/40 hover:text-danger disabled:opacity-50"
                           >
                             Отменить
                           </button>
@@ -747,7 +747,7 @@ export default function DealDetail({ id }: { id: string }) {
                           reminderTemplateId: value,
                         });
                       }}
-                      className="w-full rounded-[8px] border border-line bg-canvas px-2.5 py-1.5 text-xs outline-none focus:border-brand"
+                      className="w-full rounded-[12px] border border-line bg-canvas px-2.5 py-1.5 text-xs outline-none focus:border-brand"
                     >
                       <option value="">Общий по умолчанию</option>
                       {templates.map((t) => (
@@ -828,7 +828,7 @@ export default function DealDetail({ id }: { id: string }) {
                   <li key={g.id}>
                     <Link
                       href={`/clients/${g.id}`}
-                      className="flex items-center justify-between rounded-[10px] px-2 py-1.5 text-sm hover:bg-canvas"
+                      className="flex items-center justify-between rounded-[14px] px-2 py-1.5 text-sm hover:bg-canvas"
                     >
                       <span>{g.name}</span>
                       {i === 0 && (
@@ -877,7 +877,7 @@ export default function DealDetail({ id }: { id: string }) {
                           setReassigning(false);
                         }
                       }}
-                      className="rounded-[8px] border border-line bg-canvas px-2 py-1 text-sm outline-none focus:border-brand"
+                      className="rounded-[10px] border border-line bg-canvas px-2 py-1 text-sm outline-none focus:border-brand"
                     >
                       {!deal.managerId && <option value="">Не назначен</option>}
                       {employees.filter((e) => e.active).map((e) => (
@@ -911,7 +911,7 @@ export default function DealDetail({ id }: { id: string }) {
               ].map(({ icon: Icon, title, text, mode }) => (
                 <li
                   key={title}
-                  className="flex items-center gap-3 rounded-[10px] border border-line px-3.5 py-2.5"
+                  className="flex items-center gap-3 rounded-full border border-line px-3.5 py-2.5"
                 >
                   <Icon size={17} className="shrink-0 text-brand" aria-hidden />
                   <div className="min-w-0 flex-1">
@@ -970,7 +970,7 @@ export default function DealDetail({ id }: { id: string }) {
           <button
             onClick={removeDeal}
             disabled={deleting}
-            className="rounded-[10px] border border-danger/40 px-4 py-2.5 text-sm font-medium text-danger hover:bg-danger hover:text-white disabled:opacity-50"
+            className="rounded-full border border-danger/40 px-4 py-2.5 text-sm font-medium text-danger hover:bg-danger hover:text-white disabled:opacity-50"
           >
             Удалить сделку
           </button>
@@ -1061,7 +1061,7 @@ export default function DealDetail({ id }: { id: string }) {
 }
 
 const editField =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 function EditDealModal({
   deal,
@@ -1206,13 +1206,13 @@ function EditDealModal({
           <p className="mr-auto text-sm" role="status" aria-live="polite">
             {error ? <span className="text-danger">{error}</span> : saving ? "Сохраняем…" : ""}
           </p>
-          <button type="button" onClick={onClose} className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
             Отмена
           </button>
           <button
             type="submit"
             disabled={!ready || saving}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Сохранить
           </button>
@@ -1297,7 +1297,7 @@ function RejectModal({
               onChange={(e) => setOther(e.target.value)}
               maxLength={200}
               placeholder="Опишите причину"
-              className="mt-1 w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:bg-surface"
+              className="mt-1 w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:bg-surface"
             />
           )}
         </fieldset>
@@ -1436,7 +1436,7 @@ function HolidayModal({
                 onChange={(e) => setOther(e.target.value)}
                 maxLength={200}
                 placeholder="Опишите причину"
-                className="mt-1 w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:bg-surface"
+                className="mt-1 w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:bg-surface"
               />
             )}
           </fieldset>

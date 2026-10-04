@@ -13,7 +13,7 @@ import { addMonthsIso, money } from "@/lib/schedule";
 const OUTCOMES: ContactOutcome[] = ["promise", "callback", "no_answer", "refused", "paid", "other"];
 
 const field =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:bg-surface";
 
 const addDays = (iso: string, n: number) => {
   const [y, m, d] = iso.split("-").map(Number);
@@ -103,7 +103,7 @@ export default function ContactModal({
                 type="button"
                 onClick={() => setOutcome(o)}
                 aria-pressed={outcome === o}
-                className={`rounded-[12px] border px-3 py-2.5 text-left text-sm ${
+                className={`rounded-full border px-3 py-2.5 text-left text-sm ${
                   outcome === o ? "border-brand bg-brand-soft font-medium text-brand-deep" : "border-line text-mute hover:text-ink"
                 }`}
               >

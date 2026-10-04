@@ -233,12 +233,12 @@ export default function BrandingSettings() {
                   }
                 }}
                 aria-label="Код цвета, например #1D5FD6"
-                className="w-28 rounded-[10px] border border-line bg-canvas px-3 py-2 text-sm text-ink uppercase outline-none focus:border-brand focus:bg-surface"
+                className="w-28 rounded-[14px] border border-line bg-canvas px-3 py-2 text-sm text-ink uppercase outline-none focus:border-brand focus:bg-surface"
               />
             </label>
           </div>
           {warning && (
-            <p className="mt-3 rounded-[12px] bg-warn-soft px-3.5 py-2.5 text-sm text-ink">{warning}</p>
+            <p className="mt-3 rounded-[16px] bg-warn-soft px-3.5 py-2.5 text-sm text-ink">{warning}</p>
           )}
         </Step>
 

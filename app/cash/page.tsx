@@ -94,7 +94,7 @@ const filters = [
 ] as const satisfies { key: string; label: string; kinds: readonly CashKind[] | null }[];
 
 const input =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 function AdjustmentModal({ onClose }: { onClose: () => void }) {
   const { addCashAdjustment } = useData();
@@ -146,7 +146,7 @@ function AdjustmentModal({ onClose }: { onClose: () => void }) {
             type="button"
             onClick={onClose}
             aria-label="Закрыть"
-            className="rounded-[10px] p-2 text-mute hover:bg-canvas hover:text-ink"
+            className="rounded-full p-2 text-mute hover:bg-canvas hover:text-ink"
           >
             <X size={18} />
           </button>
@@ -165,7 +165,7 @@ function AdjustmentModal({ onClose }: { onClose: () => void }) {
                 type="button"
                 onClick={() => setDirection(key)}
                 aria-pressed={direction === key}
-                className={`flex items-center justify-center gap-2 rounded-[10px] border px-3 py-2.5 text-sm transition-colors ${
+                className={`flex items-center justify-center gap-2 rounded-full border px-3 py-2.5 text-sm transition-colors ${
                   direction === key
                     ? "border-brand bg-brand-soft font-medium text-brand-deep"
                     : "border-line bg-canvas text-mute hover:text-ink"
@@ -222,14 +222,14 @@ function AdjustmentModal({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-[10px] border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
+            className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
           >
             Отмена
           </button>
           <button
             type="submit"
             disabled={!ready}
-            className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+            className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Провести
           </button>
@@ -341,7 +341,7 @@ export default function CashPage() {
             <Card key={label} className="p-5">
               <div className="flex items-start justify-between">
                 <p className="text-sm text-mute">{label}</p>
-                <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-brand-soft text-brand">
+                <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-brand-soft text-brand">
                   <Icon size={17} aria-hidden />
                 </span>
               </div>
@@ -442,7 +442,7 @@ export default function CashPage() {
                 key={f.key}
                 onClick={() => setFilter(f.key)}
                 aria-pressed={filter === f.key}
-                className={`rounded-[10px] px-3.5 py-2 text-sm transition-colors ${
+                className={`rounded-full px-3.5 py-2 text-sm transition-colors ${
                   filter === f.key
                     ? "bg-brand font-medium text-on-brand"
                     : "border border-line bg-surface text-mute hover:text-ink"
@@ -457,7 +457,7 @@ export default function CashPage() {
               onClick={exportCsv}
               disabled={list.length === 0}
               title="Выгрузить видимый список в CSV"
-              className="flex items-center gap-1.5 rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-sm text-mute transition-colors hover:border-brand/40 hover:text-ink disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-2.5 text-sm text-mute transition-colors hover:border-brand/40 hover:text-ink disabled:opacity-50"
             >
               <Download size={15} aria-hidden />
               Экспорт
@@ -465,7 +465,7 @@ export default function CashPage() {
             {canAdjust && (
               <button
                 onClick={() => setModal(true)}
-                className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
+                className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
               >
                 + Движение по кассе
               </button>
@@ -481,7 +481,7 @@ export default function CashPage() {
               value={from}
               max={to || undefined}
               onChange={(e) => setFrom(e.target.value)}
-              className="rounded-[10px] border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
+              className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
             />
           </label>
           <label className="flex items-center gap-2 text-sm text-mute">
@@ -491,7 +491,7 @@ export default function CashPage() {
               value={to}
               min={from || undefined}
               onChange={(e) => setTo(e.target.value)}
-              className="rounded-[10px] border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
+              className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
             />
           </label>
           {(from || to) && (
@@ -527,7 +527,7 @@ export default function CashPage() {
                 const row = (
                   <>
                     <span
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${meta.bg} ${meta.text}`}
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] ${meta.bg} ${meta.text}`}
                     >
                       <meta.icon size={16} aria-hidden />
                     </span>

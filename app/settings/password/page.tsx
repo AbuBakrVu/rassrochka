@@ -7,7 +7,7 @@ import { PageHeader, Card } from "@/components/ui";
 import { useData } from "@/lib/store";
 
 const field =
-  "w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
+  "w-full rounded-[14px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-brand focus:bg-surface";
 
 export default function PasswordPage() {
   const { user, refresh } = useData();
@@ -102,7 +102,7 @@ export default function PasswordPage() {
             <button
               type="submit"
               disabled={!ready || busy || done}
-              className="mt-1 rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+              className="mt-1 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
             >
               {done ? "Пароль изменён" : busy ? "Сохраняем…" : "Сменить пароль"}
             </button>
