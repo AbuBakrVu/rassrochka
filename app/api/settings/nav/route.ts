@@ -11,6 +11,7 @@ const HIDEABLE = [
   "/deals",
   "/clients",
   "/payments",
+  "/collections",
   "/mailings",
   "/coinvestors",
   "/cash",

@@ -20,6 +20,7 @@ import {
   LogOut,
   ShieldAlert,
   ScrollText,
+  PhoneCall,
   Search,
   MoreHorizontal,
 } from "lucide-react";
@@ -40,6 +41,7 @@ export const nav: {
   { href: "/deals", label: "Сделки", icon: KanbanSquare },
   { href: "/clients", label: "Клиенты", icon: Users },
   { href: "/payments", label: "Платежи", icon: CalendarDays },
+  { href: "/collections", label: "Просрочки", icon: PhoneCall },
   { href: "/mailings", label: "Рассылки", icon: Send },
   { href: "/coinvestors", label: "Соинвесторы", icon: Handshake, adminOnly: true },
   { href: "/cash", label: "Финансы", icon: Wallet },

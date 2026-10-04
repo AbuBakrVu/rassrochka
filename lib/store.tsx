@@ -19,6 +19,7 @@ import {
 } from "react";
 import type { Deal, Client, ReminderStage } from "./data";
 import type { DealEvent } from "./events";
+import type { ContactLog, ContactOutcome } from "./collections";
 
 export interface CurrentUser {
   id: number;
@@ -135,6 +136,8 @@ interface Snapshot {
   coinvestorProfitTx: CoinvestorProfitTx[];
   templates: MessageTemplate[];
   savedFilters: SavedFilter[];
+  /** Журнал звонков по просрочкам (страница «Просрочки»). */
+  contacts: ContactLog[];
   cashOpeningBalance: number;
   hiddenNavItems: string[];
   /** Базовый лимит клиента без истории; 0 — автоматические лимиты выключены. */
@@ -154,6 +157,7 @@ const EMPTY: Snapshot = {
   coinvestorProfitTx: [],
   templates: [],
   savedFilters: [],
+  contacts: [],
   cashOpeningBalance: 0,
   hiddenNavItems: [],
   clientDefaultLimit: 0,
@@ -282,6 +286,10 @@ interface DataContextValue extends Snapshot {
   closeDeal: (dealId: string) => Promise<Deal>;
   rejectDeal: (dealId: string, reason: string) => Promise<Deal>;
   holidayDeal: (dealId: string, months: number, reason: string) => Promise<Deal>;
+  addContact: (
+    dealId: string,
+    input: { outcome: ContactOutcome; dueDate?: string; amount?: number; note?: string }
+  ) => Promise<void>;
   deleteDeal: (dealId: string) => Promise<void>;
   addEmployee: (input: NewEmployeeInput) => Promise<{ password: string }>;
   updateEmployee: (id: number, input: UpdateEmployeeInput) => Promise<void>;
@@ -394,6 +402,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       coinvestorProfitTx: data.coinvestorProfitTx,
       templates: data.templates,
       savedFilters: data.savedFilters,
+      contacts: data.contacts ?? [],
       cashOpeningBalance: data.settings.cashOpeningBalance,
       hiddenNavItems: data.settings.hiddenNavItems,
       clientDefaultLimit: data.settings.clientDefaultLimit ?? 0,
@@ -515,6 +524,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const deal = await api<Deal>(`/api/deals/${encodeURIComponent(dealId)}/holiday`, { months, reason });
       await load();
       return deal;
+    },
+    [load]
+  );
+
+  const addContact = useCallback(
+    async (
+      dealId: string,
+      input: { outcome: ContactOutcome; dueDate?: string; amount?: number; note?: string }
+    ) => {
+      await api(`/api/deals/${encodeURIComponent(dealId)}/contacts`, input);
+      await load();
     },
     [load]
   );
@@ -782,6 +802,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       closeDeal,
       rejectDeal,
       holidayDeal,
+      addContact,
       deleteDeal,
       addClient,
       setClientBlacklisted,
@@ -813,7 +834,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       logout,
       refresh,
     }),
-    [state, addDeal, updateDeal, restructureDeal, reassignDeal, setDealStage, closeDeal, rejectDeal, holidayDeal, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
+    [state, addDeal, updateDeal, restructureDeal, reassignDeal, setDealStage, closeDeal, rejectDeal, holidayDeal, addContact, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
      addCoinvestor, updateCoinvestor, setCoinvestorActive, deleteCoinvestor,
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,

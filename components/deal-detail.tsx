@@ -34,14 +34,17 @@ import DealPrint, { type PrintMode } from "@/components/deal-print";
 import { paymentTitle, receiptMessage, receiptPath } from "@/lib/receipts";
 import { computeProfit } from "@/lib/profit";
 import PayoffCalculator from "@/components/payoff-calculator";
+import ContactModal from "@/components/contact-modal";
+import { OUTCOME_LABEL } from "@/lib/collections";
 
 export default function DealDetail({ id }: { id: string }) {
   const {
-    deals, clients, paidPayments, events, templates, employees, user, cash,
+    deals, clients, paidPayments, events, templates, employees, user, cash, contacts,
     acceptPayment, undoLastPayment, sendReminder, updateDeal, restructureDeal,
     closeDeal, reassignDeal, deleteDeal, setDealStage, rejectDeal, holidayDeal,
   } = useData();
   const [holidayOpen, setHolidayOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   const [calcOpen, setCalcOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [issuing, setIssuing] = useState(false);
@@ -150,6 +153,10 @@ export default function DealDetail({ id }: { id: string }) {
       "noopener,noreferrer"
     );
   };
+
+  const dealContacts = contacts
+    .filter((c) => c.dealId === deal.id)
+    .sort((a, b) => b.at.localeCompare(a.at));
 
   const history = dealEvents(events, deal.id).map((e) => ({
     date: longDate(new Date(e.date)),
@@ -758,6 +765,43 @@ export default function DealDetail({ id }: { id: string }) {
             )}
           </Card>
 
+          {(dealContacts.length > 0 || deal.statusTone === "red") && (
+            <Card className="p-5">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="font-semibold">Звонки по просрочке</h2>
+                {active && (
+                  <button
+                    type="button"
+                    onClick={() => setContactOpen(true)}
+                    className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-brand hover:border-brand"
+                  >
+                    Записать звонок
+                  </button>
+                )}
+              </div>
+              {dealContacts.length === 0 ? (
+                <p className="text-sm text-mute">Звонков ещё не было.</p>
+              ) : (
+                <ol className="flex flex-col gap-2.5">
+                  {dealContacts.slice(0, 5).map((c) => (
+                    <li key={c.id} className="text-sm">
+                      <p className="font-medium">
+                        {OUTCOME_LABEL[c.outcome]}
+                        {c.dueDate && ` · ${longDate(new Date(`${c.dueDate}T00:00:00`))}`}
+                        {c.amount && ` · ${money(c.amount)}`}
+                      </p>
+                      <p className="text-xs text-mute">
+                        {longDate(new Date(c.at))}
+                        {c.userId && ` · ${employees.find((e) => e.id === c.userId)?.name ?? ""}`}
+                        {c.note && ` — ${c.note}`}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </Card>
+          )}
+
           <Card className="p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold">Поручители</h2>
@@ -935,6 +979,16 @@ export default function DealDetail({ id }: { id: string }) {
           />,
           document.body
         )}
+
+      {contactOpen && (
+        <ContactModal
+          dealId={deal.id}
+          clientName={deal.client}
+          phone={client?.phone}
+          overdueSum={schedule.filter((p) => p.status === "due" && p.iso < today).reduce((s, p) => s + p.amount, 0)}
+          onClose={() => setContactOpen(false)}
+        />
+      )}
 
       {calcOpen && (
         <SimpleModal title="Досрочное погашение" subtitle={`${deal.client} · ${deal.id}`} onClose={() => setCalcOpen(false)}>

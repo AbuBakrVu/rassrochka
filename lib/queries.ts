@@ -12,6 +12,7 @@ import { query, queryOne, transaction } from "./db";
 import { buildRoute, purchasePrice, stages, type Client, type Deal, type DealStage } from "./data";
 import { addMonthsIso, buildSchedule, monthNames, planOf, restructureOf, splitPlan, type PlanItem } from "./schedule";
 import { allocatePayment, nextDue, stateFromPayments } from "./payments";
+import { OUTCOME_LABEL, type ContactLog, type ContactOutcome } from "./collections";
 import { computeClientStatus, computeDealStatus, isoDate, todayIso } from "./status";
 import type {
   CashTx,
@@ -334,6 +335,7 @@ export interface Bootstrap {
   coinvestorProfitTx: CoinvestorProfitTx[];
   templates: MessageTemplate[];
   savedFilters: SavedFilter[];
+  contacts: ContactLog[];
   settings: { cashOpeningBalance: number; hiddenNavItems: string[]; clientDefaultLimit: number };
 }
 
@@ -412,6 +414,63 @@ function toTemplate(row: TemplateRow): MessageTemplate {
   };
 }
 
+interface ContactRow extends Record<string, unknown> {
+  id: number;
+  deal_id: string;
+  user_id: number | null;
+  outcome: ContactOutcome;
+  due_date: string | null;
+  amount: number | null;
+  note: string | null;
+  created_at: Date;
+}
+
+function toContact(r: ContactRow): ContactLog {
+  return {
+    id: String(r.id),
+    dealId: r.deal_id,
+    outcome: r.outcome,
+    at: r.created_at.toISOString(),
+    ...(r.user_id !== null ? { userId: r.user_id } : {}),
+    ...(r.due_date ? { dueDate: r.due_date } : {}),
+    ...(r.amount !== null ? { amount: Number(r.amount) } : {}),
+    ...(r.note ? { note: r.note } : {}),
+  };
+}
+
+export interface NewContactInput {
+  outcome: ContactOutcome;
+  dueDate?: string;
+  amount?: number;
+  note?: string;
+}
+
+/** Записывает звонок клиенту по сделке и его итог (обещание, перезвон…). */
+export async function addContact(
+  dbName: string,
+  dealId: string,
+  userId: number,
+  input: NewContactInput
+): Promise<ContactLog> {
+  const row = await queryOne<ContactRow>(
+    dbName,
+    `insert into contact_log (deal_id, user_id, outcome, due_date, amount, note)
+     select $1, $2, $3, $4, $5, $6 where exists (select 1 from deals where id = $1 and deleted_at is null)
+     returning *`,
+    [dealId, userId, input.outcome, input.dueDate ?? null, input.amount ?? null, input.note || null]
+  );
+  if (!row) throw new Error(`Сделка ${dealId} не найдена`);
+  await query(dbName, "insert into deal_events (deal_id, text, user_id) values ($1, $2, $3)", [
+    dealId,
+    `Звонок: ${OUTCOME_LABEL[input.outcome].toLowerCase()}` +
+      (input.dueDate ? ` · ${input.dueDate}` : "") +
+      (input.amount ? ` · ${input.amount.toLocaleString("ru-RU")} ₽` : "") +
+      (input.note ? ` — ${input.note}` : ""),
+    userId,
+  ]);
+  return toContact(row);
+}
+
 /** Клиент без персональных данных — для ролей, которым они не нужны по работе. */
 function withoutPersonalData(c: Client): Client {
   return {
@@ -444,7 +503,7 @@ export async function loadBootstrap(
 
   const [
     dealRows, clientRows, cashRows, eventRows, settingRows, userRows,
-    coinvestorRows, capitalRows, profitRows, templateRows, savedFilters,
+    coinvestorRows, capitalRows, profitRows, templateRows, savedFilters, contactRows,
   ] =
     await Promise.all([
       query<DealRow>(dbName, DEALS_SQL),
@@ -472,6 +531,11 @@ export async function loadBootstrap(
       ),
       query<TemplateRow>(dbName, "select * from message_templates order by created_at"),
       listSavedFilters(dbName, currentUser.id),
+      // Журнал звонков до миграции 022 отсутствует — тогда просто пусто
+      query<ContactRow>(
+        dbName,
+        "select * from contact_log order by created_at desc limit 5000"
+      ).catch(() => [] as ContactRow[]),
     ]);
 
   // Данные по ролям. Меню прячет разделы, но в браузер приходит всё, что
@@ -537,6 +601,7 @@ export async function loadBootstrap(
     coinvestorProfitTx,
     templates: templateRows.map(toTemplate),
     savedFilters,
+    contacts: currentUser.role === "accountant" ? [] : contactRows.map(toContact),
     settings: {
       cashOpeningBalance: Number(opening?.value ?? 0),
       hiddenNavItems: Array.isArray(hiddenNav?.value) ? (hiddenNav.value as string[]) : [],
