@@ -19,12 +19,13 @@ import {
   History,
   SearchX,
   ReceiptText,
+  XCircle,
 } from "lucide-react";
 import { Card, Badge, EmptyState, ProgressRing } from "@/components/ui";
 import DealActions from "@/components/deal-actions";
 import { useData, type Employee } from "@/lib/store";
 import { clientById, fmt, stages, paidCount, purchasePrice, ruPlural, type Deal } from "@/lib/data";
-import { scheduleForDeal, money, longDate } from "@/lib/schedule";
+import { scheduleForDeal, paidTotal, money, longDate } from "@/lib/schedule";
 import { dealEvents } from "@/lib/events";
 import { reminderStageFor, pickReminderTemplate, buildReminderText } from "@/lib/reminders";
 import { todayIso } from "@/lib/status";
@@ -37,8 +38,10 @@ export default function DealDetail({ id }: { id: string }) {
   const {
     deals, clients, paidPayments, events, templates, employees, user, cash,
     acceptPayment, undoLastPayment, sendReminder, updateDeal, restructureDeal,
-    closeDeal, reassignDeal, deleteDeal,
+    closeDeal, reassignDeal, deleteDeal, setDealStage, rejectDeal,
   } = useData();
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [issuing, setIssuing] = useState(false);
   const router = useRouter();
   const deal = deals.find((d) => d.id === id);
   const [printMode, setPrintMode] = useState<PrintMode | null>(null);
@@ -79,12 +82,12 @@ export default function DealDetail({ id }: { id: string }) {
   const schedule = scheduleForDeal(deal, paid);
   // Не amount/months «в лоб» — после реструктуризации размер взноса
   // отличается от простого среднего
-  const monthly =
-    schedule.find((p) => p.status !== "paid")?.amount ??
-    Math.round(deal.amount / deal.months);
-  const paidSum = schedule
-    .filter((p) => p.status === "paid")
-    .reduce((s, p) => s + p.amount, 0);
+  // Полный размер взноса — без учёта уже внесённого в счёт ближайшего
+  const upcoming = schedule.find((p) => p.status !== "paid");
+  const monthly = upcoming
+    ? upcoming.amount + (upcoming.credited ?? 0)
+    : Math.round(deal.amount / deal.months);
+  const paidSum = paidTotal(schedule);
   const remaining = deal.amount - paidSum;
   const purchase = purchasePrice(deal.amount, deal.markupPct, deal.downPayment ?? 0);
   const markup = deal.amount + (deal.downPayment ?? 0) - purchase;
@@ -109,7 +112,7 @@ export default function DealDetail({ id }: { id: string }) {
   // Платёж в кассе по каждому оплаченному взносу — для квитанции.
   // Отменённые платежи (у которых есть запись-отмена) пропускаем.
   const reversed = new Set(cash.filter((t) => t.reversesId).map((t) => t.reversesId));
-  const receiptByInstallment = new Map<number, { id: string; amount: number }>();
+  const receiptByInstallment = new Map<number, { id: string; amount: number; partial: boolean }>();
   for (const t of cash) {
     if (
       t.dealId === deal.id &&
@@ -119,7 +122,11 @@ export default function DealDetail({ id }: { id: string }) {
       !t.reversesId &&
       !reversed.has(t.id)
     ) {
-      receiptByInstallment.set(t.installmentNumber, { id: t.id, amount: t.amount });
+      receiptByInstallment.set(t.installmentNumber, {
+        id: t.id,
+        amount: t.amount,
+        partial: t.title.startsWith("Частичная оплата"),
+      });
     }
   }
 
@@ -131,7 +138,7 @@ export default function DealDetail({ id }: { id: string }) {
       clientName: client.name,
       product: deal.product,
       amount: payment.amount,
-      title: paymentTitle("installment", n, deal.months),
+      title: paymentTitle(payment.partial ? "partial" : "installment", n, deal.months),
       url,
     });
     window.open(
@@ -376,6 +383,36 @@ export default function DealDetail({ id }: { id: string }) {
               <p className="mt-2 text-sm text-ink">{deal.nextStep}</p>
             )}
             <div className="mt-auto pt-5">
+              {!active ? (
+                // Заявка: одобрить и выдать (закупка уходит из кассы) или отклонить
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    disabled={issuing}
+                    onClick={async () => {
+                      if (!confirm(`Выдать сделку ${deal.id}? Закупка ${money(purchase)} спишется из кассы.`)) return;
+                      setIssuing(true);
+                      try {
+                        await setDealStage(deal.id, "active");
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : "Не удалось выдать сделку");
+                      } finally {
+                        setIssuing(false);
+                      }
+                    }}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-full bg-brand px-5 py-3 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:opacity-60"
+                  >
+                    <Check size={15} aria-hidden /> Одобрить и выдать
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRejectOpen(true)}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:border-danger/40 hover:text-danger"
+                  >
+                    <XCircle size={15} aria-hidden /> Отклонить заявку
+                  </button>
+                </div>
+              ) : (
               <DealActions
                 layout="stack"
                 dealId={deal.id}
@@ -390,6 +427,7 @@ export default function DealDetail({ id }: { id: string }) {
                 }}
                 onCloseEarly={active ? async () => { await closeDeal(deal.id); } : undefined}
               />
+              )}
             </div>
           </Card>
         )}
@@ -492,7 +530,7 @@ export default function DealDetail({ id }: { id: string }) {
               </div>
               <button
                 onClick={() => acceptPayment(deal.id)}
-                disabled={paid >= deal.months}
+                disabled={!active || paid >= deal.months}
                 title="Принять ближайший платёж по графику"
                 className="rounded-full border border-line px-4 py-2 text-sm font-medium text-mute transition-colors hover:border-brand hover:text-brand-deep disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -525,6 +563,7 @@ export default function DealDetail({ id }: { id: string }) {
                       <p className="text-sm font-medium">{money(p.amount)}</p>
                       <p className={`text-xs ${late ? "text-danger" : "text-mute"}`}>
                         {p.date}
+                        {p.credited ? ` · внесено ${money(p.credited)}` : ""}
                         {late ? " · просрочен" : p.status === "paid" ? " · оплачен" : ""}
                       </p>
                     </div>
@@ -546,7 +585,7 @@ export default function DealDetail({ id }: { id: string }) {
                         Отменить
                       </button>
                     )}
-                    {p.status !== "paid" && p.n === paid + 1 && (
+                    {active && p.status !== "paid" && p.n === paid + 1 && (
                       <button
                         onClick={() => acceptPayment(deal.id)}
                         className="rounded-full bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep"
@@ -587,6 +626,10 @@ export default function DealDetail({ id }: { id: string }) {
                       <td className="px-3 py-3">
                         {p.status === "paid" ? (
                           <Badge tone="green">Оплачен</Badge>
+                        ) : p.credited ? (
+                          <Badge tone={active && p.iso < today ? "red" : "yellow"}>
+                            Внесено {money(p.credited)}
+                          </Badge>
                         ) : active && p.iso < today ? (
                           <Badge tone="red">Просрочен</Badge>
                         ) : (
@@ -603,7 +646,7 @@ export default function DealDetail({ id }: { id: string }) {
                             <ReceiptText size={13} aria-hidden /> Квитанция
                           </button>
                         )}
-                        {p.status !== "paid" && p.n === paid + 1 && (
+                        {active && p.status !== "paid" && p.n === paid + 1 && (
                           <button
                             onClick={() => acceptPayment(deal.id)}
                             className="rounded-[10px] bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep hover:bg-brand hover:text-on-brand"
@@ -880,6 +923,18 @@ export default function DealDetail({ id }: { id: string }) {
           document.body
         )}
 
+      {rejectOpen && (
+        <RejectModal
+          dealId={deal.id}
+          clientName={deal.client}
+          onClose={() => setRejectOpen(false)}
+          onSubmit={async (reason) => {
+            await rejectDeal(deal.id, reason);
+            setRejectOpen(false);
+          }}
+        />
+      )}
+
       {editOpen && (
         <EditDealModal
           deal={deal}
@@ -1051,6 +1106,105 @@ function EditDealModal({
             className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
           >
             Сохранить
+          </button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+const REJECT_REASONS = [
+  "Не прошёл проверку",
+  "Нет подтверждения дохода",
+  "Плохая платёжная история",
+  "Клиент передумал",
+  "Не устроили условия",
+];
+
+function RejectModal({
+  dealId,
+  clientName,
+  onClose,
+  onSubmit,
+}: {
+  dealId: string;
+  clientName: string;
+  onClose: () => void;
+  onSubmit: (reason: string) => Promise<void>;
+}) {
+  const [reason, setReason] = useState(REJECT_REASONS[0]);
+  const [other, setOther] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const final = reason === "other" ? other.trim() : reason;
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!final || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSubmit(final);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось отклонить заявку");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+      <button aria-label="Закрыть окно" className="absolute inset-0 bg-scrim" onClick={onClose} />
+      <form
+        onSubmit={submit}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reject-title"
+        className="relative w-full max-w-md rounded-t-card bg-surface shadow-pop sm:rounded-card"
+      >
+        <div className="border-b border-line px-5 py-4">
+          <h2 id="reject-title" className="font-semibold tracking-tight">
+            Отклонить заявку {dealId}
+          </h2>
+          <p className="text-sm text-mute">{clientName}</p>
+        </div>
+        <fieldset className="flex flex-col gap-2 px-5 py-4">
+          <legend className="mb-2 text-sm font-medium">Причина — попадёт в аналитику отказов</legend>
+          {[...REJECT_REASONS, "other"].map((r) => (
+            <label key={r} className="flex items-center gap-2.5 text-sm">
+              <input
+                type="radio"
+                name="reason"
+                checked={reason === r}
+                onChange={() => setReason(r)}
+                className="h-4 w-4 accent-[var(--color-brand)]"
+              />
+              {r === "other" ? "Другая" : r}
+            </label>
+          ))}
+          {reason === "other" && (
+            <input
+              autoFocus
+              value={other}
+              onChange={(e) => setOther(e.target.value)}
+              maxLength={200}
+              placeholder="Опишите причину"
+              className="mt-1 w-full rounded-[10px] border border-line bg-canvas px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:bg-surface"
+            />
+          )}
+        </fieldset>
+        <footer className="flex items-center gap-3 border-t border-line px-5 py-4">
+          <p className="mr-auto text-sm text-danger" role="status" aria-live="polite">
+            {error}
+          </p>
+          <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink">
+            Отмена
+          </button>
+          <button
+            type="submit"
+            disabled={!final || saving}
+            className="rounded-full bg-danger px-4 py-2.5 text-sm font-medium text-white shadow-card hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? "Сохраняем…" : "Отклонить"}
           </button>
         </footer>
       </form>

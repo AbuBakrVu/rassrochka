@@ -51,9 +51,13 @@ COMPANY_NAME="${COMPANY_NAME:-$(ask "Название компании")}"
 ADMIN_NAME="${ADMIN_NAME:-$(ask "Имя администратора" "Администратор")}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-$(ask "Почта администратора (логин в CRM)")}"
 ACME_EMAIL="${ACME_EMAIL:-$(ask "Почта для Let's Encrypt (уведомления о сертификате)" "$ADMIN_EMAIL")}"
+TZ_NAME="${TZ_NAME:-$(ask "Часовой пояс компании (Europe/Moscow, Asia/Yekaterinburg, Asia/Vladivostok…)" "Europe/Moscow")}"
 
 if ! [[ "$SLUG" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
   die "Поддомен «$SLUG»: только строчные латинские буквы, цифры и дефис (не по краям)"
+fi
+if [ -d /usr/share/zoneinfo ] && [ ! -f "/usr/share/zoneinfo/$TZ_NAME" ]; then
+  die "Часовой пояс «$TZ_NAME» не найден — пример: Europe/Moscow"
 fi
 if ! [[ "$ADMIN_EMAIL" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; then
   die "Некорректная почта администратора: «$ADMIN_EMAIL»"
@@ -64,6 +68,7 @@ echo "Проверьте перед стартом:"
 echo "  Адрес компании   $SLUG.$DOMAIN"
 echo "  Название         $COMPANY_NAME"
 echo "  Администратор    $ADMIN_NAME <$ADMIN_EMAIL>"
+echo "  Часовой пояс     $TZ_NAME"
 echo "  DNS: A-запись $SLUG.$DOMAIN → IP этого сервера должна быть добавлена ЗАРАНЕЕ"
 if [ -z "${CONFIRM:-}" ]; then
   read -r -p "Продолжить? [Y/n]: " CONFIRM || true
@@ -131,6 +136,7 @@ cat > "$ENV_FILE" <<EOF
 APP_DOMAIN=$DOMAIN
 ACME_EMAIL=$ACME_EMAIL
 PG_PASSWORD=$PG_PASSWORD
+TZ=$TZ_NAME
 
 # Служебное — читают только scripts/*.sh, само приложение эти ключи не видит
 COMPANY_SLUG=$SLUG

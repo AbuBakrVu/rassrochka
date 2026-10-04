@@ -31,6 +31,11 @@ export interface Installment {
   amount: number;
   remaining: number;
   status: "paid" | "due";
+  /**
+   * Уже внесено в счёт этого взноса (частичная оплата или переплата, см.
+   * lib/payments.ts). amount у такого взноса — сколько осталось внести.
+   */
+  credited?: number;
 }
 
 /**
@@ -134,7 +139,11 @@ export function restructureOf(deal: {
   };
 }
 
-/** График сделки с учётом реструктуризации, если она была. */
+/**
+ * График сделки с учётом реструктуризации, если она была, и уже
+ * внесённого в счёт ближайшего взноса (credit): его amount — сколько
+ * осталось доплатить. Для плановых сумм без учёта оплат — buildSchedule.
+ */
 export function scheduleForDeal(
   deal: {
     amount: number;
@@ -143,8 +152,20 @@ export function scheduleForDeal(
     originalMonths?: number | null;
     restructuredMonths?: number | null;
     restructuredFrom?: string | null;
+    credit?: number;
   },
   paid: number
 ): Installment[] {
-  return buildSchedule(deal.amount, deal.months, paid, deal.openedAt, restructureOf(deal));
+  const list = buildSchedule(deal.amount, deal.months, paid, deal.openedAt, restructureOf(deal));
+  const credit = deal.credit ?? 0;
+  const next = list.find((p) => p.status === "due");
+  if (next && credit > 0) {
+    next.credited = Math.min(credit, next.amount);
+    next.amount = Math.round((next.amount - next.credited) * 100) / 100;
+  }
+  return list;
 }
+
+/** Сколько клиент уже внёс по графику: закрытые взносы плюс внесённое в счёт следующего. */
+export const paidTotal = (schedule: Installment[]) =>
+  schedule.reduce((s, p) => s + (p.status === "paid" ? p.amount : (p.credited ?? 0)), 0);

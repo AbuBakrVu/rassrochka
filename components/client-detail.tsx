@@ -28,7 +28,7 @@ import {
   paidCount,
   type Client,
 } from "@/lib/data";
-import { scheduleForDeal, money, longDate } from "@/lib/schedule";
+import { scheduleForDeal, paidTotal, money, longDate } from "@/lib/schedule";
 
 const statusTone: Record<Client["status"], "green" | "red" | "gray" | "blue"> = {
   active: "green",
@@ -84,9 +84,7 @@ export default function ClientDetail({ id }: { id: string }) {
   const computed = clientDeals.map((deal) => {
     const paid = paidCount(deal, paidPayments);
     const schedule = scheduleForDeal(deal, paid);
-    const paidSum = schedule
-      .filter((p) => p.status === "paid")
-      .reduce((s, p) => s + p.amount, 0);
+    const paidSum = paidTotal(schedule);
     const next = schedule.find((p) => p.status === "due");
     return { deal, paid, schedule, paidSum, next };
   });
@@ -116,9 +114,9 @@ export default function ClientDetail({ id }: { id: string }) {
     (s, { deal, paidSum }) => s + (deal.amount - paidSum),
     0
   );
-  const paidTotal = computed.reduce((s, c) => s + c.paidSum, 0);
+  const paidAll = computed.reduce((s, c) => s + c.paidSum, 0);
   const paidPct =
-    paidTotal + portfolio > 0 ? Math.round((paidTotal / (paidTotal + portfolio)) * 100) : 0;
+    paidAll + portfolio > 0 ? Math.round((paidAll / (paidAll + portfolio)) * 100) : 0;
   const closedCount = computed.filter(
     ({ deal }) => dealState(deal) === "closed"
   ).length;
@@ -233,7 +231,7 @@ export default function ClientDetail({ id }: { id: string }) {
           <div className="grid flex-1 grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
             {[
               ["Остаток по рассрочкам", money(portfolio), ""],
-              ["Выплачено всего", money(paidTotal), "text-good"],
+              ["Выплачено всего", money(paidAll), "text-good"],
               ["Активных сделок", String(activeDeals.length), ""],
               ["Закрытых сделок", String(closedCount), ""],
             ].map(([label, value, cls]) => (

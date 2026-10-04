@@ -66,8 +66,13 @@ function CtaMenu({ label }: { label: string }) {
   const wrap = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
-  // Меню не должно оставаться раскрытым после перехода в другой раздел
-  useEffect(() => setOpen(false), [pathname]);
+  // Меню не должно оставаться раскрытым после перехода в другой раздел —
+  // сбрасываем во время отрисовки, как советует React, а не эффектом
+  const [shownAt, setShownAt] = useState(pathname);
+  if (shownAt !== pathname) {
+    setShownAt(pathname);
+    setOpen(false);
+  }
 
   useEffect(() => {
     if (!open) return;

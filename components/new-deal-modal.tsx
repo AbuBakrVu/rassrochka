@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { type Client } from "@/lib/data";
 import { todayIso } from "@/lib/derive";
+import { isoDate } from "@/lib/status";
 import { useData } from "@/lib/store";
 import { cashBalance } from "@/lib/cash";
 import NewClientModal from "@/components/new-client-modal";
@@ -83,10 +84,10 @@ const longDate = (iso: string) =>
       })
     : "—";
 
+// Тот же сдвиг, что у графика (lib/schedule.ts): тот же день следующего месяца
 const addMonth = (iso: string) => {
-  const d = new Date(iso);
-  d.setMonth(d.getMonth() + 1);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = iso.split("-").map(Number);
+  return isoDate(new Date(y, m, d));
 };
 
 function Label({
@@ -160,15 +161,14 @@ export default function NewDealModal({ onClose }: { onClose: () => void }) {
   const [months, setMonths] = useState(6);
   const [dealDate, setDealDate] = useState(todayIso());
   const [firstPayment, setFirstPayment] = useState("");
-  const [manager, setManager] = useState<number | null>(null);
-
-  // По умолчанию ответственный — тот, кто создаёт сделку
+  // По умолчанию ответственный — тот, кто создаёт сделку; выбор вручную
+  // хранится отдельно и перекрывает умолчание (без эффекта, который
+  // дописывал бы состояние после первой отрисовки)
   const { user } = useData();
-  useEffect(() => {
-    if (manager === null && managers.length > 0) {
-      setManager(managers.some((m) => m.id === user.id) ? user.id : managers[0].id);
-    }
-  }, [manager, managers, user.id]);
+  const [pickedManager, setManager] = useState<number | null>(null);
+  const manager =
+    pickedManager ??
+    (managers.some((m) => m.id === user.id) ? user.id : (managers[0]?.id ?? null));
 
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState<Client | null>(null);

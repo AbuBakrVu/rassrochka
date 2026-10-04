@@ -7,7 +7,7 @@
 // менеджеру в списке причин: решение не должно выглядеть чёрным ящиком.
 
 import { assessRisk, dealsOfClient, paidCount, type Client, type Deal, type RiskAssessment } from "./data";
-import { scheduleForDeal } from "./schedule";
+import { paidTotal, scheduleForDeal } from "./schedule";
 import type { CashTx } from "./store";
 
 const DAY_MS = 86_400_000;
@@ -102,9 +102,7 @@ export function computeClientCredit(
   let used = 0;
   for (const d of own) {
     if (d.stage === "active") {
-      const paidSum = scheduleForDeal(d, paidCount(d, paidPayments))
-        .filter((p) => p.status === "paid")
-        .reduce((s, p) => s + p.amount, 0);
+      const paidSum = paidTotal(scheduleForDeal(d, paidCount(d, paidPayments)));
       used += d.amount - paidSum;
     } else if (d.stage === "new" || d.stage === "check" || d.stage === "signing") {
       used += d.amount;

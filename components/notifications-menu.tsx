@@ -34,7 +34,14 @@ export default function NotificationsMenu() {
   const items = buildNotifications(deals);
   const unread = !seen && items.length > 0;
 
-  useEffect(() => setOpen(false), [pathname]);
+  // Закрываем меню при переходе в другой раздел — прямо во время
+  // отрисовки, а не эффектом после неё (рекомендация React для «сбросить
+  // состояние при смене значения»)
+  const [shownAt, setShownAt] = useState(pathname);
+  if (shownAt !== pathname) {
+    setShownAt(pathname);
+    setOpen(false);
+  }
 
   useEffect(() => {
     if (!open) return;

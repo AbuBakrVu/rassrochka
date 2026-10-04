@@ -55,6 +55,11 @@ export interface Deal {
   restructuredMonths?: number;
   restructuredFrom?: string;
   downPayment?: number;
+  /**
+   * Внесено в счёт следующего, ещё не закрытого взноса — частичная оплата
+   * или переплата (lib/payments.ts). Учитывается в остатке долга.
+   */
+  credit?: number;
   /** Свой шаблон напоминания на эту сделку — если не задан, используется общий по умолчанию. */
   reminderTemplateId?: string;
   /** Последняя стадия лесенки напоминаний, отправленная по текущему взносу — вместе с датой взноса не даёт слать её повторно. */
@@ -324,30 +329,33 @@ const notificationTitles: Record<RouteKind, string> = {
   request: "Новая заявка",
 };
 
-// Не настоящие метки времени (у сделок нет event-лога) — просто
-// правдоподобная лесенка «свежее выше», по порядку приоритета маршрута.
-const notificationTimes = [
-  "5 минут назад",
-  "32 минуты назад",
-  "1 час назад",
-  "3 часа назад",
-  "Вчера",
-  "2 дня назад",
-];
+const shortRuDate = (iso: string) =>
+  new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+
+/** Подпись под уведомлением: настоящий факт о сделке, а не выдуманное «5 минут назад». */
+function notificationWhen(deal: Deal | undefined, kind: RouteKind): string {
+  if (!deal) return "";
+  if (kind === "overdue") return deal.status;
+  if (kind === "deadline") return deal.deadline ? `срок ${deal.deadline}` : deal.status;
+  return `заявка от ${shortRuDate(deal.openedAt)}`;
+}
 
 // Уведомления в шапке — тот же приоритизированный список, что и маршрут
 // менеджера, просто оформленный как лента событий, а не список дел.
 export function buildNotifications(deals: Deal[]): NotificationItem[] {
   return buildRoute(deals)
     .slice(0, 6)
-    .map((item, i) => ({
+    .map((item) => ({
       key: item.key,
       dealId: item.dealId,
       clientId: item.clientId,
       kind: item.kind,
       title: notificationTitles[item.kind],
       text: `${item.clientName} — ${item.text}`,
-      time: notificationTimes[i] ?? "Ранее",
+      time: notificationWhen(
+        deals.find((d) => d.id === item.dealId),
+        item.kind
+      ),
     }));
 }
 

@@ -14,7 +14,8 @@ import {
   ReceiptText,
 } from "lucide-react";
 import { clientById, paidCount, dealState, ruPlural, type Deal } from "@/lib/data";
-import { scheduleForDeal } from "@/lib/schedule";
+import { scheduleForDeal, paidTotal } from "@/lib/schedule";
+import { allocatePayment } from "@/lib/payments";
 import { todayIso } from "@/lib/derive";
 import { useData } from "@/lib/store";
 import { Badge } from "@/components/ui";
@@ -76,8 +77,9 @@ export default function AcceptPaymentModal({
     const q = query.trim().toLowerCase();
     const qd = digits(query);
     return deals
-      // Платёж можно принять только по действующей или готовящейся сделке
-      .filter((d) => dealState(d) === "active" || dealState(d) === "pending")
+      // Платёж принимается только по выданной сделке — заявку сначала
+      // одобряют переводом в «Активна» (там же проводится закупка)
+      .filter((d) => dealState(d) === "active")
       .map((d) => {
         const client = clientById(clients, d.clientId);
         const paid = paidCount(d, paidPayments);
@@ -85,9 +87,7 @@ export default function AcceptPaymentModal({
         // реструктуризации взносы могут отличаться от простого деления
         const schedule = scheduleForDeal(d, paid);
         const next = schedule.find((p) => p.status === "due");
-        const paidSum = schedule
-          .filter((p) => p.status === "paid")
-          .reduce((s, p) => s + p.amount, 0);
+        const paidSum = paidTotal(schedule);
         return {
           deal: d,
           phone: client?.phone ?? "",
@@ -125,22 +125,20 @@ export default function AcceptPaymentModal({
   };
 
   const amount = Number(amountInput.replace(/\s/g, ""));
-  const amountValid =
-    selected !== null && Number.isFinite(amount) && amount >= selected.nextAmount - 0.5;
-
-  // Сколько взносов подряд закроет введённая сумма — та же логика, что на
-  // сервере (lib/queries.ts, acceptPayment), только для подсказки в интерфейсе
-  const coveredCount = (() => {
-    if (!selected || !amountValid) return 1;
-    let cash = amount;
-    let n = 0;
-    const due = selected.schedule.filter((p) => p.status === "due");
-    while (n < due.length && cash >= due[n].amount - 0.5) {
-      cash -= due[n].amount;
-      n++;
-    }
-    return Math.max(n, 1);
-  })();
+  // Тот же расчёт, что на сервере (lib/payments.ts): сколько взносов
+  // закроет сумма и сколько останется в счёт следующего. В графике
+  // ближайший взнос уже уменьшен на внесённое ранее, поэтому credit = 0
+  const allocation = selected
+    ? allocatePayment(
+        selected.schedule.filter((p) => p.status === "due").map((p) => p.amount),
+        0,
+        0,
+        Number.isFinite(amount) ? amount : 0
+      )
+    : null;
+  const amountValid = allocation?.ok === true;
+  const coveredCount = allocation?.ok ? allocation.paid : 0;
+  const leftover = allocation?.ok ? allocation.credit : 0;
 
   const ready = date !== "" && amountValid;
 
@@ -167,6 +165,7 @@ export default function AcceptPaymentModal({
             t.kind === "payment" &&
             t.amount > 0 &&
             t.installmentNumber &&
+            !t.reversesId &&
             Number(t.id) > cashIdBefore
         )
       : [];
@@ -182,7 +181,7 @@ export default function AcceptPaymentModal({
         ? `Квитанция: ${url(newPayments[0].id)}`
         : "Квитанции:\n" +
           newPayments
-            .map((t) => `${paymentTitle("installment", t.installmentNumber, deal.months)} — ${url(t.id)}`)
+            .map((t) => `${paymentTitle(t.title.startsWith("Частичная оплата") ? "partial" : "installment", t.installmentNumber, deal.months)} — ${url(t.id)}`)
             .join("\n");
     const text =
       `${firstName}, здравствуйте! Платёж ${moneyFmt(total)} по рассрочке «${deal.product}» получен. Спасибо!\n\n` +
@@ -351,20 +350,26 @@ export default function AcceptPaymentModal({
                 </div>
                 {!amountValid ? (
                   <p className="mt-1.5 text-xs text-danger">
-                    Меньше очередного взноса ({money(selected!.nextAmount)}) внести
-                    нельзя
+                    {allocation && !allocation.ok && allocation.error === "TOO_HIGH"
+                      ? `Больше остатка долга — можно принять не больше ${money(allocation.max)}`
+                      : "Введите сумму больше нуля"}
                   </p>
-                ) : coveredCount > 1 ? (
+                ) : coveredCount === 0 ? (
                   <p className="mt-1.5 text-xs text-mute">
-                    Этой суммы хватит на {coveredCount}{" "}
-                    {ruPlural(coveredCount, "взнос", "взноса", "взносов")} вперёд
-                    — график сам продвинется на {coveredCount}.
+                    Частичная оплата: взнос закроется, когда клиент доплатит{" "}
+                    {money(Math.max(selected!.nextAmount - amount, 0))}.
+                  </p>
+                ) : coveredCount > 1 || leftover > 0 ? (
+                  <p className="mt-1.5 text-xs text-mute">
+                    Закроет {coveredCount}{" "}
+                    {ruPlural(coveredCount, "взнос", "взноса", "взносов")}
+                    {leftover > 0 && `, ещё ${money(leftover)} пойдёт в счёт следующего`}.
                   </p>
                 ) : (
                   <p className="mt-1.5 text-xs text-mute">
-                    По умолчанию — очередной взнос по графику. Если клиент
-                    заплатил больше, впишите фактическую сумму — лишнее закроет
-                    следующие взносы.
+                    По умолчанию — очередной взнос по графику. Впишите
+                    фактическую сумму: меньше — частичная оплата, больше —
+                    закроет и следующие взносы.
                   </p>
                 )}
               </div>

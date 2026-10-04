@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation";
 import { Search, SearchX, Download } from "lucide-react";
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui";
 import { dealsOfClient, dealState, paidCount, type Client } from "@/lib/data";
-import { scheduleForDeal, money } from "@/lib/schedule";
+import { scheduleForDeal, paidTotal, money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
 import { downloadCsv } from "@/lib/csv";
 import SavedFilters from "@/components/saved-filters";
 import { computeClientCredit } from "@/lib/credit";
+import { todayIso } from "@/lib/status";
 
 const statusTone: Record<Client["status"], "green" | "red" | "gray" | "blue"> = {
   active: "green",
@@ -48,9 +49,7 @@ export default function ClientsPage() {
           .filter((d) => dealState(d) === "active")
           .reduce((sum, d) => {
             const schedule = scheduleForDeal(d, paidCount(d, paidPayments));
-            const paidSum = schedule
-              .filter((p) => p.status === "paid")
-              .reduce((s, p) => s + p.amount, 0);
+            const paidSum = paidTotal(schedule);
             return sum + (d.amount - paidSum);
           }, 0);
         return {
@@ -86,7 +85,7 @@ export default function ClientsPage() {
 
   const exportCsv = () => {
     downloadCsv(
-      `клиенты-${new Date().toISOString().slice(0, 10)}.csv`,
+      `клиенты-${todayIso()}.csv`,
       ["ID", "Имя", "Телефон", "Статус", "Сделок", "Остаток", "Ближайшее действие", "Срок"],
       list.map(({ client: c, deals, portfolio }) => [
         c.id,

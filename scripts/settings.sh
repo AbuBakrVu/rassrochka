@@ -21,6 +21,7 @@ cmd_show() {
   echo "  Адрес входа        https://$(env_get COMPANY_SLUG).$(env_get APP_DOMAIN)"
   echo "  Название компании  $(env_get COMPANY_NAME)"
   echo "  Почта Let's Encrypt $(env_get ACME_EMAIL)"
+  echo "  Часовой пояс       $(env_get TZ || true)"
   echo "───────────────────────────────────────────────"
 }
 
@@ -76,6 +77,22 @@ cmd_email() {
   c_green "Готово"
 }
 
+cmd_timezone() {
+  local current new
+  current="$(env_get TZ)"
+  current="${current:-Europe/Moscow}"
+  read -r -p "Часовой пояс компании [$current]: " new
+  new="${new:-$current}"
+  [ "$new" = "$current" ] && { echo "Без изменений"; return 0; }
+  [ -f "/usr/share/zoneinfo/$new" ] || die "Часовой пояс «$new» не найден — пример: Asia/Yekaterinburg"
+
+  env_set TZ "$new"
+  echo "→ Перезапускаю приложение и базу"
+  compose up -d app db
+  wait_for_health "$(env_get APP_DOMAIN)"
+  c_green "Готово: «сегодня» теперь считается по $new"
+}
+
 cmd_password() {
   local email="${1:-}"
   [ -z "$email" ] && read -r -p "Почта сотрудника: " email
@@ -85,22 +102,24 @@ cmd_password() {
 case "${1:-}" in
   domain)   cmd_domain ;;
   email)    cmd_email ;;
+  timezone) cmd_timezone ;;
   password) cmd_password "${2:-}" ;;
   show)     cmd_show ;;
   "")
     cmd_show
     echo
     echo "Что изменить?"
-    select choice in "Домен" "Почта Let's Encrypt" "Пароль сотрудника" "Выход"; do
+    select choice in "Домен" "Почта Let's Encrypt" "Часовой пояс" "Пароль сотрудника" "Выход"; do
       case "$choice" in
         "Домен") cmd_domain; break ;;
         "Почта Let's Encrypt") cmd_email; break ;;
+        "Часовой пояс") cmd_timezone; break ;;
         "Пароль сотрудника") cmd_password; break ;;
         *) exit 0 ;;
       esac
     done
     ;;
   *)
-    die "Неизвестная команда «$1». Доступно: domain, email, password, show"
+    die "Неизвестная команда «$1». Доступно: domain, email, timezone, password, show"
     ;;
 esac

@@ -3,7 +3,7 @@
 
 import { money } from "./schedule";
 
-export type PaymentKind = "installment" | "down" | "payoff";
+export type PaymentKind = "installment" | "partial" | "down" | "payoff";
 
 export const PAYMENT_METHOD_TITLE: Record<"cash" | "card" | "transfer", string> = {
   cash: "Наличные",
@@ -14,6 +14,7 @@ export const PAYMENT_METHOD_TITLE: Record<"cash" | "card" | "transfer", string> 
 export function paymentTitle(kind: PaymentKind, installment: number | undefined, months: number) {
   if (kind === "down") return "Первоначальный взнос";
   if (kind === "payoff") return "Досрочное погашение остатка";
+  if (kind === "partial") return `Часть взноса ${installment} из ${months}`;
   return `Взнос ${installment} из ${months}`;
 }
 

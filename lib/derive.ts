@@ -11,7 +11,7 @@ import {
   type RouteItem,
 } from "./data";
 import type { Employee } from "./store";
-import { scheduleForDeal, type Installment } from "./schedule";
+import { paidTotal, scheduleForDeal, type Installment } from "./schedule";
 
 // Именительный падеж для заголовка календаря («Август 2026») — monthNames
 // в lib/schedule.ts родительный («6 августа») и сюда не подходит.
@@ -43,9 +43,7 @@ export function computeActive(
     .map((deal) => {
       const paid = paidCount(deal, paidPayments);
       const schedule = scheduleForDeal(deal, paid);
-      const paidSum = schedule
-        .filter((p) => p.status === "paid")
-        .reduce((s, p) => s + p.amount, 0);
+      const paidSum = paidTotal(schedule);
       return {
         deal,
         paid,

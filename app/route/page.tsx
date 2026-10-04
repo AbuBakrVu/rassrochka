@@ -15,6 +15,34 @@ import { PageHeader, Card } from "@/components/ui";
 import { buildRoute, type RouteKind } from "@/lib/data";
 import { money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
+import { todayIso } from "@/lib/status";
+
+// Отметки «сделано» живут до конца дня: в localStorage этого браузера под
+// ключом с датой и сотрудником — завтра маршрут начинается с чистого листа.
+// Раньше они пропадали при любом обновлении страницы.
+const doneKey = (userId: number) => `route-done:${userId}:${todayIso()}`;
+
+function readDone(userId: number): Set<string> {
+  try {
+    const raw = localStorage.getItem(doneKey(userId));
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeDone(userId: number, done: Set<string>) {
+  try {
+    // Вчерашние отметки больше не нужны — убираем, чтобы не копились
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(`route-done:${userId}:`) && k !== doneKey(userId)) localStorage.removeItem(k);
+    }
+    localStorage.setItem(doneKey(userId), JSON.stringify([...done]));
+  } catch {
+    // приватный режим — отметки просто не сохранятся
+  }
+}
 
 const kindMeta: Record<
   RouteKind,
@@ -39,17 +67,20 @@ const tabs = [
 ] as const;
 
 export default function RoutePage() {
-  const { deals, paidPayments } = useData();
+  const { deals, paidPayments, user } = useData();
   const items = useMemo(() => buildRoute(deals, paidPayments), [deals, paidPayments]);
-  const [done, setDone] = useState<Set<string>>(new Set());
+  // Страница рисуется только в браузере после загрузки данных (DataProvider),
+  // поэтому localStorage доступен уже при первой отрисовке
+  const [done, setDone] = useState<Set<string>>(() => readDone(user.id));
   const [tab, setTab] = useState<(typeof tabs)[number]["key"]>("left");
 
-  const toggle = (key: string) =>
-    setDone((s) => {
-      const next = new Set(s);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
+  const toggle = (key: string) => {
+    const next = new Set(done);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setDone(next);
+    writeDone(user.id, next);
+  };
 
   const list = items.filter((it) => {
     if (tab === "left") return !done.has(it.key);

@@ -240,7 +240,10 @@ function AdjustmentModal({ onClose }: { onClose: () => void }) {
 }
 
 export default function CashPage() {
-  const { cash, cashOpeningBalance, deals, paidPayments, coinvestors } = useData();
+  const { cash, cashOpeningBalance, deals, paidPayments, coinvestors, user } = useData();
+  // Ручные внесения и изъятия — у администратора и бухгалтера (так же
+  // проверяет сервер, app/api/cash/route.ts)
+  const canAdjust = user.role === "admin" || user.role === "accountant";
   const [filter, setFilter] = useState<(typeof filters)[number]["key"]>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -249,7 +252,7 @@ export default function CashPage() {
   const monthPrefix = todayIso().slice(0, 7);
   const summary = useMemo(
     () => cashSummary(cashOpeningBalance, cash, monthPrefix),
-    [cash, monthPrefix]
+    [cashOpeningBalance, cash, monthPrefix]
   );
 
   const forecast = useMemo(
@@ -282,7 +285,7 @@ export default function CashPage() {
 
   const exportCsv = () => {
     downloadCsv(
-      `касса-${new Date().toISOString().slice(0, 10)}.csv`,
+      `касса-${todayIso()}.csv`,
       ["Дата", "Тип", "Основание", "Сумма", "Сделка", "Примечание"],
       list.map((t) => [
         t.date,
@@ -459,12 +462,14 @@ export default function CashPage() {
               <Download size={15} aria-hidden />
               Экспорт
             </button>
-            <button
-              onClick={() => setModal(true)}
-              className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
-            >
-              + Движение по кассе
-            </button>
+            {canAdjust && (
+              <button
+                onClick={() => setModal(true)}
+                className="rounded-[10px] bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
+              >
+                + Движение по кассе
+              </button>
+            )}
           </div>
         </div>
 

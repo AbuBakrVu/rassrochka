@@ -11,7 +11,8 @@ import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
 import { buildRoute, purchasePrice, stages, type Client, type Deal, type DealStage } from "./data";
 import { buildSchedule, monthNames, restructureOf } from "./schedule";
-import { computeClientStatus, computeDealStatus, todayIso } from "./status";
+import { allocatePayment, nextDue, stateFromPayments } from "./payments";
+import { computeClientStatus, computeDealStatus, isoDate, todayIso } from "./status";
 import type {
   CashTx,
   Coinvestor,
@@ -37,6 +38,7 @@ interface DealRow extends Record<string, unknown> {
   manager_initials: string | null;
   manager_id: number | null;
   paid_count: number;
+  credit: number;
   next_step: string | null;
   deadline: string | null;
   reject_reason: string | null;
@@ -212,6 +214,7 @@ function toDeal(row: DealRow, today: string): Deal {
     ...(row.category ? { category: row.category } : {}),
     ...(row.city ? { city: row.city } : {}),
     ...(row.down_payment ? { downPayment: row.down_payment } : {}),
+    ...(Number(row.credit) > 0 ? { credit: Number(row.credit) } : {}),
     ...(row.reminder_template_id ? { reminderTemplateId: String(row.reminder_template_id) } : {}),
     ...(row.last_reminder_stage
       ? { lastReminderStage: row.last_reminder_stage as Deal["lastReminderStage"] }
@@ -275,7 +278,7 @@ function toClient(row: ClientRow, deals: Deal[], today: string): Client {
 
 const DEALS_SELECT = `
   select d.id, d.client_id, c.name as client_name, d.product, d.amount,
-         d.months, d.markup_pct, d.opened_at, d.stage, d.paid_count,
+         d.months, d.markup_pct, d.opened_at, d.stage, d.paid_count, d.credit,
          d.next_step, d.deadline, d.reject_reason, d.portal_token,
          d.description, d.category, d.city,
          d.original_months, d.restructured_months, d.restructured_from,
@@ -399,6 +402,25 @@ function toTemplate(row: TemplateRow): MessageTemplate {
   };
 }
 
+/** Клиент без персональных данных — для ролей, которым они не нужны по работе. */
+function withoutPersonalData(c: Client): Client {
+  return {
+    id: c.id,
+    name: c.name,
+    phone: "—",
+    email: "—",
+    city: c.city,
+    since: c.since,
+    status: c.status,
+    statusLabel: c.statusLabel,
+    nextAction: c.nextAction,
+    nextDate: c.nextDate,
+    portalToken: "",
+    ...(c.creditLimit !== undefined ? { creditLimit: c.creditLimit } : {}),
+    ...(c.blacklistedAt ? { blacklistedAt: c.blacklistedAt } : {}),
+  };
+}
+
 /**
  * Всё состояние компании одним запросом — прямая замена чтения localStorage.
  * При сотнях сделок это дешевле, чем множить запросы по страницам; когда
@@ -442,8 +464,16 @@ export async function loadBootstrap(
       listSavedFilters(dbName, currentUser.id),
     ]);
 
-  const coinvestorCapitalTx = capitalRows.map(toCapitalTx);
-  const coinvestorProfitTx = profitRows.map(toProfitTx);
+  // Данные по ролям. Меню прячет разделы, но в браузер приходит всё, что
+  // отдал этот запрос, — поэтому лишнее отрезается здесь, а не в интерфейсе:
+  //   соинвесторы (их капитал и доходы) — администратору и бухгалтеру;
+  //   паспортные данные, адреса, ИНН и контакты клиентов — не бухгалтеру,
+  //   ему для кассы и аналитики хватает имени.
+  const seesInvestors = currentUser.role === "admin" || currentUser.role === "accountant";
+  const seesPersonalData = currentUser.role !== "accountant";
+
+  const coinvestorCapitalTx = seesInvestors ? capitalRows.map(toCapitalTx) : [];
+  const coinvestorProfitTx = seesInvestors ? profitRows.map(toProfitTx) : [];
 
   const deals = dealRows.map((r) => toDeal(r, today));
 
@@ -463,11 +493,14 @@ export async function loadBootstrap(
       email: u.email,
       phone: u.phone ?? "—",
       role: u.role,
-      since: sinceLabel(u.created_at.toISOString().slice(0, 10)),
+      since: sinceLabel(isoDate(u.created_at)),
       active: u.active,
     })),
     deals,
-    clients: clientRows.map((r) => toClient(r, deals, today)),
+    clients: clientRows.map((r) => {
+      const client = toClient(r, deals, today);
+      return seesPersonalData ? client : withoutPersonalData(client);
+    }),
     paidPayments,
     cash: cashRows.map((r) => ({
       id: String(r.id),
@@ -484,12 +517,12 @@ export async function loadBootstrap(
     events: eventRows.map((r) => ({
       id: String(r.id),
       dealId: r.deal_id,
-      date: r.occurred_at.toISOString().slice(0, 10),
+      date: isoDate(r.occurred_at),
       text: r.text,
     })),
-    coinvestors: coinvestorRows.map((r) =>
-      toCoinvestor(r, coinvestorCapitalTx, coinvestorProfitTx)
-    ),
+    coinvestors: seesInvestors
+      ? coinvestorRows.map((r) => toCoinvestor(r, coinvestorCapitalTx, coinvestorProfitTx))
+      : [],
     coinvestorCapitalTx,
     coinvestorProfitTx,
     templates: templateRows.map(toTemplate),
@@ -627,8 +660,6 @@ export async function createDeal(
   dbName: string,
   input: NewDealInput
 ): Promise<Deal> {
-  const purchase = purchasePrice(input.amount, input.markupPct, input.downPayment ?? 0);
-
   const id = await transaction(dbName, async (client) => {
     const { rows } = await client.query<{ id: string; product: string }>(
       `insert into deals (client_id, product, amount, months, markup_pct, opened_at,
@@ -663,35 +694,9 @@ export async function createDeal(
       }
     }
 
-    const { rows: clientRows } = await client.query<{ name: string }>(
-      "select name from clients where id = $1",
-      [input.clientId]
-    );
-    const clientName = clientRows[0]?.name ?? "";
-
-    // Закупка товара сразу уменьшает остаток кассы
-    await client.query(
-      `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note)
-       values ('purchase', $1, $2, $3, $4, $5)`,
-      [-purchase, input.openedAt, deal.id, `Закупка товара · ${deal.product}`, clientName]
-    );
-
-    // Первоначальный взнос — реальные деньги, полученные при оформлении,
-    // а не просто число для отображения: без этой проводки касса не
-    // учитывала бы их вообще
-    if (input.downPayment) {
-      await client.query(
-        `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note)
-         values ('payment', $1, $2, $3, $4, $5)`,
-        [
-          input.downPayment,
-          input.openedAt,
-          deal.id,
-          `Первоначальный взнос · ${deal.product}`,
-          clientName,
-        ]
-      );
-    }
+    // Закупка и первый взнос проводятся в кассу не здесь, а при выдаче —
+    // переводе в «Активна» (issueDealCash): пока это заявка, деньги не
+    // потрачены и не получены, и касса не должна их показывать
 
     const { rows: managerRows } = await client.query<{ name: string }>(
       "select name from users where id = $1",
@@ -740,12 +745,26 @@ export async function updateDeal(
   input: UpdateDealInput
 ): Promise<Deal> {
   await transaction(dbName, async (client) => {
-    const { rows } = await client.query<{ paid_count: number; down_payment: number | null }>(
-      "select paid_count, down_payment from deals where id = $1 for update",
+    const { rows } = await client.query<{
+      paid_count: number;
+      down_payment: number | null;
+      manager_id: number | null;
+    }>(
+      "select paid_count, down_payment, manager_id from deals where id = $1 and deleted_at is null for update",
       [dealId]
     );
     const deal = rows[0];
     if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+
+    // Раньше отключённый сотрудник молча превращался в «без ответственного».
+    // Оставить прежнего (даже отключённого) можно, назначить отключённого — нет
+    if (input.managerId !== deal.manager_id) {
+      const { rows: active } = await client.query(
+        "select 1 from users where id = $1 and active",
+        [input.managerId]
+      );
+      if (active.length === 0) throw new Error("MANAGER_NOT_FOUND");
+    }
 
     const changingEconomics =
       input.amount !== undefined ||
@@ -756,9 +775,7 @@ export async function updateDeal(
     }
 
     await client.query(
-      `update deals set product = $2, next_step = $3,
-                        manager_id = (select id from users where id = $4 and active)
-       where id = $1`,
+      "update deals set product = $2, next_step = $3, manager_id = $4 where id = $1",
       [dealId, input.product, input.nextStep || null, input.managerId]
     );
 
@@ -802,6 +819,64 @@ export async function updateDeal(
 
 const KANBAN_STAGES = new Set<DealStage>(["new", "check", "active"]);
 
+/** Запись кассы о первом взносе — без номера взноса, узнаётся по заголовку. */
+const DOWN_PAYMENT_SQL = `kind = 'payment' and installment_number is null and title like 'Первоначальный взнос%'`;
+
+/**
+ * Выдача сделки: закупка товара уходит из кассы, первый взнос приходит.
+ * Проводится один раз — у сделок, созданных до этого правила, обе записи
+ * уже есть с момента создания заявки.
+ */
+async function issueDealCash(client: PoolClient, dealId: string): Promise<void> {
+  const { rows } = await client.query<{
+    amount: number;
+    markup_pct: number;
+    down_payment: number | null;
+    product: string;
+    client_name: string;
+  }>(
+    `select d.amount, d.markup_pct, d.down_payment, d.product, c.name as client_name
+     from deals d join clients c on c.id = d.client_id where d.id = $1`,
+    [dealId]
+  );
+  const deal = rows[0];
+  if (!deal) return;
+  const today = todayIso();
+
+  const { rows: has } = await client.query<{ purchase: boolean; down: boolean }>(
+    `select exists (select 1 from cash_tx where deal_id = $1 and kind = 'purchase') as purchase,
+            exists (select 1 from cash_tx where deal_id = $1 and ${DOWN_PAYMENT_SQL}) as down`,
+    [dealId]
+  );
+  if (!has[0].purchase) {
+    const purchase = purchasePrice(deal.amount, deal.markup_pct, deal.down_payment ?? 0);
+    await client.query(
+      `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note)
+       values ('purchase', $1, $2, $3, $4, $5)`,
+      [-purchase, today, dealId, `Закупка товара · ${deal.product}`, deal.client_name]
+    );
+  }
+  if (deal.down_payment && !has[0].down) {
+    await client.query(
+      `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note)
+       values ('payment', $1, $2, $3, $4, $5)`,
+      [deal.down_payment, today, dealId, `Первоначальный взнос · ${deal.product}`, deal.client_name]
+    );
+  }
+}
+
+/**
+ * Обратное к issueDealCash — для сделки без единого платежа по графику,
+ * которую вернули в заявки, отклонили или удалили: закупки не было,
+ * первого взноса тоже.
+ */
+async function unissueDealCash(client: PoolClient, dealId: string): Promise<void> {
+  await client.query(
+    `delete from cash_tx where deal_id = $1 and (kind = 'purchase' or (${DOWN_PAYMENT_SQL}))`,
+    [dealId]
+  );
+}
+
 /**
  * Перетаскивание карточки между колонками канбана. Только между new/check/
  * active — закрытие и отказ идут через свои действия (closeDealEarly и
@@ -824,7 +899,8 @@ export async function setDealStage(
     );
     const deal = rows[0];
     if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
-    if (!KANBAN_STAGES.has(deal.stage)) {
+    // «Подписание» на канбане не показывается, но выдать такую заявку можно
+    if (!KANBAN_STAGES.has(deal.stage) && deal.stage !== "signing") {
       throw new Error("BAD_STAGE");
     }
     if (deal.stage === stage) return;
@@ -836,6 +912,8 @@ export async function setDealStage(
     }
 
     await client.query("update deals set stage = $2 where id = $1", [dealId, stage]);
+    if (stage === "active") await issueDealCash(client, dealId);
+    else if (deal.stage === "active") await unissueDealCash(client, dealId);
 
     const stageTitle = stages.find((s) => s.key === stage)?.title ?? stage;
     await client.query(
@@ -897,6 +975,7 @@ export async function closeDealEarly(
       markup_pct: number;
       down_payment: number | null;
       paid_count: number;
+      credit: number;
       opened_at: string;
       original_months: number | null;
       restructured_months: number | null;
@@ -905,7 +984,7 @@ export async function closeDealEarly(
       product: string;
       client_name: string;
     }>(
-      `select d.amount, d.months, d.markup_pct, d.down_payment, d.paid_count, d.opened_at,
+      `select d.amount, d.months, d.markup_pct, d.down_payment, d.paid_count, d.credit, d.opened_at,
               d.original_months, d.restructured_months, d.restructured_from,
               d.stage, d.product, c.name as client_name
        from deals d join clients c on c.id = d.client_id
@@ -934,17 +1013,19 @@ export async function closeDealEarly(
     const paidSum = schedule
       .filter((p) => p.status === "paid")
       .reduce((s, p) => s + p.amount, 0);
-    const remaining = deal.amount - paidSum;
+    // Уже внесённое в счёт следующего взноса — часть остатка, второй раз не берём
+    const remaining = Math.round((deal.amount - paidSum - Number(deal.credit)) * 100) / 100;
 
     if (remaining > 0) {
       await client.query(
         `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note)
-         values ('payment', $1, current_date, $2, $3, $4)`,
+         values ('payment', $1, $5, $2, $3, $4)`,
         [
           remaining,
           dealId,
           `Досрочное погашение остатка · ${deal.client_name}`,
           deal.product,
+          todayIso(),
         ]
       );
 
@@ -968,7 +1049,7 @@ export async function closeDealEarly(
     }
 
     await client.query(
-      "update deals set paid_count = $2, stage = 'closed' where id = $1",
+      "update deals set paid_count = $2, credit = 0, stage = 'closed' where id = $1",
       [dealId, deal.months]
     );
 
@@ -1003,9 +1084,43 @@ export async function deleteDeal(dbName: string, dealId: string): Promise<void> 
     if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
     if (deal.paid_count > 0) throw new Error("HAS_PAYMENTS");
 
-    await client.query("delete from cash_tx where deal_id = $1 and kind = 'purchase'", [dealId]);
+    // Без единого платежа по графику — значит, и закупки с первым взносом
+    // по ней на самом деле не было (раньше первый взнос оставался в кассе)
+    await unissueDealCash(client, dealId);
     await client.query("update deals set deleted_at = now() where id = $1", [dealId]);
   });
+}
+
+/**
+ * Отказ по заявке: этап «Отклонена» с причиной (видна в аналитике
+ * «Причины отказов»). Только для заявок — выданную сделку с графиком
+ * отклонить нельзя, её закрывают или реструктурируют.
+ */
+export async function rejectDeal(dbName: string, dealId: string, reason: string): Promise<Deal> {
+  await transaction(dbName, async (client) => {
+    const { rows } = await client.query<{ stage: DealStage; paid_count: number }>(
+      "select stage, paid_count from deals where id = $1 and deleted_at is null for update",
+      [dealId]
+    );
+    const deal = rows[0];
+    if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+    if (deal.stage === "rejected") return;
+    if (deal.stage === "closed" || deal.paid_count > 0) throw new Error("HAS_PAYMENTS");
+
+    await unissueDealCash(client, dealId);
+    await client.query(
+      "update deals set stage = 'rejected', reject_reason = $2, next_step = null where id = $1",
+      [dealId, reason]
+    );
+    await client.query("insert into deal_events (deal_id, text) values ($1, $2)", [
+      dealId,
+      `Заявка отклонена: ${reason}`,
+    ]);
+  });
+
+  const deal = await loadDeal(dbName, dealId);
+  if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
+  return deal;
 }
 
 export interface RestructureDealInput {
@@ -1066,8 +1181,8 @@ export async function restructureDeal(
 }
 
 /**
- * Принимает один ближайший взнос: увеличивает счётчик, приходует деньги в
- * кассу и пишет событие в историю — одной транзакцией.
+ * Принимает платёж: распределяет сумму по взносам, приходует деньги в
+ * кассу и пишет события в историю — одной транзакцией.
  *
  * `for update` держит строку до конца транзакции: без него два менеджера,
  * нажавшие «Принять платёж» одновременно, засчитали бы два взноса вместо
@@ -1084,12 +1199,10 @@ export interface AcceptPaymentOptions {
   date?: string;
   method?: "cash" | "card" | "transfer";
   /**
-   * Фактически внесённая сумма — по умолчанию равна очередному взносу по
-   * графику. Если клиент занёс больше, лишнее автоматически закрывает
-   * столько следующих взносов, сколько покрывает сумма (остаток меньше
-   * полного взноса добавляется к последнему закрытому — отдельного
-   * «частично оплаченного» взноса модель графика не поддерживает).
-   * Меньше очередного взноса внести нельзя — см. AMOUNT_TOO_LOW.
+   * Фактически внесённая сумма — по умолчанию то, что осталось внести по
+   * ближайшему взносу. Больше — закрывает следующие взносы, меньше —
+   * частичная оплата; остаток в обоих случаях копится в deals.credit
+   * (lib/payments.ts). Больше всего долга принять нельзя.
    */
   amount?: number;
 }
@@ -1098,12 +1211,13 @@ export async function acceptPayment(
   dbName: string,
   dealId: string,
   options: AcceptPaymentOptions = {}
-): Promise<{ deal: Deal; alreadyPaid: boolean; received: number; installments: number[] }> {
+): Promise<{ deal: Deal; alreadyPaid: boolean; received: number; installments: number[]; credit: number }> {
   const occurredAt = options.date ?? todayIso();
   const methodLabel = options.method ? PAYMENT_METHOD_LABEL[options.method] : undefined;
-  // Что реально провели — для журнала действий
+  // Что реально провели — для журнала действий: полностью закрытые взносы
   let received = 0;
   const installments: number[] = [];
+  let creditAfter = 0;
 
   const alreadyPaid = await transaction(dbName, async (client) => {
     const { rows } = await client.query<{
@@ -1113,6 +1227,8 @@ export async function acceptPayment(
       markup_pct: number;
       down_payment: number | null;
       paid_count: number;
+      credit: number;
+      stage: DealStage;
       opened_at: string;
       product: string;
       client_name: string;
@@ -1120,100 +1236,73 @@ export async function acceptPayment(
       restructured_months: number | null;
       restructured_from: string | null;
     }>(
-      `select d.id, d.amount, d.months, d.markup_pct, d.down_payment, d.paid_count, d.opened_at, d.product,
-              c.name as client_name, d.original_months, d.restructured_months, d.restructured_from
+      `select d.id, d.amount, d.months, d.markup_pct, d.down_payment, d.paid_count, d.credit,
+              d.stage, d.opened_at, d.product, c.name as client_name,
+              d.original_months, d.restructured_months, d.restructured_from
        from deals d join clients c on c.id = d.client_id
-       where d.id = $1
+       where d.id = $1 and d.deleted_at is null
        for update of d`,
       [dealId]
     );
-
     const deal = rows[0];
     if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
     if (deal.paid_count >= deal.months) return true;
+    // Платёж принимается только по выданной сделке: заявку сначала
+    // одобряют (перевод в «Активна» на канбане — там же проводится закупка),
+    // а не активируют случайным нажатием «Принять платёж»
+    if (deal.stage !== "active") throw new Error("NOT_ACTIVE");
 
     const restructure = restructureOf({
       originalMonths: deal.original_months,
       restructuredMonths: deal.restructured_months,
       restructuredFrom: deal.restructured_from,
     });
-
     // Суммы по графику не зависят от paid — берём весь график один раз
-    const schedule = buildSchedule(
-      deal.amount,
-      deal.months,
-      deal.months,
-      deal.opened_at,
-      restructure
+    const amounts = buildSchedule(deal.amount, deal.months, deal.months, deal.opened_at, restructure)
+      .map((p) => p.amount);
+
+    const credit = Number(deal.credit);
+    const allocation = allocatePayment(
+      amounts,
+      deal.paid_count,
+      credit,
+      options.amount ?? nextDue(amounts, deal.paid_count, credit)
     );
-
-    const nextInstallment = schedule[deal.paid_count];
-    let cash = options.amount ?? nextInstallment.amount;
-    if (cash < nextInstallment.amount - 0.5) {
-      throw new Error("AMOUNT_TOO_LOW");
+    if (!allocation.ok) {
+      throw new PaymentAmountError(allocation.error, allocation.max);
     }
-
-    // Сколько взносов подряд закрывает внесённая сумма — остаток меньше
-    // полного взноса не считаем отдельным (недооплаченным) взносом, а
-    // приплюсовываем к сумме последнего закрытого в этом платеже
-    const covered: number[] = [];
-    let n = deal.paid_count;
-    while (n < deal.months && cash >= schedule[n].amount - 0.5) {
-      covered.push(n);
-      cash -= schedule[n].amount;
-      n++;
-    }
-    const leftover = cash;
-    const newPaidCount = n;
 
     await client.query(
-      "update deals set paid_count = $2 where id = $1",
-      [dealId, newPaidCount]
+      `update deals set paid_count = $2, credit = $3,
+              stage = case when $2 >= months then 'closed' else stage end
+       where id = $1`,
+      [dealId, allocation.paid, allocation.credit]
     );
+    creditAfter = allocation.credit;
 
-    // Первый принятый платёж переводит сделку в «Активна» — до этого стадию
-    // двигать было физически нечем: ни одного места в коде, кроме этого,
-    // не переводит сделку в active, а «закрытие» ниже само требует active.
-    await client.query(
-      "update deals set stage = 'active' where id = $1 and stage in ('new', 'check', 'signing')",
-      [dealId]
-    );
+    // По одной записи в кассу на каждый взнос, которого коснулся платёж —
+    // так «Отменить последний платёж» откатывает ровно одну запись, а
+    // квитанция и история показывают, за какой взнос пришли деньги.
+    for (const part of allocation.parts) {
+      received += part.amount;
+      const n = part.installment;
+      const what = part.completes
+        ? `Платёж ${n} из ${deal.months}`
+        : `Частичная оплата взноса ${n} из ${deal.months}`;
 
-    // Последняя оплата закрывает сделку
-    if (newPaidCount === deal.months) {
-      await client.query(
-        "update deals set stage = 'closed' where id = $1 and stage = 'active'",
-        [dealId]
-      );
-    }
-
-    // По одной записи в кассу и в историю на каждый закрытый этим платежом
-    // взнос — так «Отменить последний платёж» откатывает ровно один взнос
-    // за раз, даже если внесли сразу на несколько вперёд. Остаток меньше
-    // полного взноса (leftover) идёт в сумму последнего из них — деньги в
-    // кассе должны совпадать с тем, что реально занесли, до копейки.
-    for (let i = 0; i < covered.length; i++) {
-      const installmentNumber = covered[i] + 1;
-      const isLast = i === covered.length - 1;
-      const amount = schedule[covered[i]].amount + (isLast ? leftover : 0);
-      received += amount;
-      installments.push(installmentNumber);
-
-      // Дата операции — по умолчанию сегодня, а НЕ плановая дата взноса из
-      // графика: клиент может гасить июльский платёж в августе, деньги
-      // пришли фактически в августе, иначе «Приход за месяц» в кассе
-      // считался бы неверно. Менеджер может явно указать другую дату
-      // (options.date), например если заносит платёж задним числом.
+      // Дата операции — по умолчанию сегодня, а НЕ плановая дата взноса:
+      // клиент может гасить июльский платёж в августе. Менеджер может явно
+      // указать другую дату (options.date), если заносит платёж задним числом.
       await client.query(
         `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note, installment_number, method)
          values ('payment', $1, $2, $3, $4, $5, $6, $7)`,
         [
-          amount,
+          part.amount,
           occurredAt,
           dealId,
-          `Платёж ${installmentNumber} из ${deal.months} · ${deal.client_name}`,
+          `${what} · ${deal.client_name}`,
           methodLabel ? `${deal.product} · ${methodLabel}` : deal.product,
-          installmentNumber,
+          n,
           options.method ?? null,
         ]
       );
@@ -1222,22 +1311,27 @@ export async function acceptPayment(
         "insert into deal_events (deal_id, text) values ($1, $2)",
         [
           dealId,
-          `Платёж ${installmentNumber} из ${deal.months} принят — ${amount.toLocaleString("ru-RU")} ₽` +
-            (methodLabel ? ` · ${methodLabel}` : "") +
-            (covered.length > 1 ? " · закрыт переплатой одним платежом" : ""),
+          `${what} — ${part.amount.toLocaleString("ru-RU")} ₽` +
+            (part.completes ? " · взнос закрыт" : "") +
+            (methodLabel ? ` · ${methodLabel}` : ""),
         ]
       );
 
-      await accrueCoinvestorProfit(
-        client,
-        dealId,
-        deal.amount,
-        deal.months,
-        deal.markup_pct,
-        deal.product,
-        installmentNumber,
-        deal.down_payment ?? 0
-      );
+      // Долю соинвесторам начисляем, когда взнос закрыт целиком: доля
+      // считается от маржи взноса, а не от случайной части платежа
+      if (part.completes) {
+        installments.push(n);
+        await accrueCoinvestorProfit(
+          client,
+          dealId,
+          deal.amount,
+          deal.months,
+          deal.markup_pct,
+          deal.product,
+          n,
+          deal.down_payment ?? 0
+        );
+      }
     }
 
     return false;
@@ -1245,19 +1339,30 @@ export async function acceptPayment(
 
   const deal = await loadDeal(dbName, dealId);
   if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
-  return { deal, alreadyPaid, received, installments };
+  return { deal, alreadyPaid, received, installments, credit: creditAfter };
+}
+
+/** Сумма платежа не подходит: не больше нуля или больше остатка долга (max). */
+export class PaymentAmountError extends Error {
+  constructor(
+    public readonly reason: "NOT_POSITIVE" | "TOO_HIGH",
+    public readonly max: number
+  ) {
+    super(reason);
+    this.name = "PaymentAmountError";
+  }
 }
 
 /**
- * Откатывает последний принятый взнос — менеджер ошибся и нажал «Отметить
- * оплату» не по той сделке. Отменять можно только самый последний взнос:
- * график — это «первые paid_count взносов оплачены», отменить произвольный
- * взнос из середины физически нечем.
+ * Отменяет последнюю принятую запись о платеже по сделке — менеджер
+ * ошибся суммой или сделкой. Отменяется одна запись кассы за раз (полный
+ * взнос или его часть), в обратном порядке; состояние графика после этого
+ * пересчитывается по оставшимся платежам (stateFromPayments).
  *
  * Реальные деньги (cash_tx) не удаляются задним числом — добавляется
  * компенсирующая запись, чтобы в кассе остался полный аудиторский след.
- * Начисление соинвесторам за этот взнос удаляется: это ещё не выплаченные
- * деньги, просто прогноз, отменённому платежу неоткуда взяться.
+ * Начисление соинвесторам за взнос, который снова стал неоплаченным,
+ * удаляется: это ещё не выплаченные деньги, просто прогноз.
  */
 export async function undoLastPayment(
   dbName: string,
@@ -1265,67 +1370,94 @@ export async function undoLastPayment(
 ): Promise<{ deal: Deal; installment: number; amount: number }> {
   const undone = await transaction(dbName, async (client) => {
     const { rows } = await client.query<{
+      amount: number;
       months: number;
       paid_count: number;
+      credit: number;
+      opened_at: string;
+      original_months: number | null;
+      restructured_months: number | null;
+      restructured_from: string | null;
       product: string;
       client_name: string;
     }>(
-      `select d.months, d.paid_count, d.product, c.name as client_name
+      `select d.amount, d.months, d.paid_count, d.credit, d.opened_at,
+              d.original_months, d.restructured_months, d.restructured_from,
+              d.product, c.name as client_name
        from deals d join clients c on c.id = d.client_id
-       where d.id = $1
+       where d.id = $1 and d.deleted_at is null
        for update of d`,
       [dealId]
     );
     const deal = rows[0];
     if (!deal) throw new Error(`Сделка ${dealId} не найдена`);
-    if (deal.paid_count <= 0) throw new Error("NOTHING_TO_UNDO");
+    if (deal.paid_count <= 0 && Number(deal.credit) <= 0) throw new Error("NOTHING_TO_UNDO");
 
-    const n = deal.paid_count;
-
-    // Именно платёж этого взноса, который ещё никто не отменял. Раньше
-    // брали просто последнюю запись кассы по сделке — второй откат подряд
-    // попадал в запись-отмену первого и «отменял отмену» (плюс в кассу
-    // вместо минуса)
-    const { rows: txRows } = await client.query<{ id: string; amount: number }>(
-      `select p.id, p.amount from cash_tx p
-       where p.deal_id = $1 and p.kind = 'payment' and p.installment_number = $2
+    // Действующие (не отменённые) записи о взносах. Запись-отмену берём
+    // по reverses_id, а не «последнюю запись по сделке» — иначе второй
+    // откат подряд «отменял бы отмену»
+    const { rows: payments } = await client.query<{ id: string; amount: number; installment_number: number }>(
+      `select p.id, p.amount, p.installment_number from cash_tx p
+       where p.deal_id = $1 and p.kind = 'payment' and p.installment_number is not null
          and p.amount > 0 and p.reverses_id is null
          and not exists (select 1 from cash_tx r where r.reverses_id = p.id)
-       order by p.id desc limit 1`,
-      [dealId, n]
+       order by p.id`,
+      [dealId]
     );
-    const lastTx = txRows[0];
-    // Нет записи — взнос закрыт не отдельным платежом (досрочное погашение
-    // одной суммой) или это данные до появления связи платёж ↔ взнос
+    const lastTx = payments[payments.length - 1];
+    // Нет записи — взносы закрыты не отдельными платежами (досрочное
+    // погашение одной суммой) или это данные до связи платёж ↔ взнос
     if (!lastTx) throw new Error("NO_PAYMENT_RECORD");
+    const n = lastTx.installment_number;
 
     await client.query(
       `insert into cash_tx (kind, amount, occurred_at, deal_id, title, note, installment_number, reverses_id)
-       values ('payment', $1, current_date, $2, $3, $4, $5, $6)`,
+       values ('payment', $1, $2, $3, $4, $5, $6, $7)`,
       [
         -lastTx.amount,
+        todayIso(),
         dealId,
-        `Отмена платежа ${n} из ${deal.months} · ${deal.client_name}`,
+        `Отмена платежа по взносу ${n} из ${deal.months} · ${deal.client_name}`,
         deal.product,
         n,
         lastTx.id,
       ]
     );
 
-    await client.query(
-      `delete from coinvestor_profit_tx where deal_id = $1 and kind = 'accrual' and installment_number = $2`,
-      [dealId, n]
+    const restructure = restructureOf({
+      originalMonths: deal.original_months,
+      restructuredMonths: deal.restructured_months,
+      restructuredFrom: deal.restructured_from,
+    });
+    const amounts = buildSchedule(deal.amount, deal.months, deal.months, deal.opened_at, restructure)
+      .map((p) => p.amount);
+    const state = stateFromPayments(
+      amounts,
+      payments.slice(0, -1).map((p) => ({ installment: p.installment_number, amount: Number(p.amount) }))
     );
 
+    // Взносы, которые снова стали неоплаченными, — без доли соинвесторам
+    if (state.paid < deal.paid_count) {
+      await client.query(
+        `delete from coinvestor_profit_tx
+         where deal_id = $1 and kind = 'accrual' and installment_number > $2 and installment_number <= $3`,
+        [dealId, state.paid, deal.paid_count]
+      );
+    }
+
     await client.query(
-      `update deals set paid_count = $2, stage = case when stage = 'closed' then 'active' else stage end
+      `update deals set paid_count = $2, credit = $3,
+              stage = case when stage = 'closed' then 'active' else stage end
        where id = $1`,
-      [dealId, n - 1]
+      [dealId, state.paid, state.credit]
     );
 
     await client.query(
       "insert into deal_events (deal_id, text) values ($1, $2)",
-      [dealId, `Платёж ${n} из ${deal.months} отменён — принят по ошибке`]
+      [
+        dealId,
+        `Платёж ${Number(lastTx.amount).toLocaleString("ru-RU")} ₽ по взносу ${n} из ${deal.months} отменён — принят по ошибке`,
+      ]
     );
 
     return { installment: n, amount: Number(lastTx.amount) };
@@ -1755,6 +1887,8 @@ export interface PortalDeal {
   months: number;
   openedAt: string;
   paid: number;
+  /** Внесено в счёт следующего взноса (lib/payments.ts). */
+  credit: number;
   managerName: string;
   managerPhone: string | null;
   originalMonths?: number;
@@ -1783,6 +1917,7 @@ export async function loadPortalDeal(
     months: number;
     opened_at: string;
     paid_count: number;
+    credit: number;
     stage: DealStage;
     manager_name: string | null;
     manager_phone: string | null;
@@ -1792,13 +1927,13 @@ export async function loadPortalDeal(
   }>(
     dbName,
     `select d.id, c.name as client_name, d.product, d.amount, d.months,
-            d.opened_at, d.paid_count, d.stage,
+            d.opened_at, d.paid_count, d.credit, d.stage,
             u.name as manager_name, u.phone as manager_phone,
             d.original_months, d.restructured_months, d.restructured_from
      from deals d
      join clients c on c.id = d.client_id
      left join users u on u.id = d.manager_id
-     where d.portal_token = $1`,
+     where d.portal_token = $1 and d.deleted_at is null`,
     [token]
   );
 
@@ -1821,6 +1956,7 @@ export async function loadPortalDeal(
     openedAt: row.opened_at,
     // у закрытой сделки выплачены все взносы — та же логика, что в paidCount
     paid: row.stage === "closed" ? row.months : row.paid_count,
+    credit: row.stage === "closed" ? 0 : Number(row.credit),
     managerName: row.manager_name ?? "менеджер",
     managerPhone: row.manager_phone,
     ...(restructure
@@ -1841,6 +1977,8 @@ export interface PortalClientDeal {
   months: number;
   openedAt: string;
   paid: number;
+  /** Внесено в счёт следующего взноса (lib/payments.ts). */
+  credit: number;
   stage: DealStage;
   originalMonths?: number;
   restructuredMonths?: number;
@@ -1878,6 +2016,7 @@ export async function loadPortalClient(
     months: number;
     opened_at: string;
     paid_count: number;
+    credit: number;
     stage: DealStage;
     manager_name: string | null;
     manager_phone: string | null;
@@ -1886,7 +2025,7 @@ export async function loadPortalClient(
     restructured_from: string | null;
   }>(
     dbName,
-    `select d.id, d.product, d.amount, d.months, d.opened_at, d.paid_count,
+    `select d.id, d.product, d.amount, d.months, d.opened_at, d.paid_count, d.credit,
             d.stage, u.name as manager_name, u.phone as manager_phone,
             d.original_months, d.restructured_months, d.restructured_from
      from deals d
@@ -1919,6 +2058,7 @@ export async function loadPortalClient(
         months: row.months,
         openedAt: row.opened_at,
         paid: row.stage === "closed" ? row.months : row.paid_count,
+        credit: row.stage === "closed" ? 0 : Number(row.credit),
         stage: row.stage,
         ...(restructure
           ? {
@@ -1934,7 +2074,7 @@ export async function loadPortalClient(
 
 // ── Квитанции ──────────────────────────────────────────────────────────
 
-export type PaymentKind = "installment" | "down" | "payoff";
+export type PaymentKind = "installment" | "partial" | "down" | "payoff";
 
 /** Один реально поступивший и не отменённый платёж клиента — строка «Истории платежей» в кабинете. */
 export interface PortalPayment {
@@ -1965,7 +2105,9 @@ const VALID_PAYMENTS_SQL = `
     and not exists (select 1 from cash_tx r where r.reverses_id = p.id)`;
 
 function paymentKind(row: PaymentRow): PaymentKind | undefined {
-  if (row.installment_number !== null) return "installment";
+  if (row.installment_number !== null) {
+    return row.title.startsWith("Частичная оплата") ? "partial" : "installment";
+  }
   if (row.title.startsWith("Первоначальный взнос")) return "down";
   if (row.title.startsWith("Досрочное погашение")) return "payoff";
   return undefined;
@@ -2211,7 +2353,7 @@ export async function updateEmployee(
       email: row.email,
       phone: row.phone ?? "—",
       role: row.role,
-      since: sinceLabel(row.created_at.toISOString().slice(0, 10)),
+      since: sinceLabel(isoDate(row.created_at)),
       active: row.active,
     };
   });

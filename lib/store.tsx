@@ -280,6 +280,7 @@ interface DataContextValue extends Snapshot {
   reassignDeal: (dealId: string, managerId: number) => Promise<Deal>;
   setDealStage: (dealId: string, stage: "new" | "check" | "active") => Promise<Deal>;
   closeDeal: (dealId: string) => Promise<Deal>;
+  rejectDeal: (dealId: string, reason: string) => Promise<Deal>;
   deleteDeal: (dealId: string) => Promise<void>;
   addEmployee: (input: NewEmployeeInput) => Promise<{ password: string }>;
   updateEmployee: (id: number, input: UpdateEmployeeInput) => Promise<void>;
@@ -401,6 +402,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
+    // Первая загрузка данных — ровно то, для чего нужен эффект: состояние
+    // меняется после ответа сервера, а не синхронно при отрисовке
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load()
       .then(() => !cancelled && setStatus("ready"))
       .catch((err: Error) => {
@@ -499,6 +503,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const closeDeal = useCallback(
     async (dealId: string): Promise<Deal> => {
       const deal = await api<Deal>(`/api/deals/${encodeURIComponent(dealId)}/close`, {});
+      await load();
+      return deal;
+    },
+    [load]
+  );
+
+  const rejectDeal = useCallback(
+    async (dealId: string, reason: string): Promise<Deal> => {
+      const deal = await api<Deal>(`/api/deals/${encodeURIComponent(dealId)}/reject`, { reason });
       await load();
       return deal;
     },
@@ -757,6 +770,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       reassignDeal,
       setDealStage,
       closeDeal,
+      rejectDeal,
       deleteDeal,
       addClient,
       setClientBlacklisted,
@@ -788,7 +802,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       logout,
       refresh,
     }),
-    [state, addDeal, updateDeal, restructureDeal, reassignDeal, setDealStage, closeDeal, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
+    [state, addDeal, updateDeal, restructureDeal, reassignDeal, setDealStage, closeDeal, rejectDeal, deleteDeal, addClient, setClientBlacklisted, acceptPayment, undoLastPayment, addCashAdjustment,
      addCoinvestor, updateCoinvestor, setCoinvestorActive, deleteCoinvestor,
      recordCoinvestorPayout, reinvestCoinvestorProfit, adjustCoinvestorCapital,
      addTemplate, updateTemplateFn, deleteTemplateFn, setDefaultTemplate, sendReminder,

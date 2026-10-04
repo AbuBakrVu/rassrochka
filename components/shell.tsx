@@ -41,7 +41,7 @@ export const nav: {
   { href: "/clients", label: "Клиенты", icon: Users },
   { href: "/payments", label: "Платежи", icon: CalendarDays },
   { href: "/mailings", label: "Рассылки", icon: Send },
-  { href: "/coinvestors", label: "Соинвесторы", icon: Handshake },
+  { href: "/coinvestors", label: "Соинвесторы", icon: Handshake, adminOnly: true },
   { href: "/cash", label: "Финансы", icon: Wallet },
   { href: "/registry", label: "Реестр клиентов", icon: BookUser },
   { href: "/blacklist", label: "Чёрный список", icon: ShieldAlert },

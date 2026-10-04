@@ -9,7 +9,7 @@
 // деньгам: в каждом рубле платежа доля маржи та же, что во всей сделке.
 
 import { purchasePrice, type Deal } from "./data";
-import { scheduleForDeal } from "./schedule";
+import { buildSchedule, restructureOf } from "./schedule";
 import { todayIso } from "./status";
 import type { CashTx, Coinvestor, CoinvestorProfitTx } from "./store";
 
@@ -124,7 +124,9 @@ export function computeProfit(
     if (!paybackDate && deal.stage === "active") {
       // План по графику: первый взнос, после которого закупка вернётся
       let sum = deal.downPayment ?? 0;
-      const point = scheduleForDeal(deal, 0).find((p) => (sum += p.amount) >= purchase);
+      const point = buildSchedule(deal.amount, deal.months, 0, deal.openedAt, restructureOf(deal)).find(
+        (p) => (sum += p.amount) >= purchase
+      );
       if (point) {
         paybackDays = daysBetween(deal.openedAt, point.iso);
         paybackPlanned = true;

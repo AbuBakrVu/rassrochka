@@ -27,6 +27,9 @@ export async function PATCH(
         await audit(tenant.dbName, user.id, "deal.update", id, `Отредактирована сделка ${id} · ${deal.client}`);
         return deal;
       } catch (err) {
+        if (err instanceof Error && err.message === "MANAGER_NOT_FOUND") {
+          throw new BadRequestError("Ответственный не найден или отключён — выберите действующего сотрудника");
+        }
         if (err instanceof Error && err.message === "ALREADY_PAID") {
           throw new BadRequestError(
             "По сделке уже есть принятые платежи — сумму, срок и наценку менять нельзя"

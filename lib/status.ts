@@ -10,7 +10,18 @@ import { buildSchedule, type RestructureInfo } from "./schedule";
 
 const DAY_MS = 86_400_000;
 
-export const todayIso = () => new Date().toISOString().slice(0, 10);
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * Дата в формате ГГГГ-ММ-ДД по МЕСТНОМУ времени. Не toISOString(): тот
+ * всегда в UTC, и с полуночи до 03:00 по Москве (во Владивостоке — до
+ * 10:00) «сегодня» оказывалось вчерашним днём — сдвигались просрочки и
+ * дата платежа. В браузере местное время — сотрудника, на сервере —
+ * часового пояса компании (TZ в .env, см. docker-compose.yml).
+ */
+export const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+export const todayIso = () => isoDate(new Date());
 
 /** Сколько дней просрочен ближайший неоплаченный взнос. 0 — просрочки нет. */
 export function daysOverdue(

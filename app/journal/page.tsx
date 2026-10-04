@@ -6,6 +6,7 @@ import { Download, ScrollText, Search, ShieldAlert } from "lucide-react";
 import { PageHeader, Card, EmptyState } from "@/components/ui";
 import { useData } from "@/lib/store";
 import { downloadCsv } from "@/lib/csv";
+import { todayIso } from "@/lib/status";
 
 // Журнал действий сотрудников: кто удалил сделку, откатил платёж, поправил
 // кассу, сменил ответственного. Только для администратора — данные
@@ -39,6 +40,7 @@ const ACTION_LABEL: Record<string, string> = {
   "deal.stage": "Смена этапа",
   "deal.manager": "Смена ответственного",
   "deal.close": "Досрочное закрытие",
+  "deal.reject": "Отказ по заявке",
   "deal.restructure": "Изменение графика",
   "payment.accept": "Приём платежа",
   "payment.undo": "Отмена платежа",
@@ -143,7 +145,7 @@ export default function JournalPage() {
   const exportCsv = () => {
     if (!entries) return;
     downloadCsv(
-      `журнал-${new Date().toISOString().slice(0, 10)}.csv`,
+      `журнал-${todayIso()}.csv`,
       ["Время", "Сотрудник", "Действие", "Объект", "Подробности"],
       entries.map((e) => [
         timeFmt.format(new Date(e.at)),

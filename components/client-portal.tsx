@@ -15,7 +15,7 @@ import {
   ReceiptText,
 } from "lucide-react";
 import { fmt } from "@/lib/data";
-import { scheduleForDeal, longDate, money, type Installment } from "@/lib/schedule";
+import { scheduleForDeal, paidTotal, longDate, money, type Installment } from "@/lib/schedule";
 import { paymentTitle, receiptPath, type PaymentKind } from "@/lib/receipts";
 import { todayIso } from "@/lib/status";
 
@@ -300,7 +300,7 @@ function DealSchedule({
 
 function SingleDealView({ data, token }: { data: SingleDealResponse; token: string }) {
   const schedule = scheduleForDeal(data, data.paid);
-  const paidSum = schedule.filter((p) => p.status === "paid").reduce((s, p) => s + p.amount, 0);
+  const paidSum = paidTotal(schedule);
   const remaining = data.amount - paidSum;
   const next = schedule.find((p) => p.status === "due");
 
@@ -352,7 +352,7 @@ function DealCard({
 }) {
   const [open, setOpen] = useState(false);
   const schedule = scheduleForDeal(deal, deal.paid);
-  const paidSum = schedule.filter((p) => p.status === "paid").reduce((s, p) => s + p.amount, 0);
+  const paidSum = paidTotal(schedule);
   const remaining = deal.amount - paidSum;
   const next = schedule.find((p) => p.status === "due");
 
@@ -411,7 +411,7 @@ function ClientView({ data, token }: { data: ClientResponse; token: string }) {
 
   const remaining = active.reduce((sum, deal) => {
     const schedule = scheduleForDeal(deal, deal.paid);
-    const paidSum = schedule.filter((p) => p.status === "paid").reduce((s, p) => s + p.amount, 0);
+    const paidSum = paidTotal(schedule);
     return sum + (deal.amount - paidSum);
   }, 0);
 

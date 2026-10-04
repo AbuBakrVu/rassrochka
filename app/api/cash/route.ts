@@ -14,5 +14,5 @@ export async function POST(request: Request) {
       `Ручная операция по кассе: ${tx.amount >= 0 ? "внесение" : "изъятие"} ${rub(Math.abs(tx.amount))} · «${tx.title}», дата ${tx.date}`
     );
     return tx;
-  });
+  }, { roles: ["admin", "accountant"] });
 }

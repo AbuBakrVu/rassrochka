@@ -27,12 +27,16 @@ export default function CommandPalette() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
+        setQuery("");
         setOpen((v) => !v);
       } else if (e.key === "Escape") {
         setOpen(false);
       }
     };
-    const onOpenRequest = () => setOpen(true);
+    const onOpenRequest = () => {
+      setQuery("");
+      setOpen(true);
+    };
     document.addEventListener("keydown", onKey);
     window.addEventListener("open-command-palette", onOpenRequest);
     return () => {
@@ -42,7 +46,6 @@ export default function CommandPalette() {
   }, []);
 
   useEffect(() => {
-    if (open) setQuery("");
     document.body.style.overflow = open ? "hidden" : "";
   }, [open]);
 

@@ -13,7 +13,7 @@ import {
 import { PageHeader, Card } from "@/components/ui";
 import AnalyticsTabs from "@/components/analytics-tabs";
 import { stages, paidCount, dealMargin, type Deal } from "@/lib/data";
-import { scheduleForDeal, money } from "@/lib/schedule";
+import { scheduleForDeal, paidTotal, money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
 import { computeAging } from "@/lib/derive";
 
@@ -24,9 +24,7 @@ function activeRemaining(deals: Deal[], paidPayments: Record<string, number>) {
     .filter((d) => d.stage === "active")
     .reduce((sum, d) => {
       const schedule = scheduleForDeal(d, paidCount(d, paidPayments));
-      const paidSum = schedule
-        .filter((p) => p.status === "paid")
-        .reduce((s, p) => s + p.amount, 0);
+      const paidSum = paidTotal(schedule);
       return sum + (d.amount - paidSum);
     }, 0);
 }
