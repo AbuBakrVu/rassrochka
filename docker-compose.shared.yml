@@ -1,0 +1,21 @@
+# Режим «общий сервер» (DEPLOY_MODE=shared в .env): на VPS несколько
+# сервисов, порты 80/443 держит общий прокси из /opt/proxy (./nasiya
+# proxy-setup). Своего Caddy у Nasiya тогда нет, а приложение входит в
+# общую Docker-сеть «web» под уникальным именем — по нему прокси и ходит.
+# Подключается поверх docker-compose.yml (scripts/lib.sh, COMPOSE_FILE в .env).
+
+services:
+  caddy:
+    # Профиль, который никто не включает, — сервис просто не запускается
+    profiles: ["standalone-only"]
+
+  app:
+    networks:
+      default: {}
+      web:
+        aliases:
+          - ${PROXY_ALIAS:?нужен PROXY_ALIAS}
+
+networks:
+  web:
+    external: true

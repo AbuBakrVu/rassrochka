@@ -1,0 +1,35 @@
+# Общий входной веб-сервер для всех сервисов на этом VPS. Живёт отдельно
+# от любого сервиса в /opt/proxy (ставится командой ./nasiya proxy-setup),
+# занимает порты 80/443 и раздаёт домены по контейнерам через общую
+# Docker-сеть «web». Сертификаты Let's Encrypt — автоматически.
+#
+# Управление — /opt/proxy/proxy (add / remove / list / reload / logs).
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: proxy-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?нужен ACME_EMAIL в /opt/proxy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      # Без тома Let's Encrypt перевыпускал бы сертификаты при каждом
+      # рестарте и упёрся бы в недельный лимит
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - web
+
+networks:
+  web:
+    external: true
+
+volumes:
+  caddy_data:
+  caddy_config:
