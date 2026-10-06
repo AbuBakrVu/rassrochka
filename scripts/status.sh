@@ -11,7 +11,10 @@ SLUG="$(env_get COMPANY_SLUG)"
 
 echo "Компания: $(env_get COMPANY_NAME)"
 echo "Адрес:    https://$SLUG.$DOMAIN"
-[ "$(env_get DEPLOY_MODE)" = "shared" ] && echo "Сервер:   общий, вход через $PROXY_DIR"
+case "$(env_get DEPLOY_MODE)" in
+  shared) echo "Вход:     общий прокси $PROXY_DIR" ;;
+  port)   echo "Вход:     ваш веб-сервер → 127.0.0.1:$(env_get APP_PORT)" ;;
+esac
 echo
 
 compose ps
@@ -31,6 +34,8 @@ if [ "$CODE" = "200" ]; then
 else
   if [ "$(env_get DEPLOY_MODE)" = "shared" ]; then
     c_red "код $CODE — проверьте DNS, $PROXY_DIR/proxy list и $PROXY_DIR/proxy logs"
+  elif [ "$(env_get DEPLOY_MODE)" = "port" ]; then
+    c_red "код $CODE — проверьте DNS и настройки вашего веб-сервера (nginx -t, certbot certificates)"
   else
     c_red "код $CODE — проверьте DNS и docker compose logs caddy"
   fi
