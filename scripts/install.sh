@@ -7,7 +7,11 @@
 #
 # Ставит Docker (если его нет), поднимает своп, включает firewall, заводит
 # .env, собирает и запускает контейнеры, накатывает миграции и создаёт
-# ЕДИНСТВЕННУЮ компанию этого сервера. Компания и её база — только здесь;
+# ЕДИНСТВЕННУЮ компанию этого сервера.
+#
+# Сервер общий с другими сервисами — MODE=shared (или ответ «да» на вопрос):
+# порты 80/443 держит общий прокси /opt/proxy (ставится здесь же, если его
+# ещё нет), своего Caddy у Nasiya нет, firewall не трогается. Компания и её база — только здесь;
 # у других клиентов свои отдельные серверы и базы друг друга не видят.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -53,6 +57,15 @@ ADMIN_EMAIL="${ADMIN_EMAIL:-$(ask "Почта администратора (ло
 ACME_EMAIL="${ACME_EMAIL:-$(ask "Почта для Let's Encrypt (уведомления о сертификате)" "$ADMIN_EMAIL")}"
 TZ_NAME="${TZ_NAME:-$(ask "Часовой пояс компании (Europe/Moscow, Asia/Yekaterinburg, Asia/Vladivostok…)" "Europe/Moscow")}"
 
+# Общий сервер угадываем по уже стоящему прокси, но спрашиваем всегда
+DEFAULT_MODE="n"
+[ -d "$PROXY_DIR" ] && DEFAULT_MODE="y"
+if [ -z "${MODE:-}" ]; then
+  SHARED_ANSWER="$(ask "На этом сервере будут и другие веб-сервисы? (y/n)" "$DEFAULT_MODE")"
+  case "$SHARED_ANSWER" in y|Y|д|Д|yes|да) MODE=shared ;; *) MODE=standalone ;; esac
+fi
+[ "$MODE" = "shared" ] || [ "$MODE" = "standalone" ] || die "MODE — shared или standalone"
+PROXY_ALIAS="nasiya-$SLUG"
 if ! [[ "$SLUG" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
   die "Поддомен «$SLUG»: только строчные латинские буквы, цифры и дефис (не по краям)"
 fi
@@ -69,6 +82,11 @@ echo "  Адрес компании   $SLUG.$DOMAIN"
 echo "  Название         $COMPANY_NAME"
 echo "  Администратор    $ADMIN_NAME <$ADMIN_EMAIL>"
 echo "  Часовой пояс     $TZ_NAME"
+if [ "$MODE" = "shared" ]; then
+  echo "  Сервер           общий: вход через прокси $PROXY_DIR, firewall не трогаем"
+else
+  echo "  Сервер           только для Nasiya"
+fi
 echo "  DNS: A-запись $SLUG.$DOMAIN → IP этого сервера должна быть добавлена ЗАРАНЕЕ"
 if [ -z "${CONFIRM:-}" ]; then
   read -r -p "Продолжить? [Y/n]: " CONFIRM || true
@@ -94,7 +112,11 @@ if [ ! -f /swapfile ] && [ "$(free -m | awk '/^Mem:/{print $2}')" -lt 8000 ]; th
   grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
 
-if command -v ufw >/dev/null 2>&1; then
+# На общем сервере firewall — общее дело всех сервисов: включение ufw
+# закрыло бы порты, которые нужны соседям
+if [ "$MODE" = "shared" ]; then
+  c_dim "→ Firewall не трогаю (общий сервер)"
+elif command -v ufw >/dev/null 2>&1; then
   echo "→ Настраиваю firewall (22, 80, 443)"
   ufw allow OpenSSH >/dev/null
   ufw allow 80,443/tcp >/dev/null
@@ -139,12 +161,23 @@ PG_PASSWORD=$PG_PASSWORD
 TZ=$TZ_NAME
 
 # Служебное — читают только scripts/*.sh, само приложение эти ключи не видит
+DEPLOY_MODE=$MODE
+PROXY_ALIAS=$PROXY_ALIAS
 COMPANY_SLUG=$SLUG
 COMPANY_NAME=$COMPANY_NAME
 ADMIN_EMAIL=$ADMIN_EMAIL
 ADMIN_NAME=$ADMIN_NAME
 EOF
 chmod 600 "$ENV_FILE"
+
+# Чтобы и ручной `docker compose …` в этой папке видел режим общего сервера
+if [ "$MODE" = "shared" ]; then
+  echo "COMPOSE_FILE=docker-compose.yml:docker-compose.shared.yml" >> "$ENV_FILE"
+  if ! docker ps --format '{{.Names}}' | grep -qx proxy-caddy; then
+    echo "→ Ставлю общий прокси в $PROXY_DIR"
+    ACME_EMAIL="$ACME_EMAIL" bash scripts/proxy-setup.sh
+  fi
+fi
 
 # ── Контейнеры ────────────────────────────────────────────────────────
 
@@ -160,6 +193,11 @@ echo "→ Накатываю миграции"
 compose exec -T app node scripts/migrate-all.mjs
 
 wait_for_health "$DOMAIN"
+
+if [ "$MODE" = "shared" ]; then
+  echo "→ Публикую $SLUG.$DOMAIN в общем прокси"
+  write_proxy_site "$SLUG.$DOMAIN" "$PROXY_ALIAS"
+fi
 
 echo "→ Завожу компанию «$COMPANY_NAME»"
 CREATE_OUT="$(compose exec -T app node scripts/create-tenant.mjs \

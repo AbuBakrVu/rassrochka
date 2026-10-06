@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Управление общим прокси (Caddy) этого сервера.
+#
+#   ./proxy add <домен> <контейнер:порт>   опубликовать сервис на домене
+#   ./proxy remove <домен>                  снять домен
+#   ./proxy list                            какие домены куда ведут
+#   ./proxy reload                          перечитать настройки без простоя
+#   ./proxy logs                            журнал прокси
+#   ./proxy up                              запустить (или обновить образ)
+#
+# Сервис должен быть в Docker-сети «web»: в его docker-compose.yml у
+# веб-контейнера добавьте
+#
+#     networks: [default, web]
+#   и внизу файла
+#     networks:
+#       web:
+#         external: true
+#
+# и опубликуйте: ./proxy add crm.example.ru имя-контейнера:3000
+# DNS: A-запись домена → IP этого сервера (заранее, иначе не выдастся сертификат).
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+red()   { printf '\033[31m%s\033[0m\n' "$1"; }
+green() { printf '\033[32m%s\033[0m\n' "$1"; }
+die()   { red "✗ $1" >&2; exit 1; }
+
+mkdir -p sites
+
+# Домен проверен регуляркой в add — в имени файла безопасен
+file_for() { echo "sites/$1.caddy"; }
+
+reload() {
+  docker exec proxy-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null \
+    || die "Настройки с ошибкой — прокси не перезагружен (docker exec proxy-caddy caddy validate --config /etc/caddy/Caddyfile)"
+  docker exec proxy-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+  green "✓ прокси перечитал настройки"
+}
+
+cmd="${1:-}"
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+  up)
+    docker network inspect web >/dev/null 2>&1 || docker network create web >/dev/null
+    docker compose pull -q caddy
+    docker compose up -d
+    green "✓ прокси запущен"
+    ;;
+  add)
+    domain="${1:-}"; upstream="${2:-}"
+    [ -n "$domain" ] && [ -n "$upstream" ] || die "Использование: ./proxy add <домен> <контейнер:порт>"
+    [[ "$domain" =~ ^[a-z0-9.-]+$ ]] || die "Домен «$domain»: только латиница, цифры, точка и дефис"
+    [[ "$upstream" =~ ^[a-zA-Z0-9_.-]+:[0-9]+$ ]] || die "Адрес сервиса «$upstream» — в виде контейнер:порт"
+    cat > "$(file_for "$domain")" <<SITE
+# $domain → $upstream (./proxy add)
+$domain {
+	encode gzip zstd
+	reverse_proxy $upstream
+}
+SITE
+    reload
+    echo "  https://$domain → $upstream"
+    ;;
+  remove)
+    domain="${1:-}"
+    [[ "$domain" =~ ^[a-z0-9.-]+$ ]] || die "Использование: ./proxy remove <домен>"
+    f="$(file_for "$domain")"
+    [ -f "$f" ] || die "Домен $domain не найден (./proxy list)"
+    rm -f "$f"
+    reload
+    ;;
+  list)
+    shopt -s nullglob
+    for f in sites/*.caddy; do
+      sed -n 's/^# \(.*\)$/\1/p' "$f" | head -1
+    done
+    ;;
+  reload) reload ;;
+  logs) docker compose logs --tail 100 -f caddy ;;
+  *)
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    exit 1
+    ;;
+esac

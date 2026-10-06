@@ -11,6 +11,7 @@ SLUG="$(env_get COMPANY_SLUG)"
 
 echo "Компания: $(env_get COMPANY_NAME)"
 echo "Адрес:    https://$SLUG.$DOMAIN"
+[ "$(env_get DEPLOY_MODE)" = "shared" ] && echo "Сервер:   общий, вход через $PROXY_DIR"
 echo
 
 compose ps
@@ -28,7 +29,11 @@ CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$SLUG.$DOM
 if [ "$CODE" = "200" ]; then
   c_green "OK ($CODE)"
 else
-  c_red "код $CODE — проверьте DNS и docker compose logs caddy"
+  if [ "$(env_get DEPLOY_MODE)" = "shared" ]; then
+    c_red "код $CODE — проверьте DNS, $PROXY_DIR/proxy list и $PROXY_DIR/proxy logs"
+  else
+    c_red "код $CODE — проверьте DNS и docker compose logs caddy"
+  fi
 fi
 
 echo -n "Резервные копии:       "

@@ -56,7 +56,7 @@ wait_for_container() {
   local tries=0
   echo "  ждём, пока контейнер поднимется…"
   while [ "$tries" -lt 20 ]; do
-    if docker compose -f "$REPO_DIR/docker-compose.yml" exec -T app node -e "process.exit(0)" >/dev/null 2>&1; then
+    if compose exec -T app node -e "process.exit(0)" >/dev/null 2>&1; then
       c_green "  ✓ контейнер отвечает"
       return 0
     fi
@@ -72,7 +72,7 @@ wait_for_health() {
   local domain="$1" tries=0
   echo "  ждём, пока приложение поднимется…"
   while [ "$tries" -lt 40 ]; do
-    if docker compose -f "$REPO_DIR/docker-compose.yml" exec -T app \
+    if compose exec -T app \
          node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" \
          >/dev/null 2>&1; then
       c_green "  ✓ приложение отвечает"
@@ -84,6 +84,30 @@ wait_for_health() {
   die "приложение не поднялось за 2 минуты — смотрите: docker compose logs app"
 }
 
+# На общем сервере (DEPLOY_MODE=shared) поверх основного файла подключается
+# docker-compose.shared.yml: без своего Caddy, приложение в сети общего прокси
 compose() {
-  docker compose -f "$REPO_DIR/docker-compose.yml" --env-file "$ENV_FILE" "$@"
+  local files=(-f "$REPO_DIR/docker-compose.yml")
+  if [ "$(env_get DEPLOY_MODE)" = "shared" ]; then
+    files+=(-f "$REPO_DIR/docker-compose.shared.yml")
+  fi
+  docker compose "${files[@]}" --env-file "$ENV_FILE" "$@"
+}
+
+PROXY_DIR="${PROXY_DIR:-/opt/proxy}"
+
+# Сайт Nasiya в общем прокси: <компания>.<домен> → приложение этой установки
+write_proxy_site() {
+  local host="$1" alias="$2"
+  mkdir -p "$PROXY_DIR/sites"
+  cat > "$PROXY_DIR/sites/$host.caddy" <<SITE
+# $host → $alias:3000 (Nasiya, $REPO_DIR)
+$host {
+	encode gzip zstd
+	reverse_proxy $alias:3000 {
+		header_up X-Forwarded-Proto https
+	}
+}
+SITE
+  "$PROXY_DIR/proxy" reload
 }

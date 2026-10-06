@@ -8,6 +8,7 @@
 #   ./nasiya backup        — сделать резервную копию прямо сейчас
 #   ./nasiya backup-setup  — настроить копии в облако и расписание
 #   ./nasiya restore       — восстановить базу из копии
+#   ./nasiya proxy-setup   — общий прокси для сервера с несколькими сервисами
 #   ./nasiya deploy root@IP — с вашего компьютера: поставить на новый сервер
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -23,6 +24,7 @@ case "$cmd" in
   backup-setup) exec bash scripts/backup-setup.sh "$@" ;;
   restore)  exec bash scripts/restore.sh "$@" ;;
   deploy)   exec bash scripts/deploy.sh "$@" ;;
+  proxy-setup) exec bash scripts/proxy-setup.sh "$@" ;;
   backup)
     [ -f .env ] && set -a && . ./.env && set +a
     exec bash scripts/backup.sh "$@"
@@ -38,9 +40,10 @@ case "$cmd" in
   backup     запустить резервное копирование прямо сейчас
   backup-setup  настроить копии в облако, шифрование и расписание
   restore    восстановить базу компании из копии (latest — самую свежую)
+  proxy-setup  общий прокси, если на сервере несколько веб-сервисов
 
 С вашего компьютера:
-  deploy root@<IP>  поставить на новый сервер одной командой
+  deploy root@<IP> [--shared]  поставить на новый сервер одной командой
 EOF
     exit 1
     ;;

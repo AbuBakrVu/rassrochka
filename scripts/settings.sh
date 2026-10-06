@@ -60,12 +60,20 @@ cmd_domain() {
   echo "→ Перезапускаю с новыми настройками"
   compose up -d
   wait_for_health "$new_domain"
+  if [ "$(env_get DEPLOY_MODE)" = "shared" ]; then
+    rm -f "$PROXY_DIR/sites/$current_slug.$current_domain.caddy"
+    write_proxy_site "$new_slug.$new_domain" "$(env_get PROXY_ALIAS)"
+  fi
 
   c_green "Готово: https://$new_slug.$new_domain"
 }
 
 cmd_email() {
   local current new
+  if [ "$(env_get DEPLOY_MODE)" = "shared" ]; then
+    echo "Сертификаты выпускает общий прокси — почта в $PROXY_DIR/.env, затем: cd $PROXY_DIR && docker compose up -d"
+    return 0
+  fi
   current="$(env_get ACME_EMAIL)"
   read -r -p "Новая почта для Let's Encrypt [$current]: " new
   new="${new:-$current}"

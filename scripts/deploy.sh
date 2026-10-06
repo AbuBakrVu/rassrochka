@@ -29,6 +29,7 @@ usage() {
   --repo <адрес>     репозиторий (по умолчанию — origin этой копии, в виде git@github.com:…)
   --branch <ветка>   ветка (по умолчанию main)
   --dir <путь>       куда ставить на сервере (по умолчанию /opt/nasiya)
+  --shared           сервер общий с другими сервисами: вход через /opt/proxy
 USAGE
   exit 1
 }
@@ -41,12 +42,14 @@ KEY="$HOME/.ssh/nasiya_deploy_key"
 REPO=""
 BRANCH="main"
 DIR="/opt/nasiya"
+MODE_ENV=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --key) KEY="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
     --branch) BRANCH="$2"; shift 2 ;;
     --dir) DIR="$2"; shift 2 ;;
+    --shared) MODE_ENV="MODE=shared "; shift ;;
     *) usage ;;
   esac
 done
@@ -109,7 +112,7 @@ fi"
 echo "→ Запускаю установку на сервере"
 # -t — чтобы вопросы install.sh задавались в этом терминале
 # shellcheck disable=SC2086
-ssh -t $SSH_OPTS "$TARGET" "cd '$DIR' && ./nasiya install"
+ssh -t $SSH_OPTS "$TARGET" "cd '$DIR' && ${MODE_ENV}./nasiya install"
 
 echo
 read -r -p "Настроить резервные копии сейчас? [Y/n]: " ANSWER || true
