@@ -1,0 +1,14 @@
+# Режим «за вашим веб-сервером» (DEPLOY_MODE=port в .env): порты 80/443 на
+# сервере уже заняты (nginx, Apache, прокси других CRM). Своего Caddy у
+# Nasiya нет — приложение слушает только 127.0.0.1:APP_PORT, а ваш
+# веб-сервер проксирует на него домен (install.sh настраивает nginx сам
+# или печатает готовый конфиг).
+# Подключается поверх docker-compose.yml (scripts/lib.sh, COMPOSE_FILE в .env).
+
+services:
+  caddy:
+    profiles: ["standalone-only"]
+
+  app:
+    ports:
+      - "127.0.0.1:${APP_PORT:?нужен APP_PORT}:3000"

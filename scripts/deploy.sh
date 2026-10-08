@@ -29,7 +29,8 @@ usage() {
   --repo <адрес>     репозиторий (по умолчанию — origin этой копии, в виде git@github.com:…)
   --branch <ветка>   ветка (по умолчанию main)
   --dir <путь>       куда ставить на сервере (по умолчанию /opt/nasiya)
-  --shared           сервер общий с другими сервисами: вход через /opt/proxy
+  --shared           принудительно общий прокси /opt/proxy (обычно режим
+                     определяется сам по занятости портов 80/443)
 USAGE
   exit 1
 }
@@ -58,25 +59,32 @@ if [ -z "$REPO" ]; then
   REPO="$(git remote get-url origin 2>/dev/null || true)"
   [ -n "$REPO" ] || die "Не удалось определить репозиторий — укажите --repo git@github.com:<владелец>/rassrochka.git"
 fi
-# Серверу нужен SSH-адрес: по https приватный репозиторий без пароля не склонировать
+# Публичный репозиторий сервер клонирует по https без всяких ключей;
+# приватный — по SSH с deploy key (DEPLOY.md §1)
+REPO_PATH=""
 case "$REPO" in
-  https://github.com/*)
-    REPO="git@github.com:${REPO#https://github.com/}"
-    case "$REPO" in *.git) ;; *) REPO="$REPO.git" ;; esac
-    ;;
+  https://github.com/*) REPO_PATH="${REPO#https://github.com/}" ;;
+  git@github.com:*) REPO_PATH="${REPO#git@github.com:}" ;;
 esac
-case "$REPO" in
-  git@*) ;;
-  *) die "Репозиторий «$REPO» — нужен SSH-адрес вида git@github.com:<владелец>/rassrochka.git (--repo)" ;;
-esac
-
-[ -f "$KEY" ] || die "Нет deploy key $KEY — создайте его по DEPLOY.md §1 или укажите --key"
+REPO_PATH="${REPO_PATH%.git}"
+PUBLIC=""
+if [ -n "$REPO_PATH" ] && GIT_TERMINAL_PROMPT=0 git ls-remote "https://github.com/$REPO_PATH.git" HEAD >/dev/null 2>&1; then
+  PUBLIC=1
+  REPO="https://github.com/$REPO_PATH.git"
+else
+  [ -n "$REPO_PATH" ] && REPO="git@github.com:$REPO_PATH.git"
+  case "$REPO" in
+    git@*) ;;
+    *) die "Репозиторий «$REPO» — нужен SSH-адрес вида git@github.com:<владелец>/rassrochka.git (--repo)" ;;
+  esac
+  [ -f "$KEY" ] || die "Нет deploy key $KEY — создайте его по DEPLOY.md §1 или укажите --key"
+fi
 
 echo "Установка Nasiya на $TARGET"
 echo "───────────────────────────────────────────────"
 echo "  Репозиторий  $REPO ($BRANCH)"
 echo "  Папка        $DIR"
-echo "  Deploy key   $KEY"
+if [ -n "$PUBLIC" ]; then echo "  Доступ       публичный репозиторий, ключ не нужен"; else echo "  Deploy key   $KEY"; fi
 echo
 
 SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
@@ -85,6 +93,7 @@ echo "→ Проверяю доступ к серверу"
 # shellcheck disable=SC2086
 ssh $SSH_OPTS "$TARGET" "true" || die "Нет доступа по SSH. Если вход пока по паролю — сначала: ssh-copy-id $TARGET"
 
+if [ -z "$PUBLIC" ]; then
 echo "→ Передаю deploy key"
 # shellcheck disable=SC2086
 ssh $SSH_OPTS "$TARGET" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat > ~/.ssh/nasiya_deploy_key && chmod 600 ~/.ssh/nasiya_deploy_key" < "$KEY"
@@ -97,6 +106,7 @@ Host github.com
   StrictHostKeyChecking accept-new
 CFG
 chmod 600 ~/.ssh/config'
+fi
 
 echo "→ Клонирую репозиторий"
 # shellcheck disable=SC2086

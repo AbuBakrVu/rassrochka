@@ -2,7 +2,11 @@
 //
 //   node scripts/create-tenant.mjs --slug acme --name "ООО Акме" \
 //        --admin-email director@acme.ru [--admin-name "Иван Петров"] \
-//        [--cash-opening 1240000]
+//        [--cash-opening 1240000] [--password-stdin]
+//
+// --password-stdin — пароль администратора читается из stdin (так он не
+// виден в списке процессов), менять его при первом входе не требуется.
+// Без флага выдаётся временный пароль, который надо сменить при входе.
 //
 // Адрес компании складывается из slug и APP_DOMAIN, поэтому домен нигде не
 // зашит в коде — его достаточно поменять в одной переменной окружения.
@@ -53,8 +57,18 @@ function tempPassword() {
   return randomBytes(9).toString("base64url");
 }
 
+async function readStdin() {
+  let data = "";
+  for await (const chunk of process.stdin) data += chunk;
+  return data.replace(/\r?\n$/, "");
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  const ownPassword = args["password-stdin"] ? await readStdin() : null;
+  if (ownPassword !== null && ownPassword.length < 8) {
+    fail("Пароль администратора — не короче 8 символов");
+  }
 
   const slug = typeof args.slug === "string" ? args.slug.toLowerCase() : "";
   const name = typeof args.name === "string" ? args.name.trim() : "";
@@ -109,7 +123,7 @@ async function main() {
   });
   console.log(`  ✓ создана база ${dbName}`);
 
-  const password = tempPassword();
+  const password = ownPassword ?? tempPassword();
 
   // Дальше любая ошибка оставила бы пустую базу без записи в реестре —
   // подчищаем за собой, чтобы повторный запуск не упёрся в «база уже есть»
@@ -121,8 +135,8 @@ async function main() {
       await client.query(
         `insert into users (email, password_hash, name, initials, role,
                             must_change_password)
-         values ($1, $2, $3, $4, 'admin', true)`,
-        [adminEmail, passwordHash, adminName, initialsFrom(adminName)]
+         values ($1, $2, $3, $4, 'admin', $5)`,
+        [adminEmail, passwordHash, adminName, initialsFrom(adminName), ownPassword === null]
       );
 
       if (cashOpening > 0) {
@@ -153,10 +167,15 @@ async function main() {
   console.log("─".repeat(52));
   console.log(`  Адрес       ${slug}.${process.env.APP_DOMAIN ?? "<APP_DOMAIN не задан>"}`);
   console.log(`  Логин       ${adminEmail}`);
-  console.log(`  Пароль      ${password}`);
-  console.log("─".repeat(52));
-  console.log("\n  Пароль показан один раз — передайте его клиенту по защищённому");
-  console.log("  каналу и потребуйте сменить при первом входе.\n");
+  if (ownPassword === null) {
+    console.log(`  Пароль      ${password}`);
+    console.log("─".repeat(52));
+    console.log("\n  Пароль показан один раз — передайте его клиенту по защищённому");
+    console.log("  каналу и потребуйте сменить при первом входе.\n");
+  } else {
+    console.log("  Пароль      заданный при установке");
+    console.log("─".repeat(52));
+  }
 }
 
 main().catch((err) => fail(err.message));

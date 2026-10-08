@@ -84,13 +84,18 @@ wait_for_health() {
   die "приложение не поднялось за 2 минуты — смотрите: docker compose logs app"
 }
 
-# На общем сервере (DEPLOY_MODE=shared) поверх основного файла подключается
-# docker-compose.shared.yml: без своего Caddy, приложение в сети общего прокси
+# Режим установки (DEPLOY_MODE в .env):
+#   standalone — сервер только под Nasiya, свой Caddy на 80/443;
+#   shared     — общий прокси /opt/proxy, приложение в его сети (docker-compose.shared.yml);
+#   port       — 80/443 держит ваш веб-сервер, приложение на 127.0.0.1:APP_PORT (docker-compose.port.yml)
+#   docker     — 80/443 держит прокси в контейнере, приложение в его сети (docker-compose.local.yml)
 compose() {
   local files=(-f "$REPO_DIR/docker-compose.yml")
-  if [ "$(env_get DEPLOY_MODE)" = "shared" ]; then
-    files+=(-f "$REPO_DIR/docker-compose.shared.yml")
-  fi
+  case "$(env_get DEPLOY_MODE)" in
+    shared) files+=(-f "$REPO_DIR/docker-compose.shared.yml") ;;
+    port)   files+=(-f "$REPO_DIR/docker-compose.port.yml") ;;
+    docker) files+=(-f "$REPO_DIR/docker-compose.local.yml") ;;
+  esac
   docker compose "${files[@]}" --env-file "$ENV_FILE" "$@"
 }
 
@@ -110,4 +115,182 @@ $host {
 }
 SITE
   "$PROXY_DIR/proxy" reload
+}
+
+# Конфиг nginx для Nasiya за вашим веб-сервером (режим port). Host
+# передаётся как есть — по нему приложение узнаёт компанию.
+nginx_site_conf() {
+  local host="$1" port="$2"
+  cat <<CONF
+# Nasiya CRM ($REPO_DIR) — $host → 127.0.0.1:$port
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $host;
+
+    # Фото паспорта и документы — до 5 МБ, в запросе они крупнее
+    client_max_body_size 12m;
+
+    location / {
+        proxy_pass http://127.0.0.1:$port;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 120s;
+    }
+}
+CONF
+}
+
+# Режим port: nginx настраиваем сами (новый файл сайта, проверка, перезагрузка,
+# сертификат certbot), для другого веб-сервера печатаем, что добавить.
+publish_behind_web_server() {
+  local host="$1" port="$2" owner="$3" email="$4"
+  local conf="/etc/nginx/sites-available/nasiya-$host.conf"
+
+  if [ "$owner" = "nginx" ] && [ -d /etc/nginx/sites-available ]; then
+    echo "→ Добавляю сайт $host в nginx"
+    if [ -e "$conf" ]; then
+      c_dim "  $conf уже есть — оставляю как есть"
+    else
+      nginx_site_conf "$host" "$port" > "$conf"
+      ln -sf "$conf" "/etc/nginx/sites-enabled/nasiya-$host.conf"
+      if ! nginx -t >/dev/null 2>&1; then
+        rm -f "/etc/nginx/sites-enabled/nasiya-$host.conf" "$conf"
+        die "nginx не принял конфиг — откатил, остальные сайты не тронуты (nginx -t покажет причину)"
+      fi
+      systemctl reload nginx
+      c_green "  ✓ nginx перечитал настройки"
+    fi
+
+    if ! command -v certbot >/dev/null 2>&1; then
+      echo "→ Ставлю certbot для сертификата"
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -qq certbot python3-certbot-nginx >/dev/null \
+        || c_red "  certbot не установился — сертификат выпустите сами: certbot --nginx -d $host"
+    fi
+    if command -v certbot >/dev/null 2>&1; then
+      echo "→ Выпускаю сертификат для $host"
+      if certbot --nginx -d "$host" --non-interactive --agree-tos -m "$email" --redirect >/dev/null 2>&1; then
+        c_green "  ✓ HTTPS включён"
+      else
+        c_red "  сертификат не выпущен — проверьте A-запись $host и повторите: certbot --nginx -d $host"
+      fi
+    fi
+    return 0
+  fi
+
+  echo
+  c_red "Порты 80/443 занимает «${owner:-другая программа}» — настроить её сам не могу."
+  echo "Направьте домен $host на http://127.0.0.1:$port, обязательно передавая заголовок Host."
+  echo "Для nginx — такой сайт (плюс сертификат: certbot --nginx -d $host):"
+  echo
+  nginx_site_conf "$host" "$port"
+  echo
+  echo "Если 80/443 держит прокси в Docker (Traefik, Caddy, nginx-proxy) — подключите"
+  echo "приложение к его сети и ведите домен на контейнер-app порт 3000:"
+  echo "  docker network connect <сеть-прокси> \$(cd $REPO_DIR && docker compose ps -q app)"
+}
+
+# ── Прокси других сервисов в Docker (режим docker) ─────────────────────
+# 80/443 держит контейнер (Traefik, Nginx Proxy Manager, nginx-proxy,
+# свой nginx/Caddy). Nasiya подключается к его Docker-сети под именем
+# PROXY_ALIAS; Traefik и nginx-proxy публикуют её сами по меткам и
+# переменным, для остальных печатаем, что добавить.
+
+# Заполняет PROXY_CONTAINER, PROXY_IMAGE, PROXY_KIND, PROXY_NETWORK.
+# Ненулевой код — порты держит не контейнер.
+detect_docker_proxy() {
+  command -v docker >/dev/null 2>&1 || return 1
+  local line
+  line="$(docker ps --filter publish=443 --format '{{.Names}} {{.Image}}' | grep -v '^proxy-caddy ' | head -1)"
+  [ -n "$line" ] || line="$(docker ps --filter publish=80 --format '{{.Names}} {{.Image}}' | grep -v '^proxy-caddy ' | head -1)"
+  [ -n "$line" ] || return 1
+  PROXY_CONTAINER="${line%% *}"
+  PROXY_IMAGE="${line#* }"
+  case "$PROXY_IMAGE" in
+    *traefik*) PROXY_KIND=traefik ;;
+    *nginx-proxy-manager*) PROXY_KIND=npm ;;
+    *nginx-proxy*|*jwilder*) PROXY_KIND=nginx-proxy ;;
+    *) PROXY_KIND=other ;;
+  esac
+  # Своя сеть прокси (не bridge/host): по ней он и ходит к сервисам
+  PROXY_NETWORK="$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$PROXY_CONTAINER" \
+    | tr ' ' '\n' | grep -vxE 'bridge|host|none|' | head -1)"
+  return 0
+}
+
+# Traefik: имя точки входа на :443 и certresolver — из аргументов запуска.
+# Если Traefik настроен файлом, берём самые частые имена.
+traefik_settings() {
+  local args
+  args="$(docker inspect -f '{{join .Config.Cmd " "}} {{join .Args " "}}' "$PROXY_CONTAINER" 2>/dev/null | tr ' ' '\n')"
+  TRAEFIK_EP="$(echo "$args" | sed -n 's/^--entrypoints\.\([^.=]*\)\.address=:443$/\1/p' | head -1)"
+  TRAEFIK_RESOLVER="$(echo "$args" | sed -n 's/^--certificatesresolvers\.\([^.=]*\)\..*/\1/p' | head -1)"
+  TRAEFIK_GUESSED=""
+  [ -n "$TRAEFIK_EP" ] || { TRAEFIK_EP="websecure"; TRAEFIK_GUESSED=1; }
+  [ -n "$TRAEFIK_RESOLVER" ] || { TRAEFIK_RESOLVER="letsencrypt"; TRAEFIK_GUESSED=1; }
+}
+
+# docker-compose.local.yml — создаётся при установке (в git не попадает):
+# без своего Caddy, приложение в сети прокси, плюс метки/переменные для него
+write_docker_override() {
+  local host="$1" alias="$2" net="$3" kind="$4"
+  {
+    echo "# Создан ./nasiya install: Nasiya за прокси «$PROXY_CONTAINER» ($kind), сеть $net"
+    echo "services:"
+    echo "  caddy:"
+    echo '    profiles: ["standalone-only"]'
+    echo "  app:"
+    echo "    networks:"
+    echo "      default: {}"
+    echo "      proxy:"
+    echo "        aliases: [\"$alias\"]"
+    if [ "$kind" = "nginx-proxy" ]; then
+      echo "    environment:"
+      echo "      VIRTUAL_HOST: \"$host\""
+      echo "      VIRTUAL_PORT: \"3000\""
+      echo "      LETSENCRYPT_HOST: \"$host\""
+    fi
+    if [ "$kind" = "traefik" ]; then
+      echo "    labels:"
+      echo "      traefik.enable: \"true\""
+      echo "      traefik.docker.network: \"$net\""
+      echo "      traefik.http.routers.$alias.rule: \"Host(\`$host\`)\""
+      echo "      traefik.http.routers.$alias.entrypoints: \"$TRAEFIK_EP\""
+      echo "      traefik.http.routers.$alias.tls: \"true\""
+      echo "      traefik.http.routers.$alias.tls.certresolver: \"$TRAEFIK_RESOLVER\""
+      echo "      traefik.http.services.$alias.loadbalancer.server.port: \"3000\""
+    fi
+    echo "networks:"
+    echo "  proxy:"
+    echo "    name: $net"
+    echo "    external: true"
+  } > "$REPO_DIR/docker-compose.local.yml"
+}
+
+# Что сделать в прокси, который сам по меткам не настраивается
+docker_proxy_instructions() {
+  local host="$1" alias="$2" kind="$3"
+  case "$kind" in
+    traefik|nginx-proxy)
+      c_green "  ✓ $PROXY_CONTAINER подхватит $host сам (сертификат — при первом заходе)"
+      [ -n "${TRAEFIK_GUESSED:-}" ] && c_red "  Traefik настроен файлом — взял точку входа «$TRAEFIK_EP» и certresolver «$TRAEFIK_RESOLVER». Если у вас другие — поправьте docker-compose.local.yml и: ./nasiya update"
+      ;;
+    npm)
+      echo
+      echo "В Nginx Proxy Manager (обычно http://IP-сервера:81) → Proxy Hosts → Add:"
+      echo "  Domain Names       $host"
+      echo "  Scheme / Forward   http  $alias  3000"
+      echo "  SSL                Request a new certificate, Force SSL"
+      ;;
+    *)
+      echo
+      echo "В настройках прокси «$PROXY_CONTAINER» направьте $host на http://$alias:3000"
+      echo "(контейнеры уже в одной сети), передавая заголовок Host. Для nginx:"
+      echo "  location / { proxy_pass http://$alias:3000; proxy_set_header Host \$host;"
+      echo "               proxy_set_header X-Forwarded-Proto \$scheme; client_max_body_size 12m; }"
+      ;;
+  esac
 }

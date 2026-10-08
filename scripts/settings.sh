@@ -60,16 +60,32 @@ cmd_domain() {
   echo "→ Перезапускаю с новыми настройками"
   compose up -d
   wait_for_health "$new_domain"
-  if [ "$(env_get DEPLOY_MODE)" = "shared" ]; then
-    rm -f "$PROXY_DIR/sites/$current_slug.$current_domain.caddy"
-    write_proxy_site "$new_slug.$new_domain" "$(env_get PROXY_ALIAS)"
-  fi
+  case "$(env_get DEPLOY_MODE)" in
+    shared)
+      rm -f "$PROXY_DIR/sites/$current_slug.$current_domain.caddy"
+      write_proxy_site "$new_slug.$new_domain" "$(env_get PROXY_ALIAS)"
+      ;;
+    docker)
+      sed -i.bak "s/$current_slug\.$current_domain/$new_slug.$new_domain/g" "$REPO_DIR/docker-compose.local.yml" && rm -f "$REPO_DIR/docker-compose.local.yml.bak"
+      compose up -d app
+      c_red "Если прокси настраивается вручную (Nginx Proxy Manager и т.п.) — поменяйте там домен на $new_slug.$new_domain"
+      ;;
+    port)
+      c_red "Обновите адрес в вашем веб-сервере: $new_slug.$new_domain → 127.0.0.1:$(env_get APP_PORT)"
+      [ -f "/etc/nginx/sites-available/nasiya-$current_slug.$current_domain.conf" ] && \
+        echo "  nginx: /etc/nginx/sites-available/nasiya-$current_slug.$current_domain.conf, затем certbot --nginx -d $new_slug.$new_domain"
+      ;;
+  esac
 
   c_green "Готово: https://$new_slug.$new_domain"
 }
 
 cmd_email() {
   local current new
+  if [ "$(env_get DEPLOY_MODE)" = "port" ]; then
+    echo "Сертификаты выпускает ваш веб-сервер (certbot) — почта настраивается там"
+    return 0
+  fi
   if [ "$(env_get DEPLOY_MODE)" = "shared" ]; then
     echo "Сертификаты выпускает общий прокси — почта в $PROXY_DIR/.env, затем: cd $PROXY_DIR && docker compose up -d"
     return 0
