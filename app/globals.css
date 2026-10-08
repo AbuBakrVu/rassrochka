@@ -529,3 +529,20 @@ h4 {
 @media (prefers-reduced-motion: reduce) {
   .nsb, .nsb *, .nsb *::before { transition-duration: 0s !important; transition-delay: 0s !important; }
 }
+
+/* Карточки-вкладки «кошелька» на главной (WalletCard): при наведении или
+   фокусе с клавиатуры карточка выезжает из колоды вверх, тень глубже */
+.wallet-tab {
+  position: relative;
+  box-shadow: 0 -6px 16px -10px rgb(22 24 40 / 0.35);
+  transition: translate 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s ease;
+}
+.wallet-tab:hover,
+.wallet-tab:focus-visible {
+  translate: 0 -10px;
+  box-shadow: 0 -10px 24px -10px rgb(22 24 40 / 0.45);
+  outline: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wallet-tab { transition: none; }
+}

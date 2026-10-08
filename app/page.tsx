@@ -117,7 +117,8 @@ function WalletCard({
           <Link
             key={t.label}
             href={t.href}
-            className={`flex h-[64px] items-start justify-between rounded-t-[20px] px-5 pt-3.5 text-sm font-medium text-white shadow-[0_-6px_16px_-10px_rgb(22_24_40/0.35)] ${t.cls}`}
+            // Наведённая карточка выезжает из колоды вверх — видно, что она «достаётся»
+            className={`wallet-tab flex h-[64px] items-start justify-between rounded-t-[20px] px-5 pt-3.5 text-sm font-medium text-white ${t.cls}`}
             style={{ marginTop: i === 0 ? 0 : -20, zIndex: i }}
           >
             <span>{t.label}</span>
