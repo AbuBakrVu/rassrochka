@@ -36,10 +36,12 @@ const META: Record<ThemeChoice, { label: string; icon: typeof Sun }> = {
 };
 
 export default function ThemeToggle({
-  className = "text-mute hover:bg-canvas hover:text-ink",
+  className = "rounded-full p-2 text-mute hover:bg-canvas hover:text-ink",
+  iconSize = 17,
 }: {
-  /** Цвета кнопки — на тёмной полосе меню они свои. */
+  /** Форма и цвета кнопки — в меню они свои. */
   className?: string;
+  iconSize?: number;
 }) {
   const [choice, setChoice] = useState<ThemeChoice>("system");
 
@@ -78,9 +80,9 @@ export default function ThemeToggle({
       onClick={next}
       title={`${label} — нажмите, чтобы сменить`}
       aria-label={`Тема оформления: ${label.toLowerCase()}. Сменить`}
-      className={`shrink-0 rounded-full p-2 transition-colors ${className}`}
+      className={`shrink-0 transition-colors ${className}`}
     >
-      <Icon size={17} aria-hidden />
+      <Icon size={iconSize} aria-hidden />
     </button>
   );
 }

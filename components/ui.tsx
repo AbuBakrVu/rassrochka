@@ -165,9 +165,7 @@ export function TickBar({ pct, tone = "brand", label }: { pct: number; tone?: "b
 
 function CtaMenu({ label }: { label: string }) {
   const [open, setOpen] = useState(false);
-  const [modal, setModal] = useState<"client" | "deal" | "payment" | null>(
-    null
-  );
+  const [modal, setModal] = useState<CreateModal>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
@@ -195,20 +193,7 @@ function CtaMenu({ label }: { label: string }) {
     };
   }, [open]);
 
-  const { user } = useData();
-  const items = [
-    can(user, "deals.edit") && { icon: FilePlus2, label: "Создать сделку", action: () => setModal("deal") },
-    can(user, "clients.edit") && {
-      icon: UserPlus,
-      label: "Создать клиента",
-      action: () => setModal("client"),
-    },
-    can(user, "payments.accept") && {
-      icon: HandCoins,
-      label: "Принять платёж",
-      action: () => setModal("payment"),
-    },
-  ].filter((i) => !!i);
+  const items = useCreateItems(setModal);
 
   return (
     <div ref={wrap} className="relative">
@@ -246,12 +231,30 @@ function CtaMenu({ label }: { label: string }) {
           ))}
         </div>
       )}
-      {modal === "client" && <NewClientModal onClose={() => setModal(null)} />}
-      {modal === "deal" && <NewDealModal onClose={() => setModal(null)} />}
-      {modal === "payment" && (
-        <AcceptPaymentModal onClose={() => setModal(null)} />
-      )}
+      <CreateModals modal={modal} onClose={() => setModal(null)} />
     </div>
+  );
+}
+
+export type CreateModal = "client" | "deal" | "payment" | null;
+
+/** Быстрые действия «Добавить» — по правам сотрудника. Общие для шапки и меню. */
+export function useCreateItems(setModal: (m: CreateModal) => void) {
+  const { user } = useData();
+  return [
+    can(user, "deals.edit") && { icon: FilePlus2, label: "Создать сделку", action: () => setModal("deal") },
+    can(user, "clients.edit") && { icon: UserPlus, label: "Создать клиента", action: () => setModal("client") },
+    can(user, "payments.accept") && { icon: HandCoins, label: "Принять платёж", action: () => setModal("payment") },
+  ].filter((i) => !!i);
+}
+
+export function CreateModals({ modal, onClose }: { modal: CreateModal; onClose: () => void }) {
+  return (
+    <>
+      {modal === "client" && <NewClientModal onClose={onClose} />}
+      {modal === "deal" && <NewDealModal onClose={onClose} />}
+      {modal === "payment" && <AcceptPaymentModal onClose={onClose} />}
+    </>
   );
 }
 

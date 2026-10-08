@@ -286,3 +286,246 @@ h4 {
     background: #ffffff;
   }
 }
+
+/* ── Боковое меню (десктоп) ─────────────────────────────────────────────
+   Плавающая карточка: в покое — колонка иконок 84 px, при наведении (или
+   фокусе с клавиатуры) раскрывается до 264 px поверх контента. Подписи,
+   имя и поиск проявляются с задержкой, подложка пункта растягивается из
+   квадрата 44×44 во всю строку, бейдж переезжает с угла иконки к краю,
+   кнопки внизу перестраиваются из столбика в ряд. Разметка — components/shell.tsx. */
+.nsb {
+  --nsb-active: color-mix(in srgb, var(--primary) 12%, transparent);
+  --nsb-soft: var(--muted-foreground);
+  --nsb-faint: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+  --nsb-chip: var(--muted);
+  --nsb-item: 52px;
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  bottom: 24px;
+  z-index: 40;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 84px;
+  padding: 20px;
+  border-radius: 24px;
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 24px 60px rgb(31 41 55 / 0.12);
+  white-space: nowrap;
+  transition: width 0.35s ease;
+}
+.dark .nsb {
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.45);
+}
+@media (max-height: 900px) {
+  .nsb { --nsb-item: 46px; gap: 12px; }
+}
+@media (min-height: 980px) {
+  .nsb { --nsb-item: 56px; }
+}
+.nsb-open { width: 264px; }
+
+/* Профиль */
+.nsb-profile {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border-radius: 14px;
+  text-align: left;
+}
+.nsb-avatar {
+  display: grid;
+  flex: 0 0 44px;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background-image: linear-gradient(135deg, var(--lilac), var(--primary));
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+.nsb-details {
+  min-width: 0;
+  flex: 1;
+}
+.nsb-details p { margin: 0; overflow: hidden; text-overflow: ellipsis; }
+.nsb-name { font-size: 15px; font-weight: 600; }
+.nsb-role { font-size: 13px; color: var(--nsb-faint); }
+
+/* Поиск — открывает палитру ⌘K */
+.nsb-search {
+  position: relative;
+  display: flex;
+  flex: 0 0 44px;
+  align-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--nsb-faint);
+  transition: width 0.35s ease, border-color 0.2s;
+}
+.nsb-search:hover { border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); }
+.nsb-search-text {
+  padding: 0 44px 0 14px;
+  font-size: 14px;
+}
+.nsb-search > svg {
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  translate: 0 -50%;
+}
+.nsb-open .nsb-search { width: 100%; }
+
+/* То, что видно только в раскрытом меню */
+.nsb-fade {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.nsb-open .nsb-fade {
+  opacity: 1;
+  transition: opacity 0.25s 0.1s;
+}
+
+/* Пункты */
+.nsb-nav {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  /* Список прокручивается, а прокрутка обрезает всё за его краем — даём
+     бейджу на углу иконки место в поле карточки */
+  margin: 0 -20px;
+  padding: 0 20px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.nsb-nav::-webkit-scrollbar { display: none; }
+.nsb-nav hr {
+  flex: 0 0 1px;
+  height: 1px;
+  margin: 8px 0;
+  border: 0;
+  background: var(--border);
+}
+.nsb-item {
+  position: relative;
+  display: flex;
+  flex: 0 0 var(--nsb-item);
+  align-items: center;
+  gap: 16px;
+  height: var(--nsb-item);
+  color: var(--nsb-soft);
+  font-size: 15px;
+  transition: color 0.2s;
+}
+.nsb-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  translate: 0 -50%;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  transition: width 0.35s ease, height 0.35s ease, background-color 0.2s;
+}
+.nsb-open .nsb-item::before {
+  width: 100%;
+  height: var(--nsb-item);
+}
+.nsb-item:hover,
+.nsb-item[aria-current="page"] { color: var(--primary); }
+.dark .nsb-item:hover,
+.dark .nsb-item[aria-current="page"] { color: var(--primary-deep); }
+.nsb-item[aria-current="page"]::before { background: var(--nsb-active); }
+.nsb-item > svg {
+  position: relative;
+  flex: 0 0 auto;
+  margin: 0 11px;
+}
+.nsb-item > .nsb-label { position: relative; }
+.nsb-item:focus-visible { outline: none; }
+.nsb-item:focus-visible::before { box-shadow: 0 0 0 2px var(--ring); }
+
+/* Счётчик: в свёрнутом меню — на углу иконки, в раскрытом — у края строки */
+.nsb-badge {
+  position: absolute;
+  top: calc(50% - 22px);
+  right: -12px;
+  translate: 0 0;
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 12px;
+  font-weight: 600;
+  transition: top 0.35s ease, right 0.35s ease, translate 0.35s ease;
+}
+.nsb-badge-danger { background: var(--destructive); color: var(--destructive-foreground); }
+.nsb-open .nsb-badge {
+  top: 50%;
+  right: 8px;
+  translate: 0 -50%;
+}
+
+/* Кнопки внизу: столбиком снизу вверх → в ряд слева направо */
+.nsb-actions {
+  position: relative;
+  flex: 0 0 auto;
+  height: 200px;
+  transition: height 0.35s ease;
+}
+.nsb-open .nsb-actions { height: 44px; }
+.nsb-action {
+  position: absolute;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--nsb-chip);
+  color: var(--nsb-soft);
+  transition: top 0.35s ease, left 0.35s ease, color 0.2s, background-color 0.2s;
+}
+.nsb-action:hover { color: var(--primary); }
+.nsb-action-danger:hover { color: var(--destructive); }
+.nsb-actions > :nth-child(1) { top: 156px; }
+.nsb-actions > :nth-child(2) { top: 104px; }
+.nsb-actions > :nth-child(3) { top: 52px; }
+.nsb-actions > :nth-child(4) { top: 0; }
+.nsb-open .nsb-actions > * { top: 0; }
+.nsb-open .nsb-actions > :nth-child(2) { left: 60px; }
+.nsb-open .nsb-actions > :nth-child(3) { left: 120px; }
+.nsb-open .nsb-actions > :nth-child(4) { left: 180px; }
+
+/* Маленькое всплывающее меню рядом с карточкой (профиль, «+») */
+.nsb-pop {
+  position: fixed;
+  z-index: 60;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--popover);
+  box-shadow: var(--shadow-lg);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nsb, .nsb *, .nsb *::before { transition-duration: 0s !important; transition-delay: 0s !important; }
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -23,18 +23,24 @@ import {
   PhoneCall,
   Search,
   MoreHorizontal,
+  ChevronDown,
+  Plus,
+  KeyRound,
 } from "lucide-react";
 import CommandPalette from "@/components/command-palette";
 import ThemeToggle from "@/components/theme-toggle";
 import { BrandMark, useBrandName } from "@/components/branding";
 import { DataProvider, useData } from "@/lib/store";
-import { canOpen, homeFor } from "@/lib/permissions";
+import { canOpen, homeFor, roleTitle } from "@/lib/permissions";
+import { CreateModals, useCreateItems, type CreateModal } from "@/components/ui";
 
 /** Разделы меню. Кому какой виден — по правам (lib/permissions.ts, SECTION_PERMISSION). */
 export const nav: {
   href: string;
   label: string;
   icon: typeof LayoutGrid;
+  /** С этого пункта в боковом меню начинается вторая группа (после черты). */
+  groupStart?: boolean;
 }[] = [
   { href: "/", label: "Главная", icon: LayoutGrid },
   { href: "/analytics", label: "Аналитика", icon: BarChart3 },
@@ -42,7 +48,7 @@ export const nav: {
   { href: "/clients", label: "Клиенты", icon: Users },
   { href: "/payments", label: "Платежи", icon: CalendarDays },
   { href: "/collections", label: "Просрочки", icon: PhoneCall },
-  { href: "/mailings", label: "Рассылки", icon: Send },
+  { href: "/mailings", label: "Рассылки", icon: Send, groupStart: true },
   { href: "/coinvestors", label: "Соинвесторы", icon: Handshake },
   { href: "/cash", label: "Финансы", icon: Wallet },
   { href: "/registry", label: "Реестр клиентов", icon: BookUser },
@@ -64,45 +70,227 @@ function useNavItems() {
 const isActive = (href: string, pathname: string) =>
   href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-/** Подсказка с названием раздела — всплывает справа от круглой кнопки меню. */
-const railTip =
-  "pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-ink opacity-0 shadow-pop transition-opacity duration-150 group-hover/item:opacity-100 group-focus-visible/item:opacity-100";
+/** Счётчики на пунктах меню: новые заявки и сделки с просрочкой. */
+function useNavBadges(): Record<string, { count: number; danger?: boolean }> {
+  const { deals } = useData();
+  const fresh = deals.filter((d) => d.stage === "new").length;
+  const overdue = deals.filter((d) => d.stage === "active" && d.statusTone === "red").length;
+  return {
+    ...(fresh ? { "/deals": { count: fresh } } : {}),
+    ...(overdue ? { "/collections": { count: overdue, danger: true } } : {}),
+  };
+}
 
-/** Круглая кнопка меню: обводка, у активной — градиент основного цвета с подсветкой. */
-const railCircle = (active: boolean) =>
-  `flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors ${
-    active
-      ? "bg-brand text-on-brand"
-      : "border border-line bg-surface/60 text-ink hover:border-brand/40 hover:text-brand-deep"
-  }`;
+const badgeText = (n: number) => (n > 99 ? "99+" : String(n));
+
+/** Всплывающее меню рядом с кнопкой — на fixed, чтобы карточка меню его не обрезала. */
+function SidebarPopover({
+  anchor,
+  onClose,
+  children,
+  label,
+}: {
+  anchor: DOMRect;
+  onClose: () => void;
+  children: React.ReactNode;
+  label: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  // Ниже середины экрана — раскрываем вверх, иначе вниз
+  const up = anchor.top > window.innerHeight / 2;
+  return (
+    <div
+      ref={ref}
+      role="menu"
+      aria-label={label}
+      className="nsb-pop"
+      style={{
+        left: anchor.left,
+        ...(up ? { bottom: window.innerHeight - anchor.top + 8 } : { top: anchor.bottom + 8 }),
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+const popItem =
+  "flex w-full items-center gap-2.5 rounded-[12px] px-3 py-2.5 text-left text-sm font-medium text-ink hover:bg-brand-soft hover:text-brand-deep";
 
 /**
- * Десктопное меню — колонка круглых иконок, как в референсе. Подписи —
- * всплывающими подсказками при наведении и фокусе с клавиатуры.
+ * Десктопное меню по референсу: плавающая карточка, в покое — колонка
+ * иконок, при наведении или фокусе с клавиатуры раскрывается поверх
+ * контента. Анимация — классы .nsb* в app/globals.css.
  */
-function RailNav({ pathname }: { pathname: string }) {
-  const items = useNavItems();
+function DesktopSidebar({ pathname }: { pathname: string }) {
+  const { user, roles } = useData();
+  const items = useNavItems().filter((n) => n.href !== "/settings");
+  const badges = useNavBadges();
+  const { busy, signOut } = useSignOut();
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pop, setPop] = useState<{ kind: "profile" | "create"; anchor: DOMRect } | null>(null);
+  const [modal, setModal] = useState<CreateModal>(null);
+  const createItems = useCreateItems(setModal);
+  // Пока открыто всплывающее меню, карточка не схлопывается
+  const open = hovered || focused || pop !== null;
+
+  const togglePop = (kind: "profile" | "create", el: HTMLElement) =>
+    setPop((p) => (p?.kind === kind ? null : { kind, anchor: el.getBoundingClientRect() }));
 
   return (
-    <nav className="my-auto flex flex-col items-center gap-2.5 py-4" aria-label="Основные разделы">
-      {items.map(({ href, label, icon: Icon }) => {
-        const active = isActive(href, pathname);
-        return (
-          <Link
-            key={href}
-            href={href}
-            aria-label={label}
-            aria-current={active ? "page" : undefined}
-            className="group/item relative rounded-full"
+    <aside
+      aria-label="Боковое меню"
+      className={`nsb hidden lg:flex ${open ? "nsb-open" : ""}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      // Раскрываем только при фокусе с клавиатуры: после клика мышью фокус
+      // остаётся на ссылке, и меню не схлопывалось бы
+      onFocus={(e) => setFocused(e.target.matches(":focus-visible"))}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setFocused(false);
+      }}
+    >
+      <button
+        type="button"
+        className="nsb-profile"
+        aria-haspopup="menu"
+        aria-expanded={pop?.kind === "profile"}
+        onClick={(e) => togglePop("profile", e.currentTarget)}
+      >
+        <span className="nsb-avatar" aria-hidden>
+          {user.initials}
+        </span>
+        <span className="nsb-details nsb-fade">
+          <p className="nsb-name">{user.name}</p>
+          <p className="nsb-role">{roleTitle(user, roles)}</p>
+        </span>
+        <ChevronDown size={18} className="nsb-fade shrink-0 text-mute" aria-hidden />
+        <span className="sr-only">Меню профиля</span>
+      </button>
+
+      <button
+        type="button"
+        className="nsb-search"
+        onClick={() => window.dispatchEvent(new Event("open-command-palette"))}
+        aria-label="Поиск или переход (⌘K)"
+      >
+        <span className="nsb-search-text nsb-fade">Поиск или переход</span>
+        <Search size={20} strokeWidth={1.75} aria-hidden />
+      </button>
+
+      <nav className="nsb-nav" aria-label="Основные разделы">
+        {items.map(({ href, label, icon: Icon, groupStart }, i) => {
+          const badge = badges[href];
+          return (
+            <div key={href} className="contents">
+              {groupStart && i > 0 && <hr />}
+              <Link
+                href={href}
+                className="nsb-item"
+                aria-current={isActive(href, pathname) ? "page" : undefined}
+                title={open ? undefined : label}
+              >
+                <Icon size={22} strokeWidth={1.75} aria-hidden />
+                <span className="nsb-label nsb-fade">{label}</span>
+                {badge && (
+                  <span
+                    className={`nsb-badge ${badge.danger ? "nsb-badge-danger" : ""}`}
+                    aria-label={`${badge.count}`}
+                  >
+                    {badgeText(badge.count)}
+                  </span>
+                )}
+              </Link>
+            </div>
+          );
+        })}
+      </nav>
+
+      <div className="nsb-actions">
+        <ThemeToggle className="nsb-action" iconSize={20} />
+        <Link
+          href="/settings"
+          className="nsb-action"
+          aria-label="Настройки"
+          title="Настройки"
+          aria-current={isActive("/settings", pathname) ? "page" : undefined}
+        >
+          <Settings size={20} strokeWidth={1.75} aria-hidden />
+        </Link>
+        {createItems.length > 0 ? (
+          <button
+            type="button"
+            className="nsb-action"
+            aria-label="Добавить"
+            title="Добавить"
+            aria-haspopup="menu"
+            aria-expanded={pop?.kind === "create"}
+            onClick={(e) => togglePop("create", e.currentTarget)}
           >
-            <span className={`${railCircle(active)} ${active ? "rail-active" : ""}`}>
-              <Icon size={18} strokeWidth={1.7} aria-hidden />
-            </span>
-            <span className={railTip}>{label}</span>
+            <Plus size={20} strokeWidth={1.75} aria-hidden />
+          </button>
+        ) : (
+          <span aria-hidden className="pointer-events-none opacity-0" />
+        )}
+        <button
+          type="button"
+          className="nsb-action nsb-action-danger"
+          onClick={signOut}
+          disabled={busy}
+          aria-label="Выйти из аккаунта"
+          title="Выйти"
+        >
+          <LogOut size={20} strokeWidth={1.75} aria-hidden />
+        </button>
+      </div>
+
+      {pop?.kind === "profile" && (
+        <SidebarPopover anchor={pop.anchor} onClose={() => setPop(null)} label="Профиль">
+          <p className="px-3 pt-1.5 pb-2 text-xs text-mute">{user.email}</p>
+          <Link href="/settings/password" role="menuitem" className={popItem} onClick={() => setPop(null)}>
+            <KeyRound size={16} className="text-brand" aria-hidden /> Сменить пароль
           </Link>
-        );
-      })}
-    </nav>
+          <button type="button" role="menuitem" className={popItem} onClick={signOut} disabled={busy}>
+            <LogOut size={16} className="text-brand" aria-hidden /> Выйти
+          </button>
+        </SidebarPopover>
+      )}
+      {pop?.kind === "create" && (
+        <SidebarPopover anchor={pop.anchor} onClose={() => setPop(null)} label="Добавить">
+          {createItems.map(({ icon: Icon, label, action }) => (
+            <button
+              key={label}
+              type="button"
+              role="menuitem"
+              className={popItem}
+              onClick={() => {
+                setPop(null);
+                action();
+              }}
+            >
+              <Icon size={16} className="text-brand" aria-hidden /> {label}
+            </button>
+          ))}
+        </SidebarPopover>
+      )}
+      <CreateModals modal={modal} onClose={() => setModal(null)} />
+    </aside>
   );
 }
 
@@ -211,31 +399,6 @@ function useSignOut() {
   return { busy, signOut };
 }
 
-/** Низ колонки меню: тема и выход — такие же круглые кнопки. */
-function RailFooter() {
-  const { busy, signOut } = useSignOut();
-
-  return (
-    <div className="flex flex-col items-center gap-2.5 pt-2 pb-6">
-      <span className="group/item relative">
-        <ThemeToggle className={`${railCircle(false)} p-0`} />
-        <span className={railTip}>Тема оформления</span>
-      </span>
-      <button
-        onClick={signOut}
-        disabled={busy}
-        aria-label="Выйти из аккаунта"
-        className="group/item relative rounded-full disabled:opacity-50"
-      >
-        <span className={`${railCircle(false)} hover:text-danger`}>
-          <LogOut size={17} aria-hidden />
-        </span>
-        <span className={railTip}>Выйти</span>
-      </button>
-    </div>
-  );
-}
-
 function DrawerFooter() {
   const { user } = useData();
   const { busy, signOut } = useSignOut();
@@ -294,21 +457,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     <DataProvider>
       <SectionGate pathname={pathname} />
       <div className="flex min-h-screen print:hidden">
-        {/* Десктопное меню — тёмная полоса иконок, при наведении раскрывается
-            поверх контента (контент не сдвигается). Небольшая задержка на
-            раскрытие — чтобы меню не «выпрыгивало», когда курсор просто
-            пересекает полосу. С клавиатуры раскрывается по Tab. */}
-        <aside className="fixed inset-y-0 left-0 z-40 hidden w-[92px] flex-col items-center lg:flex [@media(max-height:820px)]:overflow-y-auto">
-          <Link
-            href="/"
-            aria-label={`${brandName} — на главную`}
-            className="mt-6 flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
-          >
-            <BrandMark className="h-12 w-12 rounded-full" />
-          </Link>
-          <RailNav pathname={pathname} />
-          <RailFooter />
-        </aside>
+        <DesktopSidebar pathname={pathname} />
 
         {/* Мобильная шторка */}
         {open && (
@@ -338,7 +487,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <div className="flex min-w-0 flex-1 flex-col lg:pl-[92px]">
+        <div className="flex min-w-0 flex-1 flex-col lg:pl-[132px]">
           {/* Мобильная шапка */}
           <header className="sticky top-0 z-20 flex items-center gap-3 bg-canvas/90 px-4 py-3 backdrop-blur lg:hidden">
             <button
