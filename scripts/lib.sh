@@ -144,8 +144,8 @@ server {
 CONF
 }
 
-# Режим port: nginx настраиваем сами (новый файл сайта, проверка, перезагрузка,
-# сертификат certbot), для другого веб-сервера печатаем, что добавить.
+# Режим port: nginx (новый файл сайта + certbot) и Caddy на сервере (блок в
+# /etc/caddy/Caddyfile) настраиваем сами, для другого — печатаем, что добавить.
 publish_behind_web_server() {
   local host="$1" port="$2" owner="$3" email="$4"
   local conf="/etc/nginx/sites-available/nasiya-$host.conf"
@@ -177,6 +177,39 @@ publish_behind_web_server() {
       else
         c_red "  сертификат не выпущен — проверьте A-запись $host и повторите: certbot --nginx -d $host"
       fi
+    fi
+    return 0
+  fi
+
+  # Caddy, установленный прямо на сервер: дописываем сайт в его Caddyfile,
+  # проверяем, при ошибке возвращаем прежний файл. Сертификат Caddy выпустит сам
+  local caddyfile="/etc/caddy/Caddyfile"
+  if [ "$owner" = "caddy" ] && [ -f "$caddyfile" ] && command -v caddy >/dev/null 2>&1; then
+    echo "→ Добавляю сайт $host в Caddy ($caddyfile)"
+    if grep -qE "^[[:space:]]*$host([[:space:],{]|$)" "$caddyfile"; then
+      c_dim "  $host в Caddyfile уже есть — оставляю как есть"
+      return 0
+    fi
+    local backup="$caddyfile.before-nasiya-$(date +%Y%m%d%H%M%S)"
+    cp "$caddyfile" "$backup"
+    cat >> "$caddyfile" <<SITE
+
+# Nasiya CRM ($REPO_DIR)
+$host {
+	encode gzip zstd
+	reverse_proxy 127.0.0.1:$port
+	request_body {
+		max_size 12MB
+	}
+}
+SITE
+    if caddy validate --config "$caddyfile" --adapter caddyfile >/dev/null 2>&1; then
+      systemctl reload caddy && c_green "  ✓ Caddy перечитал настройки, сертификат выпустит при первом заходе"
+      c_dim "  прежний файл сохранён: $backup"
+    else
+      cp "$backup" "$caddyfile"
+      c_red "  Caddy не принял настройки — вернул прежний Caddyfile, остальные сайты не тронуты."
+      echo "  Добавьте вручную: $host { reverse_proxy 127.0.0.1:$port }"
     fi
     return 0
   fi
