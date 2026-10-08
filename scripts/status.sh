@@ -29,7 +29,8 @@ else
 fi
 
 echo -n "Сайт снаружи:          "
-CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$SLUG.$DOMAIN/api/health" || echo "000")"
+# curl сам печатает 000 при ошибке — «|| true», а не «|| echo 000», иначе выходило «000000»
+CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$SLUG.$DOMAIN/api/health" || true)"
 if [ "$CODE" = "200" ]; then
   c_green "OK ($CODE)"
 else
