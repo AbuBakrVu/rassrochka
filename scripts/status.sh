@@ -14,6 +14,7 @@ echo "Адрес:    https://$SLUG.$DOMAIN"
 case "$(env_get DEPLOY_MODE)" in
   shared) echo "Вход:     общий прокси $PROXY_DIR" ;;
   port)   echo "Вход:     ваш веб-сервер → 127.0.0.1:$(env_get APP_PORT)" ;;
+  docker) echo "Вход:     ваш прокси-контейнер (сеть из docker-compose.local.yml)" ;;
 esac
 echo
 

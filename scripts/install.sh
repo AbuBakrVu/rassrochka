@@ -14,7 +14,11 @@
 #   shared     — порты 80/443 свободны или их держит общий прокси /opt/proxy:
 #                Nasiya публикуется в нём (прокси ставится, если его нет);
 #                рядом можно ставить другие сервисы (DEPLOY.md §2а).
-#   port       — 80/443 уже занял другой веб-сервер (nginx у других CRM):
+#   docker     — 80/443 держит прокси в контейнере (Traefik, Nginx Proxy
+#                Manager, nginx-proxy, свой nginx у других CRM): Nasiya
+#                входит в его Docker-сеть; Traefik и nginx-proxy подхватывают
+#                её сами, для остальных печатается, что добавить.
+#   port       — 80/443 занял веб-сервер прямо на сервере (nginx):
 #                приложение слушает 127.0.0.1:<порт>, nginx настраивается
 #                сам (с сертификатом certbot), для остальных — готовый конфиг.
 #   standalone — сервер только под Nasiya, свой Caddy (прежний вариант).
@@ -117,13 +121,21 @@ WEB_OWNER=""
 if [ -z "${MODE:-}" ]; then
   if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' | grep -qx proxy-caddy; then
     MODE=shared
+  elif detect_docker_proxy; then
+    # Порты контейнера видны в docker ps, даже когда ss их не показывает
+    MODE=docker
   elif port_busy 80 || port_busy 443; then
     MODE=port
   else
     MODE=shared
   fi
 fi
-case "$MODE" in shared|port|standalone) ;; *) die "MODE — shared, port или standalone" ;; esac
+case "$MODE" in shared|port|docker|standalone) ;; *) die "MODE — shared, port, docker или standalone" ;; esac
+
+if [ "$MODE" = "docker" ]; then
+  [ -n "${PROXY_CONTAINER:-}" ] || detect_docker_proxy || die "Не нашёл контейнер, который держит 80/443"
+  [ "$PROXY_KIND" = "traefik" ] && traefik_settings
+fi
 
 if [ "$MODE" = "port" ]; then
   WEB_OWNER="$(port_owner 443)"
@@ -146,6 +158,7 @@ echo "  Пароль           заданный вами (в файлы не з�
 case "$MODE" in
   shared)     echo "  Вход из сети     общий прокси $PROXY_DIR — рядом можно ставить другие сервисы" ;;
   port)       echo "  Вход из сети     через ваш веб-сервер (${WEB_OWNER:-занимает 80/443}) → 127.0.0.1:$APP_PORT" ;;
+  docker)     echo "  Вход из сети     через ваш прокси-контейнер «$PROXY_CONTAINER» ($PROXY_IMAGE), сеть ${PROXY_NETWORK:-будет создана}" ;;
   standalone) echo "  Вход из сети     свой Caddy, сервер только под Nasiya" ;;
 esac
 echo "  DNS: A-запись $CRM_DOMAIN → IP этого сервера должна быть добавлена ЗАРАНЕЕ"
@@ -238,7 +251,20 @@ chmod 600 "$ENV_FILE"
 case "$MODE" in
   shared) echo "COMPOSE_FILE=docker-compose.yml:docker-compose.shared.yml" >> "$ENV_FILE" ;;
   port)   echo "COMPOSE_FILE=docker-compose.yml:docker-compose.port.yml" >> "$ENV_FILE" ;;
+  docker) echo "COMPOSE_FILE=docker-compose.yml:docker-compose.local.yml" >> "$ENV_FILE" ;;
 esac
+
+if [ "$MODE" = "docker" ]; then
+  # Прокси только в сети по умолчанию — заводим общую сеть и подключаем его.
+  # Подключение живёт до пересоздания его контейнера — поэтому подсказка ниже
+  if [ -z "$PROXY_NETWORK" ]; then
+    PROXY_NETWORK="web"
+    docker network inspect web >/dev/null 2>&1 || docker network create web >/dev/null
+    docker network connect web "$PROXY_CONTAINER" 2>/dev/null || true
+    PROXY_NET_ADDED=1
+  fi
+  write_docker_override "$CRM_DOMAIN" "$PROXY_ALIAS" "$PROXY_NETWORK" "$PROXY_KIND"
+fi
 
 if [ "$MODE" = "shared" ] && ! docker ps --format '{{.Names}}' | grep -qx proxy-caddy; then
   echo "→ Ставлю общий прокси в $PROXY_DIR"
@@ -276,6 +302,14 @@ case "$MODE" in
     ;;
   port)
     publish_behind_web_server "$CRM_DOMAIN" "$APP_PORT" "$WEB_OWNER" "$ACME_EMAIL"
+    ;;
+  docker)
+    echo "→ Публикация через $PROXY_CONTAINER"
+    docker_proxy_instructions "$CRM_DOMAIN" "$PROXY_ALIAS" "$PROXY_KIND"
+    if [ -n "${PROXY_NET_ADDED:-}" ]; then
+      c_red "  Прокси «$PROXY_CONTAINER» подключён к сети web вручную — после его пересоздания связь пропадёт."
+      echo "  Добавьте в его docker-compose.yml сеть web (external: true), чтобы это сохранилось."
+    fi
     ;;
 esac
 

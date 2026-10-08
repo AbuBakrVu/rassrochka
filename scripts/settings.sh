@@ -65,6 +65,11 @@ cmd_domain() {
       rm -f "$PROXY_DIR/sites/$current_slug.$current_domain.caddy"
       write_proxy_site "$new_slug.$new_domain" "$(env_get PROXY_ALIAS)"
       ;;
+    docker)
+      sed -i.bak "s/$current_slug\.$current_domain/$new_slug.$new_domain/g" "$REPO_DIR/docker-compose.local.yml" && rm -f "$REPO_DIR/docker-compose.local.yml.bak"
+      compose up -d app
+      c_red "Если прокси настраивается вручную (Nginx Proxy Manager и т.п.) — поменяйте там домен на $new_slug.$new_domain"
+      ;;
     port)
       c_red "Обновите адрес в вашем веб-сервере: $new_slug.$new_domain → 127.0.0.1:$(env_get APP_PORT)"
       [ -f "/etc/nginx/sites-available/nasiya-$current_slug.$current_domain.conf" ] && \

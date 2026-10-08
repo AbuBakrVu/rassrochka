@@ -149,14 +149,19 @@ Let's Encrypt) и `docker compose logs app`.
 |---|---|
 | 80/443 свободны или их держит общий прокси `/opt/proxy` | ставит общий прокси (если его нет) и публикует CRM в нём — режим `shared` |
 | 80/443 занимает **nginx** (например, у других CRM) | приложение на `127.0.0.1:31xx`, добавляет в nginx сайт `nasiya-<домен>.conf` (с проверкой `nginx -t` и откатом при ошибке) и выпускает сертификат `certbot --nginx` — режим `port` |
-| 80/443 занимает что-то другое (Apache, прокси в Docker) | то же `127.0.0.1:31xx`, а настройку для вашего веб-сервера печатает готовой |
+| 80/443 держит **прокси в Docker** у других CRM | подключает Nasiya к Docker-сети прокси (`docker-compose.local.yml`). **Traefik** и **nginx-proxy** подхватывают домен сами (метки / `VIRTUAL_HOST`), для **Nginx Proxy Manager** и своего nginx печатает, что добавить (`nasiya-<поддомен>:3000`) — режим `docker` |
+| 80/443 занимает что-то другое (Apache) | то же `127.0.0.1:31xx`, а настройку для вашего веб-сервера печатает готовой |
 
 Firewall на общем сервере не трогается (ufw закрыл бы порты соседей);
 fail2ban для SSH, автообновления безопасности и своп ставятся как обычно.
-Принудительно выбрать режим: `MODE=shared|port|standalone ./nasiya install`.
+Принудительно выбрать режим: `MODE=shared|port|docker|standalone ./nasiya install`.
+
+Репозиторий публичный — серверу ключ для клонирования не нужен
+(`git clone https://github.com/AbuBakrVu/rassrochka.git`), `./nasiya deploy`
+определяет это сам.
 
 ```
-cd /opt && git clone git@github.com:<владелец>/rassrochka.git nasiya
+cd /opt && git clone https://github.com/AbuBakrVu/rassrochka.git nasiya
 cd /opt/nasiya && ./nasiya install
 # или с вашего компьютера: ./nasiya deploy root@IP
 ```
