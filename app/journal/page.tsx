@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Download, ScrollText, Search, ShieldAlert } from "lucide-react";
 import { PageHeader, Card, EmptyState } from "@/components/ui";
+import TeamTabs from "@/components/team-tabs";
 import { useData } from "@/lib/store";
 import { can } from "@/lib/permissions";
 import { downloadCsv } from "@/lib/csv";
@@ -173,7 +174,8 @@ export default function JournalPage() {
 
   return (
     <>
-      <PageHeader title="Журнал действий" subtitle="Кто и что менял в CRM — платежи, сделки, касса" />
+      <PageHeader title="Сотрудники" subtitle="Журнал действий: кто и что менял в CRM — платежи, сделки, касса" />
+      <TeamTabs />
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8">
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <label className="relative min-w-0 flex-1 sm:max-w-xs">

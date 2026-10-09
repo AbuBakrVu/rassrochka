@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Search, SearchX, Download, FileSpreadsheet } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Search, SearchX, Download, FileSpreadsheet, ShieldOff } from "lucide-react";
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui";
 import { dealsOfClient, dealState, paidCount, type Client } from "@/lib/data";
 import { scheduleForDeal, paidTotal, money } from "@/lib/schedule";
@@ -24,19 +24,53 @@ const statusTone: Record<Client["status"], "green" | "red" | "gray" | "blue"> = 
 const riskText = { green: "text-good", yellow: "text-warn", red: "text-danger" } as const;
 const riskDot = { green: "bg-good", yellow: "bg-warn", red: "bg-danger" } as const;
 
+// «Архив» и «Чёрный список» раньше были отдельными разделами (/registry,
+// /blacklist) с тем же списком клиентов — теперь это вкладки здесь
 const filters = [
   { key: "all", label: "Все" },
   { key: "active", label: "Активные" },
   { key: "lead", label: "В работе" },
   { key: "overdue", label: "Просрочка" },
-  { key: "closed", label: "Закрытые" },
+  { key: "archive", label: "Архив" },
+  { key: "blacklist", label: "Чёрный список" },
 ] as const;
+type FilterKey = (typeof filters)[number]["key"];
+
+// Старое значение сохранённых фильтров — «Закрытые»
+const normalizeFilter = (v: string | null | undefined): FilterKey =>
+  v === "closed" ? "archive" : (filters.find((f) => f.key === v)?.key ?? "all");
+
+function matchesFilter(client: Client, filter: FilterKey): boolean {
+  if (filter === "all") return true;
+  if (filter === "archive") return client.status === "closed";
+  if (filter === "blacklist") return !!client.blacklistedAt;
+  return client.status === filter;
+}
 
 export default function ClientsPage() {
   const router = useRouter();
-  const { clients, deals, paidPayments, employees, cash, clientDefaultLimit, user } = useData();
+  const searchParams = useSearchParams();
+  const { clients, deals, paidPayments, employees, cash, clientDefaultLimit, user, setClientBlacklisted } = useData();
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<(typeof filters)[number]["key"]>("all");
+  // Вкладку можно открыть ссылкой: /clients?filter=blacklist (страница
+  // рисуется только в браузере, после загрузки данных)
+  const [filter, setFilter] = useState<FilterKey>(() =>
+    normalizeFilter(searchParams.get("filter"))
+  );
+  const [busy, setBusy] = useState<string | null>(null);
+  const isBlacklist = filter === "blacklist";
+
+  const unblacklist = async (c: Client) => {
+    if (!confirm(`Убрать ${c.name} из чёрного списка?`)) return;
+    setBusy(c.id);
+    try {
+      await setClientBlacklisted(c.id, false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось убрать из списка");
+    } finally {
+      setBusy(null);
+    }
+  };
   // Менеджер — у клиента нет своего ответственного, фильтр оставляет тех,
   // у кого есть хоть одна сделка этого менеджера
   const [managerId, setManagerId] = useState("");
@@ -69,7 +103,7 @@ export default function ClientsPage() {
     const digits = query.replace(/\D/g, "");
     return rows.filter(
       ({ client, managerIds }) =>
-        (filter === "all" || client.status === filter) &&
+        matchesFilter(client, filter) &&
         (managerId === "" || managerIds.has(managerId)) &&
         (q === "" ||
           client.name.toLowerCase().includes(q) ||
@@ -80,7 +114,7 @@ export default function ClientsPage() {
 
   const applyFilter = (p: Record<string, string>) => {
     setQuery(p.q ?? "");
-    setFilter((filters.find((f) => f.key === p.status)?.key ?? "all"));
+    setFilter(normalizeFilter(p.status));
     setManagerId(p.manager ?? "");
   };
 
@@ -105,7 +139,7 @@ export default function ClientsPage() {
     <>
       <PageHeader
         title="Клиенты"
-        subtitle="Реестр клиентов и статусы по сделкам"
+        subtitle="Все клиенты: в работе, архив и чёрный список"
         cta="+ Добавить"
         actions={
           can(user, "clients.edit") && (
@@ -191,8 +225,12 @@ export default function ClientsPage() {
           {list.length === 0 ? (
             <EmptyState
               icon={SearchX}
-              title="Никого не нашли"
-              text="Проверьте написание имени или сбросьте фильтр по статусу — список обновится сразу."
+              title={isBlacklist && query.trim() === "" ? "Чёрный список пуст" : "Никого не нашли"}
+              text={
+                isBlacklist && query.trim() === ""
+                  ? "Добавить клиента можно с его карточки — кнопка «В чёрный список»."
+                  : "Проверьте написание имени или сбросьте фильтр по статусу — список обновится сразу."
+              }
               action="Сбросить фильтры"
               onAction={() => applyFilter({})}
             />
@@ -213,8 +251,12 @@ export default function ClientsPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{c.name}</p>
                       <p className="truncate text-xs text-mute">
-                        {portfolio ? `остаток ${money(portfolio)}` : c.phone}
-                        {c.nextAction !== "—" && ` · ${c.nextAction}`}
+                        {isBlacklist
+                          ? `в чёрном списке${c.blacklistReason ? ` · ${c.blacklistReason}` : ""}`
+                          : <>
+                              {portfolio ? `остаток ${money(portfolio)}` : c.phone}
+                              {c.nextAction !== "—" && ` · ${c.nextAction}`}
+                            </>}
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
@@ -236,10 +278,17 @@ export default function ClientsPage() {
                     <th className="px-5 py-3 font-medium">Надёжность</th>
                     <th className="px-5 py-3 font-medium">Сделки</th>
                     <th className="px-5 py-3 font-medium">Остаток</th>
-                    <th className="px-5 py-3 font-medium">
-                      Ближайшее действие
-                    </th>
-                    <th className="px-5 py-3 font-medium">Срок</th>
+                    {isBlacklist ? (
+                      <>
+                        <th className="px-5 py-3 font-medium">Причина</th>
+                        <th className="px-5 py-3 font-medium">В списке с</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="px-5 py-3 font-medium">Ближайшее действие</th>
+                        <th className="px-5 py-3 font-medium">Срок</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -278,16 +327,40 @@ export default function ClientsPage() {
                       <td className="px-5 py-3.5 font-medium">
                         {portfolio ? money(portfolio) : "—"}
                       </td>
-                      <td className="px-5 py-3.5 text-mute">{c.nextAction}</td>
-                      <td
-                        className={`px-5 py-3.5 ${
-                          c.nextDate === "Сегодня"
-                            ? "font-medium text-brand-deep"
-                            : "text-mute"
-                        }`}
-                      >
-                        {c.nextDate}
-                      </td>
+                      {isBlacklist ? (
+                        <>
+                          <td className="px-5 py-3.5 text-mute">{c.blacklistReason || "—"}</td>
+                          <td className="px-5 py-3.5 text-mute">
+                            <span className="flex items-center justify-between gap-3">
+                              {c.blacklistedAt ? new Date(c.blacklistedAt).toLocaleDateString("ru-RU") : "—"}
+                              {can(user, "clients.edit") && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    unblacklist(c);
+                                  }}
+                                  disabled={busy === c.id}
+                                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs text-mute transition-colors hover:border-good/40 hover:text-good disabled:opacity-50"
+                                >
+                                  <ShieldOff size={13} aria-hidden />
+                                  Убрать
+                                </button>
+                              )}
+                            </span>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-5 py-3.5 text-mute">{c.nextAction}</td>
+                          <td
+                            className={`px-5 py-3.5 ${
+                              c.nextDate === "Сегодня" ? "font-medium text-brand-deep" : "text-mute"
+                            }`}
+                          >
+                            {c.nextDate}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>

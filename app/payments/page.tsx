@@ -50,7 +50,7 @@ export default function PaymentsPage() {
     <>
       <PageHeader
         title="Платежи"
-        subtitle="План недели и месяца по всем сделкам"
+        subtitle="Календарь: кто и когда платит. План и факт месяца — в Аналитике"
         searchPlaceholder="Найти платёж или клиента"
         cta="+ Добавить"
       />

@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { can } from "@/lib/permissions";
 import {
   Phone,
   Mail,
@@ -14,10 +16,13 @@ import {
   MapPin,
 } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
+import TeamTabs from "@/components/team-tabs";
 import { money } from "@/lib/schedule";
 import { useData, type Branch, type CustomRole, type Employee, type EmployeeRole } from "@/lib/store";
 import { ROLE_LABEL, roleTitle } from "@/lib/permissions";
 import { computeEmployees } from "@/lib/derive";
+import { completion, computePlanFact } from "@/lib/collection-plan";
+import { todayIso } from "@/lib/status";
 import { ruPlural, type RouteKind } from "@/lib/data";
 
 const kindMeta: Record<RouteKind, { label: string; icon: typeof PhoneCall; text: string }> = {
@@ -35,7 +40,7 @@ interface RoleBranch {
 
 export default function EmployeesPage() {
   const {
-    deals, paidPayments, employees: allEmployees, user, addEmployee, updateEmployee, setEmployeeActive,
+    deals, paidPayments, cash, employees: allEmployees, user, addEmployee, updateEmployee, setEmployeeActive,
     branches, roles, branchView, multiBranch,
   } = useData();
   // В выбранном филиале — его сотрудники и те, у кого доступ ко всем
@@ -50,7 +55,36 @@ export default function EmployeesPage() {
     () => computeEmployees(employees, deals, paidPayments),
     [employees, deals, paidPayments]
   );
+
+  // План сборов месяца по каждому — тот же расчёт, что в Аналитике → План/факт
+  // (с целями администратора, если они заданы; без права на аналитику — по графикам)
+  const month = todayIso().slice(0, 7);
+  const [targets, setTargets] = useState<Map<number, number>>(new Map());
+  useEffect(() => {
+    if (!can(user, "analytics")) return;
+    let cancelled = false;
+    fetch(`/api/collection-plan/targets?month=${month}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { managerId: number; amount: number }[]) => {
+        if (!cancelled) setTargets(new Map(rows.map((x) => [x.managerId, x.amount])));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user, month]);
+  const plan = useMemo(() => {
+    const pf = computePlanFact({ month, deals, cash, managers: allEmployees, branches, targets });
+    return new Map(pf.byManager.map((r) => [r.key, r]));
+  }, [month, deals, cash, allEmployees, branches, targets]);
   const isAdmin = user.role === "admin";
+  // В «Сотрудники» пускает и право на журнал — без права на команду ведём
+  // сразу во вкладку журнала
+  const router = useRouter();
+  const seesTeam = can(user, "employees");
+  useEffect(() => {
+    if (!seesTeam) router.replace("/journal");
+  }, [seesTeam, router]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [issued, setIssued] = useState<{ name: string; password: string } | null>(null);
   const [editing, setEditing] = useState<Employee | null>(null);
@@ -71,8 +105,9 @@ export default function EmployeesPage() {
     <>
       <PageHeader
         title="Сотрудники"
-        subtitle={`${stats.length} ${ruPlural(stats.length, "менеджер", "менеджера", "менеджеров")} в команде`}
+        subtitle={`${stats.length} ${ruPlural(stats.length, "сотрудник", "сотрудника", "сотрудников")} в команде`}
       />
+      <TeamTabs />
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-8">
         {isAdmin && (
           <div className="mb-4 flex justify-end">
@@ -167,6 +202,32 @@ export default function EmployeesPage() {
                   <p className="text-xs text-mute">Новых</p>
                 </div>
               </div>
+
+              {(() => {
+                const row = plan.get(String(s.employee.id));
+                if (!row || row.plan <= 0) return null;
+                const pct = completion(row) ?? 0;
+                return (
+                  <Link
+                    href="/analytics/plan"
+                    className="mt-3 block rounded-[16px] border border-line px-3 py-2.5 text-sm hover:border-brand/40"
+                    title="Подробно — Аналитика → План/факт"
+                  >
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="text-mute">План сборов месяца</span>
+                      <span className={`font-medium tabular-nums ${pct >= 100 ? "text-good" : pct >= 80 ? "text-warn" : "text-danger"}`}>
+                        {pct}%
+                      </span>
+                    </span>
+                    <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-line" aria-hidden>
+                      <span className="block h-full rounded-full bg-brand" style={{ width: `${Math.min(pct, 100)}%` }} />
+                    </span>
+                    <span className="mt-1 block text-xs text-mute">
+                      собрано {money(row.fact)} из {money(row.plan)}
+                    </span>
+                  </Link>
+                );
+              })()}
 
               <div className="mt-3 flex items-center justify-between rounded-[16px] bg-brand-soft px-3 py-2.5 text-sm">
                 <span className="text-brand-deep">

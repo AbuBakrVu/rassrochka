@@ -9,21 +9,18 @@ import {
   KanbanSquare,
   Users,
   CalendarDays,
-  Send,
   Handshake,
   Wallet,
-  BookUser,
   UserCog,
   Settings,
   Menu,
   X,
   LogOut,
-  ShieldAlert,
-  ScrollText,
   PhoneCall,
   Search,
   MoreHorizontal,
-  ChevronDown,
+  Pin,
+  PinOff,
   Plus,
   KeyRound,
 } from "lucide-react";
@@ -42,19 +39,17 @@ export const nav: {
   /** С этого пункта в боковом меню начинается вторая группа (после черты). */
   groupStart?: boolean;
 }[] = [
+  // Реестр и чёрный список — вкладки «Клиентов», рассылки — вкладка «Работы
+  // с долгом» (шаблоны — в Настройках), журнал — вкладка «Сотрудников»
   { href: "/", label: "Главная", icon: LayoutGrid },
-  { href: "/analytics", label: "Аналитика", icon: BarChart3 },
   { href: "/deals", label: "Сделки", icon: KanbanSquare },
   { href: "/clients", label: "Клиенты", icon: Users },
   { href: "/payments", label: "Платежи", icon: CalendarDays },
-  { href: "/collections", label: "Просрочки", icon: PhoneCall },
-  { href: "/mailings", label: "Рассылки", icon: Send, groupStart: true },
-  { href: "/coinvestors", label: "Соинвесторы", icon: Handshake },
+  { href: "/collections", label: "Работа с долгом", icon: PhoneCall },
   { href: "/cash", label: "Финансы", icon: Wallet },
-  { href: "/registry", label: "Реестр клиентов", icon: BookUser },
-  { href: "/blacklist", label: "Чёрный список", icon: ShieldAlert },
+  { href: "/analytics", label: "Аналитика", icon: BarChart3 },
+  { href: "/coinvestors", label: "Соинвесторы", icon: Handshake, groupStart: true },
   { href: "/employees", label: "Сотрудники", icon: UserCog },
-  { href: "/journal", label: "Журнал действий", icon: ScrollText },
   { href: "/settings", label: "Настройки", icon: Settings },
 ];
 
@@ -137,7 +132,16 @@ const popItem =
  * иконок, при наведении или фокусе с клавиатуры раскрывается поверх
  * контента. Анимация — классы .nsb* в app/globals.css.
  */
-function DesktopSidebar({ pathname }: { pathname: string }) {
+function DesktopSidebar({
+  pathname,
+  pinned,
+  onTogglePin,
+}: {
+  pathname: string;
+  /** Закреплённое меню всегда раскрыто, а страница сдвинута вправо. */
+  pinned: boolean;
+  onTogglePin: () => void;
+}) {
   const { user, roles } = useData();
   const items = useNavItems().filter((n) => n.href !== "/settings");
   const badges = useNavBadges();
@@ -148,7 +152,7 @@ function DesktopSidebar({ pathname }: { pathname: string }) {
   const [modal, setModal] = useState<CreateModal>(null);
   const createItems = useCreateItems(setModal);
   // Пока открыто всплывающее меню, карточка не схлопывается
-  const open = hovered || focused || pop !== null;
+  const open = pinned || hovered || focused || pop !== null;
 
   const togglePop = (kind: "profile" | "create", el: HTMLElement) =>
     setPop((p) => (p?.kind === kind ? null : { kind, anchor: el.getBoundingClientRect() }));
@@ -166,23 +170,34 @@ function DesktopSidebar({ pathname }: { pathname: string }) {
         if (!e.currentTarget.contains(e.relatedTarget as Node)) setFocused(false);
       }}
     >
-      <button
-        type="button"
-        className="nsb-profile"
-        aria-haspopup="menu"
-        aria-expanded={pop?.kind === "profile"}
-        onClick={(e) => togglePop("profile", e.currentTarget)}
-      >
-        <span className="nsb-avatar" aria-hidden>
-          {user.initials}
-        </span>
-        <span className="nsb-details nsb-fade">
-          <p className="nsb-name">{user.name}</p>
-          <p className="nsb-role">{roleTitle(user, roles)}</p>
-        </span>
-        <ChevronDown size={18} className="nsb-fade shrink-0 text-mute" aria-hidden />
-        <span className="sr-only">Меню профиля</span>
-      </button>
+      <div className="nsb-profile">
+        <button
+          type="button"
+          className="nsb-profile-btn"
+          aria-haspopup="menu"
+          aria-expanded={pop?.kind === "profile"}
+          onClick={(e) => togglePop("profile", e.currentTarget)}
+        >
+          <span className="nsb-avatar" aria-hidden>
+            {user.initials}
+          </span>
+          <span className="nsb-details nsb-fade">
+            <p className="nsb-name">{user.name}</p>
+            <p className="nsb-role">{roleTitle(user, roles)}</p>
+          </span>
+          <span className="sr-only">Меню профиля</span>
+        </button>
+        <button
+          type="button"
+          className="nsb-pin nsb-fade"
+          onClick={onTogglePin}
+          aria-pressed={pinned}
+          aria-label={pinned ? "Открепить меню" : "Закрепить меню"}
+          title={pinned ? "Открепить меню — будет раскрываться при наведении" : "Закрепить меню открытым"}
+        >
+          {pinned ? <PinOff size={17} aria-hidden /> : <Pin size={17} aria-hidden />}
+        </button>
+      </div>
 
       <button
         type="button"
@@ -426,8 +441,30 @@ function DrawerFooter() {
   );
 }
 
+const PIN_KEY = "nasiya:sidebar-pinned";
+
 export default function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  // Закреплённое меню — выбор каждого сотрудника в его браузере
+  const [pinned, setPinned] = useState(false);
+  useEffect(() => {
+    try {
+      // localStorage есть только в браузере — читаем после первой отрисовки
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPinned(localStorage.getItem(PIN_KEY) === "1");
+    } catch {
+      // приватный режим — меню просто не закреплено
+    }
+  }, []);
+  const togglePin = () =>
+    setPinned((p) => {
+      try {
+        localStorage.setItem(PIN_KEY, p ? "0" : "1");
+      } catch {
+        // не запомнится — не страшно
+      }
+      return !p;
+    });
   const pathname = usePathname();
   const brandName = useBrandName();
 
@@ -457,7 +494,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     <DataProvider>
       <SectionGate pathname={pathname} />
       <div className="flex min-h-screen print:hidden">
-        <DesktopSidebar pathname={pathname} />
+        <DesktopSidebar pathname={pathname} pinned={pinned} onTogglePin={togglePin} />
 
         {/* Мобильная шторка */}
         {open && (
@@ -487,7 +524,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <div className="flex min-w-0 flex-1 flex-col lg:pl-[132px]">
+        <div
+          className={`flex min-w-0 flex-1 flex-col transition-[padding] duration-[350ms] ease-out ${
+            pinned ? "lg:pl-[312px]" : "lg:pl-[132px]"
+          }`}
+        >
           {/* Мобильная шапка */}
           <header className="sticky top-0 z-20 flex items-center gap-3 bg-canvas/90 px-4 py-3 backdrop-blur lg:hidden">
             <button

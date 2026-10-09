@@ -44,14 +44,14 @@ export const PERMISSION_GROUPS: { title: string; items: PermissionInfo[] }[] = [
       { key: "dashboard", label: "Главная" },
       { key: "analytics", label: "Аналитика", hint: "включая план/факт сборов и доходность" },
       { key: "deals", label: "Сделки" },
-      { key: "clients", label: "Клиенты", hint: "реестр и чёрный список" },
+      { key: "clients", label: "Клиенты", hint: "включая архив и чёрный список" },
       { key: "payments", label: "Платежи", hint: "календарь платежей" },
-      { key: "collections", label: "Просрочки" },
-      { key: "mailings", label: "Рассылки" },
+      { key: "collections", label: "Работа с долгом: звонки", hint: "очередь звонков по просрочке" },
+      { key: "mailings", label: "Работа с долгом: напоминания", hint: "WhatsApp-напоминания об оплате" },
       { key: "cash", label: "Финансы", hint: "касса и прогноз" },
       { key: "coinvestors", label: "Соинвесторы", hint: "просмотр и управление" },
       { key: "employees", label: "Сотрудники", hint: "только просмотр" },
-      { key: "journal", label: "Журнал действий" },
+      { key: "journal", label: "Журнал действий", hint: "вкладка в «Сотрудниках»" },
     ],
   },
   {
@@ -98,21 +98,25 @@ export function can(user: { permissions: readonly string[] }, permission: Permis
   return user.permissions.includes(permission);
 }
 
-/** Какое право открывает раздел меню. "/settings" открыт всем (смена пароля). */
-export const SECTION_PERMISSION: Record<string, Permission | null> = {
+/**
+ * Какое право открывает раздел: одно или любое из списка. null — открыт
+ * всем ("/settings" — там смена пароля; старые адреса, которые только
+ * перенаправляют в новые разделы).
+ */
+export const SECTION_PERMISSION: Record<string, Permission | Permission[] | null> = {
   "/": "dashboard",
   "/analytics": "analytics",
   "/deals": "deals",
   "/clients": "clients",
   "/payments": "payments",
-  "/route": "deals",
-  "/collections": "collections",
-  "/mailings": "mailings",
+  "/route": null,
+  "/collections": ["collections", "mailings"],
+  "/mailings": null,
   "/coinvestors": "coinvestors",
   "/cash": "cash",
-  "/registry": "clients",
-  "/blacklist": "clients",
-  "/employees": "employees",
+  "/registry": null,
+  "/blacklist": null,
+  "/employees": ["employees", "journal"],
   "/journal": "journal",
   "/import": "clients.edit",
   "/settings": null,
@@ -125,7 +129,8 @@ export function canOpen(user: { permissions: readonly string[] }, pathname: stri
     .sort((a, b) => b.length - a.length)[0];
   if (section === undefined) return true;
   const perm = SECTION_PERMISSION[section];
-  return perm === null || can(user, perm);
+  if (perm === null) return true;
+  return (Array.isArray(perm) ? perm : [perm]).some((p) => can(user, p));
 }
 
 /** Куда вести сотрудника, которому закрыта открытая им страница. */
