@@ -25,6 +25,10 @@ case "$cmd" in
   restore)  exec bash scripts/restore.sh "$@" ;;
   deploy)   exec bash scripts/deploy.sh "$@" ;;
   proxy-setup) exec bash scripts/proxy-setup.sh "$@" ;;
+  clear-test-data)
+    . scripts/lib.sh
+    compose exec -T app node scripts/clear-test-data.mjs "$@"
+    ;;
   backup)
     [ -f .env ] && set -a && . ./.env && set +a
     exec bash scripts/backup.sh "$@"
@@ -41,6 +45,7 @@ case "$cmd" in
   backup-setup  настроить копии в облако, шифрование и расписание
   restore    восстановить базу компании из копии (latest — самую свежую)
   proxy-setup  общий прокси, если на сервере несколько веб-сервисов
+  clear-test-data [--yes]  удалить тестовых клиентов и сделки из nasiya-test-import.xlsx
 
 С вашего компьютера:
   deploy root@<IP> [--shared]  поставить на новый сервер одной командой

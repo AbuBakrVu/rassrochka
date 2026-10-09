@@ -2615,7 +2615,22 @@ export async function loadPortalClient(
     [client.id]
   );
 
-  if (rows.length === 0) return undefined;
+  // Выданных рассрочек ещё нет (только заявка или отказ) — ссылка всё равно
+  // рабочая: клиент видит, что сделок пока нет, и контакт менеджера заявки
+  if (rows.length === 0) {
+    const manager = await queryOne<{ name: string | null; phone: string | null }>(
+      dbName,
+      `select u.name, u.phone from deals d left join users u on u.id = d.manager_id
+       where d.client_id = $1 and d.deleted_at is null order by d.created_at desc limit 1`,
+      [client.id]
+    );
+    return {
+      clientFirstName: client.name.split(" ")[1] ?? client.name,
+      managerName: manager?.name ?? "менеджер",
+      managerPhone: manager?.phone ?? null,
+      deals: [],
+    };
+  }
 
   const payments = await loadPortalPayments(dbName, rows.map((r) => r.id));
 
