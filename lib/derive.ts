@@ -130,7 +130,8 @@ export function computeDashboard(
       count: overdueList.length,
     },
     activeClients: activeClientIds.size,
-    priorities: route.slice(0, 4),
+    // Главная показывает приоритеты вместо прежних двух блоков (+ «Контроль срока»)
+    priorities: route.slice(0, 6),
     newRequests,
     deadlines,
     inflow,

@@ -13,7 +13,7 @@ import {
   ChevronRight,
   CalendarRange,
 } from "lucide-react";
-import { PageHeader, Card, Badge, PillButton, TickBar } from "@/components/ui";
+import { PageHeader, Card, PillButton, TickBar } from "@/components/ui";
 import NewDealModal from "@/components/new-deal-modal";
 import NewClientModal from "@/components/new-client-modal";
 import AcceptPaymentModal from "@/components/accept-payment-modal";
@@ -24,10 +24,10 @@ import { can } from "@/lib/permissions";
 import { cashBalance } from "@/lib/cash";
 import { computeActive, computeDashboard, todayIso } from "@/lib/derive";
 
-// Главная по мотивам финансового дашборда: стопка цветных карт с балансом
-// кассы, плавный график поступлений «этот год против прошлого», план
-// сборов месяца делениями, ближайшие оплаты аватарами, последние платежи и
-// движение денег по дням. Ниже — очереди дел на сегодня.
+// Главная — про «сегодня»: стопка карт с балансом кассы, приоритеты дня,
+// план сборов месяца делениями (подробно — Аналитика → План/факт),
+// ближайшие оплаты, новые заявки и последние платежи. Годовой график
+// поступлений — в Аналитике → Обзор, движение денег — в Финансах.
 
 const MONTHS = [
   "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
@@ -37,7 +37,6 @@ const MONTHS_GEN = [
   "января", "февраля", "марта", "апреля", "мая", "июня",
   "июля", "августа", "сентября", "октября", "ноября", "декабря",
 ];
-const MONTHS_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
 
 const dotTone: Record<RouteKind, string> = {
   overdue: "bg-danger",
@@ -46,9 +45,6 @@ const dotTone: Record<RouteKind, string> = {
   request: "bg-brand",
 };
 
-const iso = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
 const initials = (name: string) =>
   name
     .split(" ")
@@ -56,15 +52,6 @@ const initials = (name: string) =>
     .map((w) => w[0])
     .join("");
 
-/** Короткая сумма для осей: 1,2 млн / 350 тыс. */
-const short = (n: number) =>
-  n >= 1_000_000
-    ? `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1).replace(".", ",")} млн`
-    : n >= 1000
-      ? `${Math.round(n / 1000)} тыс`
-      : String(Math.round(n));
-
-// Цвета аватаров — по первой букве, чтобы у клиента всегда был один цвет
 const AVATAR = [
   "from-brand-hi to-brand",
   "from-orange/80 to-orange",
@@ -72,28 +59,6 @@ const AVATAR = [
   "from-good/70 to-good",
 ];
 const avatarTone = (name: string) => AVATAR[(name.codePointAt(0) ?? 0) % AVATAR.length];
-
-/** Плавная кривая через точки (Catmull-Rom → кубические Безье). */
-function smoothPath(pts: [number, number][]) {
-  if (pts.length < 2) return "";
-  let d = `M${pts[0][0]},${pts[0][1]}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] ?? pts[i];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[i + 2] ?? p2;
-    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
-    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
-    d += ` C${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${p2[0]},${p2[1]}`;
-  }
-  return d;
-}
-
-/** Путь столбика со скруглённым верхом и прямым основанием. */
-function barPath(x: number, y: number, w: number, h: number, r: number) {
-  const rr = Math.min(r, w / 2, h);
-  return `M${x},${y + h} V${y + rr} Q${x},${y} ${x + rr},${y} H${x + w - rr} Q${x + w},${y} ${x + w},${y + rr} V${y + h} Z`;
-}
 
 // ── Стопка карт ────────────────────────────────────────────────────────
 
@@ -163,177 +128,6 @@ function WalletCard({
   );
 }
 
-// ── Обзор поступлений: две плавные линии ───────────────────────────────
-
-function OverviewChart({
-  current,
-  previous,
-  year,
-  monthsShown,
-}: {
-  current: number[];
-  previous: number[];
-  year: number;
-  /** Сколько месяцев текущего года уже наступило — дальше линия не рисуется. */
-  monthsShown: number;
-}) {
-  const [hover, setHover] = useState<number | null>(null);
-  const w = 760;
-  const h = 200;
-  const pad = 10;
-  const max = Math.max(...current, ...previous, 1) * 1.15;
-  const x = (i: number) => pad + ((w - pad * 2) * i) / 11;
-  const y = (v: number) => h - (v / max) * (h - 10);
-  const cur = current.slice(0, monthsShown).map((v, i) => [x(i), y(v)] as [number, number]);
-  const prev = previous.map((v, i) => [x(i), y(v)] as [number, number]);
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * max);
-
-  return (
-    <div className="flex gap-2">
-      <div className="flex h-[200px] flex-col-reverse justify-between pb-0 text-right text-[11px] text-mute" aria-hidden>
-        {ticks.map((t) => (
-          <span key={t} className="leading-none">{t ? short(t) : "0"}</span>
-        ))}
-      </div>
-      <div className="relative min-w-0 flex-1">
-        <svg
-          viewBox={`0 0 ${w} ${h}`}
-          preserveAspectRatio="none"
-          className="h-[200px] w-full overflow-visible"
-          role="img"
-          aria-label={`Поступления по месяцам: ${year} год против ${year - 1}`}
-          onMouseLeave={() => setHover(null)}
-        >
-          <defs>
-            <linearGradient id="ov-cur" x1="0" x2="1">
-              <stop offset="0" stopColor="var(--color-brand)" stopOpacity="0.35" />
-              <stop offset="0.25" stopColor="var(--color-brand)" />
-              <stop offset="1" stopColor="var(--color-brand)" />
-            </linearGradient>
-            <linearGradient id="ov-prev" x1="0" x2="1">
-              <stop offset="0" stopColor="var(--color-orange)" stopOpacity="0.35" />
-              <stop offset="0.3" stopColor="var(--color-orange)" />
-              <stop offset="1" stopColor="var(--color-orange)" stopOpacity="0.25" />
-            </linearGradient>
-          </defs>
-          <path d={smoothPath(prev)} fill="none" stroke="url(#ov-prev)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-          <path d={smoothPath(cur)} fill="none" stroke="url(#ov-cur)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-          {Array.from({ length: 12 }, (_, i) => (
-            <rect
-              key={i}
-              x={x(i) - (w - pad * 2) / 22}
-              y={0}
-              width={(w - pad * 2) / 11}
-              height={h}
-              fill="transparent"
-              onMouseEnter={() => setHover(i)}
-            />
-          ))}
-          {hover !== null && (
-            <line x1={x(hover)} x2={x(hover)} y1={0} y2={h} stroke="var(--color-line)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-          )}
-        </svg>
-        {/* Точки поверх SVG — чтобы не растягивались вместе с ним */}
-        {hover !== null && (
-          <>
-            {[
-              { v: previous[hover], cls: "bg-orange" },
-              ...(hover < monthsShown ? [{ v: current[hover], cls: "bg-brand" }] : []),
-            ].map((d, i) => (
-              <span
-                key={i}
-                className={`pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface ${d.cls}`}
-                style={{ left: `${(x(hover) / w) * 100}%`, top: y(d.v) }}
-              />
-            ))}
-            <div
-              className="pointer-events-none absolute top-0 z-10 flex -translate-x-1/2 gap-4 rounded-[14px] bg-surface px-3.5 py-2.5 text-xs shadow-pop"
-              style={{ left: `${Math.min(Math.max((x(hover) / w) * 100, 14), 86)}%` }}
-              role="status"
-            >
-              <span>
-                <span className="flex items-center gap-1.5 text-mute">
-                  <span className="h-1.5 w-1.5 rounded-full bg-brand" /> {MONTHS[hover]} {year}
-                </span>
-                <span className="mt-0.5 block font-medium">
-                  {hover < monthsShown ? money(current[hover]) : "—"}
-                </span>
-              </span>
-              <span className="border-l border-line pl-4">
-                <span className="flex items-center gap-1.5 text-mute">
-                  <span className="h-1.5 w-1.5 rounded-full bg-orange" /> {year - 1}
-                </span>
-                <span className="mt-0.5 block font-medium">{money(previous[hover])}</span>
-              </span>
-            </div>
-          </>
-        )}
-        <div className="mt-2 flex justify-between text-[11px] text-mute">
-          {MONTHS_SHORT.map((m) => (
-            <span key={m} className="w-0 text-center whitespace-nowrap first:text-left">
-              {m}
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Движение денег: столбики по дням ───────────────────────────────────
-
-function MovementBars({ days }: { days: { iso: string; inc: number }[] }) {
-  const peak = days.reduce((best, d, i) => (d.inc > days[best].inc ? i : best), 0);
-  const [hover, setHover] = useState<number | null>(null);
-  const sel = hover ?? peak;
-  const w = 420;
-  const h = 110;
-  const max = Math.max(...days.map((d) => d.inc), 1);
-  const slot = w / days.length;
-  const bw = slot * 0.72;
-  const date = new Date(`${days[sel].iso}T00:00:00`);
-
-  return (
-    <div className="relative mt-6">
-      <span
-        className="pointer-events-none absolute -top-5 z-10 -translate-x-1/2 rounded-full bg-surface px-2.5 py-1 text-[11px] whitespace-nowrap shadow-pop"
-        style={{ left: `${((sel + 0.5) / days.length) * 100}%` }}
-        role="status"
-      >
-        {date.getDate()} {MONTHS_GEN[date.getMonth()]} · {money(days[sel].inc)}
-      </span>
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        className="h-28 w-full"
-        role="img"
-        aria-label="Поступления по дням за две недели"
-        onMouseLeave={() => setHover(null)}
-      >
-        <defs>
-          <linearGradient id="mv-hi" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="var(--color-brand)" />
-            <stop offset="1" stopColor="var(--color-brand)" stopOpacity="0.15" />
-          </linearGradient>
-        </defs>
-        <line x1="0" x2={w} y1={6} y2={6} stroke="var(--color-line)" strokeDasharray="3 5" />
-        {days.map((d, i) => {
-          const bh = Math.max((d.inc / max) * (h - 16), 10);
-          return (
-            <g key={d.iso} onMouseEnter={() => setHover(i)}>
-              <rect x={slot * i} y={0} width={slot} height={h} fill="transparent" />
-              <path
-                d={barPath(slot * i + (slot - bw) / 2, h - bh, bw, bh, 8)}
-                fill={i === sel ? "url(#mv-hi)" : "color-mix(in srgb, var(--color-brand) 12%, var(--color-surface))"}
-              />
-            </g>
-          );
-        })}
-        <line x1="0" x2={w} y1={h - 0.5} y2={h - 0.5} stroke="color-mix(in srgb, var(--color-brand) 30%, transparent)" />
-      </svg>
-    </div>
-  );
-}
-
 // ── Страница ───────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -371,10 +165,6 @@ export default function Home() {
   const startBalance = balance - monthNet;
   const monthPct = startBalance > 0 ? Math.round((monthNet / startBalance) * 1000) / 10 : null;
 
-  // Поступления по месяцам: этот и прошлый год
-  const year = now.getFullYear();
-  const byMonth = (y: number) =>
-    Array.from({ length: 12 }, (_, m) => paidIn(`${y}-${String(m + 1).padStart(2, "0")}`));
 
   // Ближайшие оплаты — по одному ближайшему взносу на сделку
   const seen = new Set<string>();
@@ -385,16 +175,6 @@ export default function Home() {
     .slice(0, 6);
   const [pickedId, setPickedId] = useState<string | null>(null);
   const picked = upcoming.find((p) => p.deal.id === pickedId) ?? upcoming[0];
-
-  // Движение денег за 14 дней
-  const days = Array.from({ length: 14 }, (_, i) => {
-    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13 + i);
-    const key = iso(day);
-    return { iso: key, inc: payments.filter((t) => t.date.startsWith(key)).reduce((s, t) => s + t.amount, 0) };
-  });
-  const from14 = days[0].iso;
-  const moneyIn = cash.filter((t) => t.date >= from14 && t.amount > 0).reduce((s, t) => s + t.amount, 0);
-  const moneyOut = cash.filter((t) => t.date >= from14 && t.amount < 0).reduce((s, t) => s - t.amount, 0);
 
   const recent = [...payments]
     .filter((t) => t.amount > 0)
@@ -424,7 +204,7 @@ export default function Home() {
                 href="/collections"
                 className="flex h-10 items-center gap-2 rounded-full bg-surface px-4 text-sm font-medium shadow-card hover:text-brand-deep max-sm:hidden"
               >
-                <PhoneCall size={15} aria-hidden /> Просрочки
+                <PhoneCall size={15} aria-hidden /> Работа с долгом
               </Link>
             </>
           )
@@ -432,6 +212,8 @@ export default function Home() {
       />
 
       <div className="mx-auto max-w-[1500px] px-4 py-5 sm:px-8">
+        {/* Главная — про сегодня: деньги, срочные дела, ближайшие оплаты.
+            Годовые графики — в Аналитике, движение денег — в Финансах */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
           <WalletCard
             balance={balance}
@@ -445,28 +227,37 @@ export default function Home() {
             ]}
           />
 
+
           <Card className="min-w-0 p-5 sm:p-6">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3>Поступления</h3>
-                <div className="mt-1 flex gap-4 text-xs text-mute">
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-brand" aria-hidden /> {year}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-orange" aria-hidden /> {year - 1}
-                  </span>
-                </div>
-              </div>
-              <Link
-                href="/analytics"
-                className="flex items-center gap-1 rounded-full border border-line px-3 py-1.5 text-xs font-medium text-mute hover:text-ink"
-              >
-                Аналитика <ChevronRight size={13} aria-hidden />
+            <div className="mb-1 flex items-center justify-between">
+              <h3 className="font-semibold">Приоритеты</h3>
+              <Link href="/collections" className="flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-deep">
+                Работа с долгом <ArrowRight size={15} aria-hidden />
               </Link>
             </div>
-            <OverviewChart current={byMonth(year)} previous={byMonth(year - 1)} year={year} monthsShown={now.getMonth() + 1} />
+            <p className="mb-1 text-sm text-mute">Просрочки, сроки подписания и заявки — по срочности</p>
+            {d.priorities.length === 0 ? (
+              <p className="py-6 text-sm text-mute">Срочных дел нет.</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {d.priorities.map((p) => (
+                  <li key={p.key} className="flex items-center gap-3 py-3">
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${dotTone[p.kind]}`} aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <Link href={`/deals/${p.dealId}`} className="block truncate text-sm font-medium hover:text-brand-deep">
+                        {p.clientName}
+                      </Link>
+                      <p className={`truncate text-xs ${p.kind === "overdue" ? "text-danger" : "text-mute"}`}>
+                        {p.text}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold whitespace-nowrap">{money(p.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
+
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
@@ -478,9 +269,14 @@ export default function Home() {
                   {money(planMonth)}
                 </p>
               </div>
-              <span className="flex h-11 w-11 items-center justify-center rounded-full border border-line text-mute">
+              <Link
+                href="/analytics/plan"
+                aria-label="План и факт сборов по менеджерам"
+                title="План/факт по менеджерам и филиалам"
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-line text-mute hover:border-brand/40 hover:text-brand-deep"
+              >
                 <CalendarRange size={18} aria-hidden />
-              </span>
+              </Link>
             </div>
             <p className="mt-4 mb-2 text-sm text-mute">
               С 1 по {lastDay} {MONTHS_GEN[now.getMonth()]}
@@ -564,7 +360,49 @@ export default function Home() {
           </Card>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
+          <Card className="p-5 sm:p-6">
+            <div className="mb-1 flex items-center justify-between">
+              <h3 className="font-semibold">Новые заявки</h3>
+              <Link href="/deals" className="flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-deep">
+                К списку <ArrowRight size={15} aria-hidden />
+              </Link>
+            </div>
+            <p className="mb-3 text-sm text-mute">Быстрая квалификация</p>
+            {d.newRequests.length === 0 ? (
+              <p className="py-6 text-sm text-mute">Новых заявок нет — все разобраны.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {d.newRequests.map((r, i) => (
+                  <li key={r.dealId}>
+                    {/* Первая заявка — акцентная карточка, как «выделенный» элемент в референсах */}
+                    <Link
+                      href={`/deals/${r.dealId}`}
+                      className={`group flex items-center gap-3 rounded-[14px] px-3.5 py-3 transition-colors ${
+                        i === 0
+                          ? "bg-brand text-on-brand shadow-card hover:bg-brand-deep"
+                          : "bg-canvas hover:bg-brand-soft"
+                      }`}
+                    >
+                      <span
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
+                          i === 0 ? "bg-on-brand/20" : "bg-brand-soft text-brand-deep"
+                        }`}
+                      >
+                        {initials(r.name)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{r.name}</p>
+                        <p className={`truncate text-xs ${i === 0 ? "opacity-80" : "text-mute"}`}>{r.text}</p>
+                      </div>
+                      <ArrowUpRight size={16} className="shrink-0 opacity-70" aria-hidden />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
           <Card className="p-5 sm:p-6">
             <div className="mb-2 flex items-center justify-between">
               <h3>Последние платежи</h3>
@@ -603,126 +441,6 @@ export default function Home() {
             )}
           </Card>
 
-          <Card className="p-5 sm:p-6">
-            <div className="flex items-center justify-between">
-              <h3>Движение денег</h3>
-              <span className="rounded-full border border-line px-3 py-1.5 text-xs text-mute">14 дней</span>
-            </div>
-            <div className="mt-3 flex justify-between text-xs text-mute">
-              <span>
-                Приход
-                <span className="mt-0.5 block text-lg font-medium text-ink tabular-nums">{money(moneyIn)}</span>
-              </span>
-              <span className="text-right">
-                Расход
-                <span className="mt-0.5 block text-lg font-medium text-ink tabular-nums">{money(moneyOut)}</span>
-              </span>
-            </div>
-            <MovementBars days={days} />
-          </Card>
-        </div>
-
-        <div className="mt-4">
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <Card className="p-5">
-                <div className="mb-1 flex items-center justify-between">
-                  <h3 className="font-semibold">Приоритеты</h3>
-                  <Link href="/route" className="flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-deep">
-                    Все <ArrowRight size={15} aria-hidden />
-                  </Link>
-                </div>
-                <p className="mb-1 text-sm text-mute">Очередь на сегодня</p>
-                {d.priorities.length === 0 ? (
-                  <p className="py-6 text-sm text-mute">Срочных дел нет.</p>
-                ) : (
-                  <ul className="divide-y divide-line">
-                    {d.priorities.map((p) => (
-                      <li key={p.key} className="flex items-center gap-3 py-3">
-                        <span className={`h-2 w-2 shrink-0 rounded-full ${dotTone[p.kind]}`} aria-hidden />
-                        <div className="min-w-0 flex-1">
-                          <Link href={`/deals/${p.dealId}`} className="block truncate text-sm font-medium hover:text-brand-deep">
-                            {p.clientName}
-                          </Link>
-                          <p className={`truncate text-xs ${p.kind === "overdue" ? "text-danger" : "text-mute"}`}>
-                            {p.text}
-                          </p>
-                        </div>
-                        <span className="text-sm font-semibold whitespace-nowrap">{money(p.amount)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Card>
-
-              <Card className="p-5">
-                <div className="mb-1 flex items-center justify-between">
-                  <h3 className="font-semibold">Новые заявки</h3>
-                  <Link href="/deals" className="flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-deep">
-                    К списку <ArrowRight size={15} aria-hidden />
-                  </Link>
-                </div>
-                <p className="mb-3 text-sm text-mute">Быстрая квалификация</p>
-                {d.newRequests.length === 0 ? (
-                  <p className="py-6 text-sm text-mute">Новых заявок нет — все разобраны.</p>
-                ) : (
-                  <ul className="flex flex-col gap-2">
-                    {d.newRequests.map((r, i) => (
-                      <li key={r.dealId}>
-                        {/* Первая заявка — акцентная карточка, как «выделенный» элемент в референсах */}
-                        <Link
-                          href={`/deals/${r.dealId}`}
-                          className={`group flex items-center gap-3 rounded-[14px] px-3.5 py-3 transition-colors ${
-                            i === 0
-                              ? "bg-brand text-on-brand shadow-card hover:bg-brand-deep"
-                              : "bg-canvas hover:bg-brand-soft"
-                          }`}
-                        >
-                          <span
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
-                              i === 0 ? "bg-on-brand/20" : "bg-brand-soft text-brand-deep"
-                            }`}
-                          >
-                            {initials(r.name)}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium">{r.name}</p>
-                            <p className={`truncate text-xs ${i === 0 ? "opacity-80" : "text-mute"}`}>{r.text}</p>
-                          </div>
-                          <ArrowUpRight size={16} className="shrink-0 opacity-70" aria-hidden />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Card>
-
-              <Card className="p-5">
-                <div className="mb-1 flex items-center justify-between">
-                  <h3 className="font-semibold">Контроль срока</h3>
-                  <Link href="/route" className="flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-deep">
-                    Открыть <ArrowRight size={15} aria-hidden />
-                  </Link>
-                </div>
-                <p className="mb-1 text-sm text-mute">Договоры с ближайшими событиями</p>
-                {d.deadlines.length === 0 ? (
-                  <p className="py-6 text-sm text-mute">Ближайших дедлайнов нет.</p>
-                ) : (
-                  <ul className="divide-y divide-line">
-                    {d.deadlines.map((x) => (
-                      <li key={x.dealId} className="flex items-center gap-3 py-3">
-                        <div className="min-w-0 flex-1">
-                          <Link href={`/deals/${x.dealId}`} className="block truncate text-sm font-medium hover:text-brand-deep">
-                            {x.title}
-                          </Link>
-                          <p className="truncate text-xs text-mute">{x.text}</p>
-                        </div>
-                        <Badge tone="red">{x.badge}</Badge>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Card>
-            </div>
         </div>
       </div>
 

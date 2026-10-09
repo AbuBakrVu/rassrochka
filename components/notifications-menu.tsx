@@ -131,11 +131,11 @@ export default function NotificationsMenu() {
 
           <div className="border-t border-line px-4 py-2.5">
             <Link
-              href="/route"
+              href="/collections"
               onClick={() => setOpen(false)}
               className="block text-center text-sm font-medium text-brand hover:text-brand-deep"
             >
-              Открыть маршрут дня
+              Работа с долгом
             </Link>
           </div>
         </div>

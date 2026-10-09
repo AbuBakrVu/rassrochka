@@ -328,17 +328,38 @@ h4 {
 }
 .nsb-open { width: 264px; }
 
-/* Профиль */
+/* Профиль: аватар с именем открывает меню профиля, справа — закрепление */
 .nsb-profile {
   position: relative;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
+}
+.nsb-profile-btn {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
   border-radius: 14px;
   text-align: left;
 }
+.nsb-pin {
+  display: grid;
+  flex: 0 0 32px;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  color: var(--nsb-faint);
+  transition: opacity 0.15s, color 0.2s, background-color 0.2s;
+}
+.nsb-pin:hover { color: var(--primary); background: var(--nsb-chip); }
+.nsb-pin[aria-pressed="true"] { color: var(--primary); background: var(--nsb-active); }
+/* Невидимое в свёрнутом меню не должно ловить клики */
+.nsb:not(.nsb-open) .nsb-fade { pointer-events: none; }
 .nsb-avatar {
   display: grid;
   flex: 0 0 44px;

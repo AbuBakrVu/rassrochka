@@ -2,9 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PhoneCall, PhoneOff, CalendarClock, HandCoins, CheckCircle2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { PhoneCall, PhoneOff, CalendarClock, HandCoins, CheckCircle2, Send } from "lucide-react";
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui";
 import ContactModal from "@/components/contact-modal";
+import ReminderQueue from "@/components/reminder-queue";
+import { can } from "@/lib/permissions";
+import { computeReminderQueue } from "@/lib/reminders";
 import { useData } from "@/lib/store";
 import { computeActive } from "@/lib/derive";
 import { todayIso } from "@/lib/status";
@@ -12,7 +16,11 @@ import { money } from "@/lib/schedule";
 import { ruPlural } from "@/lib/data";
 import { buildQueue, OUTCOME_LABEL, type QueueItem, type QueueState } from "@/lib/collections";
 
-// «Просрочки» — очередь звонков на сегодня: нарушенные обещания, перезвоны
+// «Работа с долгом»: вкладка «Звонки» и вкладка «Напоминания» (очередь
+// WhatsApp-напоминаний, раньше — отдельный раздел «Рассылки»). Обе про одно:
+// с кем сегодня связаться по оплате.
+//
+// «Звонки» — очередь звонков на сегодня: нарушенные обещания, перезвоны
 // и остальные просроченные сделки по сроку и сумме. Итог каждого звонка
 // записывается (contact_log), обещание оплатить само возвращает сделку в
 // очередь, если к сроку денег не было.
@@ -29,9 +37,22 @@ const shortDate = (iso: string) =>
   new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
 
 export default function CollectionsPage() {
-  const { deals, paidPayments, contacts, cash, clients, employees, user } = useData();
+  const { deals, paidPayments, contacts, cash, clients, employees, user, templates } = useData();
   const today = todayIso();
+  const searchParams = useSearchParams();
   const [mine, setMine] = useState(user.role !== "admin");
+  const canCalls = can(user, "collections");
+  const canRemind = can(user, "mailings");
+  // Вкладку открывают и ссылкой: /collections?tab=reminders (так ведёт /mailings)
+  const [section, setSection] = useState<"calls" | "reminders">(() =>
+    (searchParams.get("tab") === "reminders" && canRemind) || !canCalls
+      ? "reminders"
+      : "calls"
+  );
+  const reminderCount = computeReminderQueue(
+    mine ? deals.filter((d) => d.managerId === user.id) : deals,
+    clients, paidPayments, templates, today
+  ).length;
   const [tab, setTab] = useState<"today" | "waiting" | "done">("today");
   const [modal, setModal] = useState<QueueItem | null>(null);
 
@@ -67,8 +88,43 @@ export default function CollectionsPage() {
 
   return (
     <>
-      <PageHeader title="Просрочки" subtitle="Кому позвонить сегодня и кто что обещал" />
+      <PageHeader title="Работа с долгом" subtitle="С кем связаться сегодня: звонки по просрочке и напоминания об оплате" />
       <div className="mx-auto max-w-5xl px-4 py-5 sm:px-8">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="inline-flex gap-1 rounded-full border border-line/70 bg-surface p-1 shadow-card" role="tablist" aria-label="Раздел">
+            {canCalls && (
+              <button
+                role="tab"
+                aria-selected={section === "calls"}
+                onClick={() => setSection("calls")}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ${section === "calls" ? "bg-brand text-on-brand" : "text-mute hover:text-ink"}`}
+              >
+                <PhoneCall size={15} aria-hidden /> Звонки · {groups.today.length}
+              </button>
+            )}
+            {canRemind && (
+              <button
+                role="tab"
+                aria-selected={section === "reminders"}
+                onClick={() => setSection("reminders")}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ${section === "reminders" ? "bg-brand text-on-brand" : "text-mute hover:text-ink"}`}
+              >
+                <Send size={15} aria-hidden /> Напоминания · {reminderCount}
+              </button>
+            )}
+          </div>
+          {user.role === "admin" && (
+            <label className="ml-auto flex items-center gap-2 text-sm text-mute">
+              <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} className="h-4 w-4 accent-[var(--color-brand)]" />
+              Только мои сделки
+            </label>
+          )}
+        </div>
+
+        {section === "reminders" ? (
+          <ReminderQueue mine={mine} />
+        ) : (
+        <>
         <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             { label: "Позвонить сегодня", value: groups.today.length, icon: PhoneCall, cls: "" },
@@ -106,12 +162,6 @@ export default function CollectionsPage() {
               </button>
             ))}
           </div>
-          {user.role === "admin" && (
-            <label className="ml-auto flex items-center gap-2 text-sm text-mute">
-              <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} className="h-4 w-4 accent-[var(--color-brand)]" />
-              Только мои сделки
-            </label>
-          )}
         </div>
 
         <Card className="overflow-hidden">
@@ -183,6 +233,8 @@ export default function CollectionsPage() {
             </ul>
           )}
         </Card>
+        </>
+        )}
       </div>
 
       {modal && (

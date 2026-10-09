@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Settings, Eye, EyeOff, Gauge } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
 import { useData } from "@/lib/store";
@@ -9,6 +10,7 @@ import BrandingSettings from "@/components/branding-settings";
 import ApplySettingsCard from "@/components/apply-settings";
 import BranchesSettings from "@/components/branches-settings";
 import RolesSettings from "@/components/roles-settings";
+import TemplatesSettings from "@/components/templates-settings";
 
 // "/settings" сюда не входит — иначе можно было бы случайно скрыть сам
 // пункт, которым управляется видимость остальных, и остаться без доступа.
@@ -18,6 +20,7 @@ const TABS = [
   { key: "branding", label: "Оформление" },
   { key: "branches", label: "Филиалы" },
   { key: "roles", label: "Роли" },
+  { key: "templates", label: "Шаблоны сообщений" },
   { key: "nav", label: "Разделы меню" },
   { key: "credit", label: "Лимиты клиентов" },
   { key: "apply", label: "Онлайн-заявка" },
@@ -26,7 +29,12 @@ const TABS = [
 type Tab = (typeof TABS)[number]["key"];
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<Tab>("branding");
+  const searchParams = useSearchParams();
+  // Вкладку открывают и ссылкой: /settings?tab=templates
+  const [tab, setTab] = useState<Tab>(() => {
+    const q = searchParams.get("tab");
+    return TABS.find((t) => t.key === q)?.key ?? "branding";
+  });
   const { user, hiddenNavItems, setHiddenNavItems } = useData();
   const isAdmin = user.role === "admin";
 
@@ -166,6 +174,7 @@ export default function SettingsPage() {
               )}
             </Card>
           )}
+          {tab === "templates" && <TemplatesSettings />}
           {tab === "branches" && <BranchesSettings />}
           {tab === "roles" && <RolesSettings />}
           {tab === "credit" && <CreditLimitCard />}

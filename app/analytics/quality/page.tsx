@@ -4,6 +4,7 @@ import { ShieldAlert, Users, Tags, CalendarRange, Info } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
 import AnalyticsTabs from "@/components/analytics-tabs";
 import MonthBars from "@/components/month-bars";
+import AgingLadder from "@/components/aging-ladder";
 import { useData } from "@/lib/store";
 import { computeQuality, type QualityRow } from "@/lib/quality";
 import { money } from "@/lib/schedule";
@@ -155,6 +156,8 @@ export default function QualityPage() {
             </Card>
           ))}
         </div>
+
+        <AgingLadder />
 
         <Card className="mt-4 p-5 sm:p-6">
           <div className="mb-1 flex items-center gap-2">
