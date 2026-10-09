@@ -438,6 +438,15 @@ function ClientView({ data, token }: { data: ClientResponse; token: string }) {
     <div className="mx-auto flex max-w-md flex-col gap-4 px-4 py-6 sm:py-10">
       <Header subtitle="Мои рассрочки" />
 
+      {data.deals.length === 0 && (
+        <section className="rounded-card border border-line bg-surface p-5 shadow-card">
+          <p className="font-medium">{data.clientFirstName}, выданных рассрочек пока нет</p>
+          <p className="mt-1 text-sm text-mute">
+            Когда рассрочку оформят, здесь появятся график платежей, остаток и квитанции — по этой же ссылке.
+          </p>
+        </section>
+      )}
+
       {nearest && (
         <NextPaymentHero
           token={token}
