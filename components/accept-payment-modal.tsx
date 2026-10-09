@@ -12,6 +12,7 @@ import {
   Landmark,
   CalendarDays,
   ReceiptText,
+  CircleCheck,
 } from "lucide-react";
 import { clientById, paidCount, dealState, ruPlural, type Deal } from "@/lib/data";
 import { scheduleForDeal, paidTotal } from "@/lib/schedule";
@@ -59,6 +60,9 @@ export default function AcceptPaymentModal({
     useState<(typeof methods)[number]["key"]>("cash");
   const [date, setDate] = useState(todayIso());
   const [saved, setSaved] = useState(false);
+  const [sending, setSending] = useState(false);
+  // Строка поиска, подсвеченная стрелками: Enter выбирает её
+  const [active, setActive] = useState(0);
   // Последний id в кассе до проведения — всё, что новее, записал этот платёж
   const [cashIdBefore, setCashIdBefore] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +99,7 @@ export default function AcceptPaymentModal({
           deal: d,
           phone: client?.phone ?? "",
           schedule,
+          nextIso: next?.iso ?? "9999-12-31",
           nextAmount: next?.amount ?? 0,
           remaining: d.amount - paidSum,
         };
@@ -105,7 +110,9 @@ export default function AcceptPaymentModal({
           d.client.toLowerCase().includes(q) ||
           d.id.toLowerCase().includes(q) ||
           (qd.length >= 3 && digits(phone).includes(qd))
-      );
+      )
+      // Сверху те, кому платить раньше всех: просрочка, затем сегодня
+      .sort((a, b) => a.nextIso.localeCompare(b.nextIso));
   }, [query, deals, clients, paidPayments]);
 
   // Запасной объект: после последнего взноса сделка закрывается и пропадает
@@ -116,6 +123,7 @@ export default function AcceptPaymentModal({
         deal,
         phone: "",
         schedule: [],
+        nextIso: "",
         nextAmount: Math.round(deal.amount / deal.months),
         remaining: deal.amount,
       })
@@ -155,14 +163,30 @@ export default function AcceptPaymentModal({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ready || !deal) return;
+    if (!ready || !deal || sending || saved) return;
     setError(null);
+    setSending(true);
     try {
       setCashIdBefore(cash.reduce((max, t) => Math.max(max, Number(t.id)), 0));
       await acceptPayment(deal.id, { date, method, amount });
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось принять платёж");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Стрелки двигают подсветку по найденным сделкам, Enter выбирает
+  const onSearchKey = (e: React.KeyboardEvent) => {
+    if (rows.length === 0) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      setActive((i) => (i + step + rows.length) % rows.length);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      pick(rows[Math.min(active, rows.length - 1)].deal);
     }
   };
 
@@ -181,6 +205,8 @@ export default function AcceptPaymentModal({
         )
       : [];
   const payer = deal ? clientById(clients, deal.clientId) : undefined;
+  // Остаток уже после проведения: стор обновился, закрытая сделка из rows ушла
+  const remainingAfter = deal ? (rows.find((r) => r.deal.id === deal.id)?.remaining ?? 0) : 0;
 
   const sendReceipt = () => {
     if (!deal || !payer || newPayments.length === 0) return;
@@ -206,7 +232,7 @@ export default function AcceptPaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-start sm:p-6 sm:pt-[8vh]">
       <button
         aria-label="Закрыть окно"
         className="absolute inset-0 bg-scrim"
@@ -216,7 +242,11 @@ export default function AcceptPaymentModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="accept-payment-title"
-        className="relative flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-card bg-surface shadow-pop sm:rounded-card"
+        className={`relative flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-card bg-surface shadow-pop sm:max-h-[84vh] sm:rounded-card ${
+          // Высота поиска постоянная: окно не сжимается под курсором, пока
+          // список фильтруется, и клик не уходит мимо — на подложку
+          !deal ? "h-[80vh] sm:h-[min(640px,84vh)]" : ""
+        }`}
       >
         <header className="flex items-center justify-between border-b border-line px-6 py-5">
           <div className="flex items-center gap-3">
@@ -268,14 +298,22 @@ export default function AcceptPaymentModal({
                   className={`${input} pl-10`}
                   placeholder="ФИО, телефон или номер сделки"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setActive(0);
+                  }}
+                  onKeyDown={onSearchKey}
+                  role="combobox"
+                  aria-expanded
+                  aria-controls="accept-payment-results"
+                  aria-activedescendant={rows[active] ? `pay-row-${rows[active].deal.id}` : undefined}
                 />
               </label>
               <p className="mt-2 text-xs text-mute">
-                Например: «Котова», «+7 921» или «R-1042»
+                «Котова», «+7 921» или «R-1042» · сверху — у кого срок раньше · ↑↓ Enter
               </p>
             </div>
-            <ul className="mt-3 min-h-0 flex-1 divide-y divide-line overflow-y-auto border-t border-line">
+            <ul id="accept-payment-results" role="listbox" className="mt-3 min-h-0 flex-1 divide-y divide-line overflow-y-auto border-t border-line">
               {rows.length === 0 ? (
                 <li className="flex flex-col items-center px-6 py-12 text-center">
                   <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-brand-soft text-brand">
@@ -288,11 +326,16 @@ export default function AcceptPaymentModal({
                   </p>
                 </li>
               ) : (
-                rows.map(({ deal: d, phone, nextAmount, remaining }) => (
-                  <li key={d.id}>
+                rows.map(({ deal: d, phone, nextAmount, remaining }, i) => (
+                  <li key={d.id} id={`pay-row-${d.id}`} role="option" aria-selected={i === active}>
                     <button
+                      tabIndex={-1}
                       onClick={() => pick(d)}
-                      className="flex w-full items-center gap-3 px-6 py-3 text-left transition-colors hover:bg-canvas"
+                      onMouseMove={() => setActive(i)}
+                      ref={i === active ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
+                      className={`flex w-full items-center gap-3 px-6 py-3 text-left transition-colors ${
+                        i === active ? "bg-canvas" : ""
+                      }`}
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-deep">
                         {initials(d.client)}
@@ -323,6 +366,45 @@ export default function AcceptPaymentModal({
               )}
             </ul>
           </div>
+        ) : saved ? (
+          /* Шаг 3 — готово. Формы больше нет: тот же платёж не провести дважды */
+          <div className="flex min-h-0 flex-col">
+            <div className="flex flex-col items-center px-6 py-8 text-center">
+              <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-good-soft text-good">
+                <CircleCheck size={28} aria-hidden />
+              </span>
+              <p className="text-xl font-semibold tracking-tight" role="status">
+                Платёж {money(amount)} принят
+              </p>
+              <p className="mt-1 text-sm text-mute">
+                {deal.client} · {deal.id}
+              </p>
+              <p className="mt-4 rounded-[16px] bg-canvas px-4 py-2.5 text-sm">
+                {remainingAfter > 0
+                  ? <>Остаток по сделке — <b>{money(remainingAfter)}</b></>
+                  : "Сделка выплачена полностью"}
+              </p>
+            </div>
+            <footer className="flex flex-wrap items-center justify-end gap-3 border-t border-line px-6 py-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
+              >
+                Готово
+              </button>
+              <button
+                type="button"
+                autoFocus
+                onClick={sendReceipt}
+                disabled={newPayments.length === 0 || !payer}
+                className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+              >
+                <ReceiptText size={15} aria-hidden />
+                Отправить квитанцию
+              </button>
+            </footer>
+          </div>
         ) : (
           /* Шаг 2 — платёж */
           <form onSubmit={submit} className="flex min-h-0 flex-col">
@@ -352,7 +434,8 @@ export default function AcceptPaymentModal({
                     className={`${input} pr-9 text-lg font-semibold ${
                       !amountValid ? "border-danger focus:border-danger" : ""
                     }`}
-                    value={amountInput}
+                    // С разрядами, как везде в CRM: «32 000», а не «32000»
+                    value={amountInput ? new Intl.NumberFormat("ru-RU").format(Number(amountInput)) : ""}
                     onChange={(e) => setAmountInput(e.target.value.replace(/[^\d]/g, ""))}
                   />
                   <span className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-sm text-mute">
@@ -446,9 +529,7 @@ export default function AcceptPaymentModal({
               >
                 {error
                   ? error
-                  : saved
-                    ? "Платёж принят — отправьте клиенту квитанцию"
-                    : ready
+                  : ready
                       ? "Можно проводить"
                       : !amountValid
                         ? "Проверьте сумму платежа"
@@ -459,28 +540,16 @@ export default function AcceptPaymentModal({
                 onClick={onClose}
                 className="rounded-full border border-line px-4 py-2.5 text-sm font-medium text-mute hover:text-ink"
               >
-                {saved ? "Готово" : "Отмена"}
+                Отмена
               </button>
-              {saved ? (
-                <button
-                  type="button"
-                  onClick={sendReceipt}
-                  disabled={newPayments.length === 0 || !payer}
-                  className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
-                >
-                  <ReceiptText size={15} aria-hidden />
-                  Отправить квитанцию
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={!ready}
-                  className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
-                >
-                  <Check size={15} aria-hidden />
-                  Принять платёж
-                </button>
-              )}
+              <button
+                type="submit"
+                disabled={!ready || sending}
+                className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute disabled:shadow-none"
+              >
+                <Check size={15} aria-hidden />
+                {sending ? "Проводим…" : "Принять платёж"}
+              </button>
             </footer>
           </form>
         )}

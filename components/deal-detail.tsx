@@ -376,7 +376,11 @@ export default function DealDetail({ id }: { id: string }) {
                 aria-hidden
               />
               <p className="text-sm font-medium text-mute">
-                {active && nextPayment ? "Следующий платёж" : "Следующий шаг"}
+                {active && nextPayment
+                  ? daysToNext !== null && daysToNext < 0
+                    ? "Просроченный платёж"
+                    : "Следующий платёж"
+                  : "Следующий шаг"}
               </p>
             </div>
             {active && nextPayment ? (
@@ -735,7 +739,7 @@ export default function DealDetail({ id }: { id: string }) {
                   Напомнить об оплате
                 </button>
                 <p className="mt-2 text-center text-xs text-mute">
-                  Сообщение уйдёт в WhatsApp по шаблону из «Рассылок»
+                  Сообщение уйдёт в WhatsApp по шаблону из Настроек → Шаблоны сообщений
                 </p>
                 {templates.length > 1 && (
                   <label className="mt-2 block">

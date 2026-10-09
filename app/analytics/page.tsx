@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import {
   Wallet,
   CheckCircle2,
   XCircle,
   Receipt,
   TrendingUp,
+  HandCoins,
+  FilePlus2,
 } from "lucide-react";
 import { PageHeader, Card } from "@/components/ui";
 import AnalyticsTabs from "@/components/analytics-tabs";
@@ -13,6 +16,39 @@ import { stages, paidCount, dealMargin, type Deal } from "@/lib/data";
 import { scheduleForDeal, paidTotal, money } from "@/lib/schedule";
 import { useData } from "@/lib/store";
 import OverviewChart from "@/components/overview-chart";
+import { todayIso } from "@/lib/derive";
+import { PERIOD_LABEL, changePct, inRange, periodRanges, type PeriodKey, type Range } from "@/lib/period";
+
+const shortDay = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+// «1–9 сент.» внутри месяца, «1 июл. – 20 авг.» через границу месяцев
+const rangeLabel = (r: Range) =>
+  r.from === r.to
+    ? shortDay(r.from)
+    : r.from.slice(0, 7) === r.to.slice(0, 7)
+      ? `${Number(r.from.slice(8))}–${shortDay(r.to)}`
+      : `${shortDay(r.from)} – ${shortDay(r.to)}`;
+
+/** «+12% к 1 сент. – 9 сент.» — зелёным рост, красным падение. */
+function Delta({ now, before, prev }: { now: number; before: number; prev: Range | null }) {
+  if (!prev) return null;
+  const pct = changePct(now, before);
+  return (
+    <p className="mt-1 text-sm text-mute">
+      {pct === null ? (
+        "в прошлом периоде — 0"
+      ) : (
+        <>
+          <span className={`font-medium ${pct > 0 ? "text-good" : pct < 0 ? "text-danger" : ""}`}>
+            {pct > 0 ? "+" : ""}
+            {pct}%
+          </span>{" "}
+          к {rangeLabel(prev)}
+        </>
+      )}
+    </p>
+  );
+}
 
 const decidedStages = ["active", "closed", "rejected"] as const;
 
@@ -60,6 +96,8 @@ function Bar({
 
 export default function AnalyticsPage() {
   const { deals, paidPayments, cash } = useData();
+  const [period, setPeriod] = useState<PeriodKey>("month");
+  const { current: cur, previous: prev } = periodRanges(period, todayIso());
   const byStage = stages.map((s) => ({
     ...s,
     count: deals.filter((d) => d.stage === s.key).length,
@@ -67,19 +105,31 @@ export default function AnalyticsPage() {
   const maxStage = Math.max(...byStage.map((s) => s.count), 1);
 
   const closedDeals = deals.filter((d) => d.stage === "closed");
-  const rejectedDeals = deals.filter((d) => d.stage === "rejected");
-  const decided = deals.filter((d) =>
-    decidedStages.includes(d.stage as (typeof decidedStages)[number])
-  );
-  const approvedCount = decided.length - rejectedDeals.length;
-  const conversion = decided.length
-    ? Math.round((approvedCount / decided.length) * 100)
-    : 0;
 
-  // Без сделок — 0, а не NaN
-  const avgDealSize = deals.length
-    ? Math.round(deals.reduce((s, d) => s + d.amount, 0) / deals.length)
-    : 0;
+  // Показатели за период — по дате заявки и дате платежа. Воронка «по
+  // этапам» ниже — снимок на сегодня, от периода не зависит
+  const periodStats = (r: Range | null) => {
+    const opened = deals.filter((d) => inRange(d.openedAt, r));
+    const rejected = opened.filter((d) => d.stage === "rejected");
+    const decided = opened.filter((d) => decidedStages.includes(d.stage as (typeof decidedStages)[number]));
+    const issued = opened.filter((d) => d.stage === "active" || d.stage === "closed");
+    return {
+      rejected,
+      decided: decided.length,
+      approved: decided.length - rejected.length,
+      issued: issued.length,
+      issuedSum: issued.reduce((s, d) => s + d.amount + (d.downPayment ?? 0), 0),
+      // Без сделок — 0, а не NaN
+      avg: opened.length ? Math.round(opened.reduce((s, d) => s + d.amount, 0) / opened.length) : 0,
+      count: opened.length,
+      // Платежи клиентов; отмена — отдельная минусовая запись, она вычитается
+      collected: cash.filter((t) => t.kind === "payment" && inRange(t.date, r)).reduce((s, t) => s + t.amount, 0),
+    };
+  };
+  const now = periodStats(cur);
+  const before = periodStats(prev);
+  const rejectedDeals = now.rejected;
+  const conversion = now.decided ? Math.round((now.approved / now.decided) * 100) : 0;
 
   const profit = deals
     .filter((d) => d.stage === "active" || d.stage === "closed")
@@ -106,25 +156,44 @@ export default function AnalyticsPage() {
     {
       label: "Портфель в работе",
       value: money(activeRemaining(deals, paidPayments)),
-      note: "остаток по активным сделкам",
+      note: <p className="mt-1 text-sm text-mute">остаток по активным сделкам на сегодня</p>,
       icon: Wallet,
     },
     {
-      label: "Одобрено",
-      value: `${approvedCount} из ${decided.length}`,
-      note: `конверсия ${conversion}%`,
+      label: "Собрано",
+      value: money(now.collected),
+      note: <Delta now={now.collected} before={before.collected} prev={prev} />,
+      icon: HandCoins,
+    },
+    {
+      label: "Выдано",
+      value: money(now.issuedSum),
+      note: prev ? (
+        <Delta now={now.issuedSum} before={before.issuedSum} prev={prev} />
+      ) : (
+        <p className="mt-1 text-sm text-mute">сделок: {now.issued}</p>
+      ),
+      icon: FilePlus2,
+    },
+    {
+      label: "Одобрено заявок",
+      value: `${now.approved} из ${now.decided}`,
+      note: (
+        <p className="mt-1 text-sm text-mute">
+          конверсия {conversion}%
+          {prev && before.decided > 0 && `, было ${Math.round((before.approved / before.decided) * 100)}%`}
+        </p>
+      ),
       icon: CheckCircle2,
     },
     {
-      label: "Отклонено",
-      value: String(rejectedDeals.length),
-      note: "заявок за всё время",
-      icon: XCircle,
-    },
-    {
       label: "Средний чек",
-      value: money(avgDealSize),
-      note: `по ${deals.length} сделкам`,
+      value: money(now.avg),
+      note: prev ? (
+        <Delta now={now.avg} before={before.avg} prev={prev} />
+      ) : (
+        <p className="mt-1 text-sm text-mute">по {now.count} сделкам</p>
+      ),
       icon: Receipt,
     },
   ];
@@ -133,11 +202,29 @@ export default function AnalyticsPage() {
     <>
       <PageHeader
         title="Аналитика"
-        subtitle="Воронка, отказы и поступления по месяцам"
+        subtitle="Сборы и выдачи за период, воронка, отказы и поступления по месяцам"
       />
       <AnalyticsTabs />
       <div className="mx-auto max-w-6xl px-4 py-5 sm:px-8">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div className="inline-flex gap-1 rounded-full border border-line/70 bg-surface p-1 shadow-card" role="tablist" aria-label="Период">
+            {(Object.keys(PERIOD_LABEL) as PeriodKey[]).map((k) => (
+              <button
+                key={k}
+                role="tab"
+                aria-selected={period === k}
+                onClick={() => setPeriod(k)}
+                className={`rounded-full px-4 py-2 text-sm font-medium ${period === k ? "bg-brand text-on-brand" : "text-mute hover:text-ink"}`}
+              >
+                {PERIOD_LABEL[k]}
+              </button>
+            ))}
+          </div>
+          <p className="text-sm text-mute">
+            {cur && prev ? `${rangeLabel(cur)} · сравнение с ${rangeLabel(prev)}` : "За всё время, без сравнения"}
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {kpis.map(({ label, value, note, icon: Icon }) => (
             <Card key={label} className="p-5">
               <div className="flex items-start justify-between">
@@ -146,10 +233,10 @@ export default function AnalyticsPage() {
                   <Icon size={17} aria-hidden />
                 </span>
               </div>
-              <p className="mt-2 text-[26px] font-semibold tracking-tight">
+              <p className="mt-2 text-[24px] font-semibold tracking-tight tabular-nums">
                 {value}
               </p>
-              <p className="mt-1 text-sm text-mute">{note}</p>
+              {note}
             </Card>
           ))}
         </div>
@@ -175,7 +262,7 @@ export default function AnalyticsPage() {
               </span>
               <span className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-danger" aria-hidden />
-                Отклонено: <b className="font-semibold">{rejectedDeals.length}</b>
+                Отклонено: <b className="font-semibold">{deals.filter((d) => d.stage === "rejected").length}</b>
               </span>
               <span className="text-mute">
                 Прибыль по активным и закрытым: {money(profit)}
@@ -190,9 +277,10 @@ export default function AnalyticsPage() {
             </div>
             <p className="mb-4 text-sm text-mute">
               По {rejectedDeals.length} отклонённым заявкам
+              {cur ? ` за ${PERIOD_LABEL[period].toLowerCase()}` : ""}
             </p>
             {reasonList.length === 0 ? (
-              <p className="text-sm text-mute">Отказов пока не было.</p>
+              <p className="text-sm text-mute">Отказов за этот период не было.</p>
             ) : (
               <div className="flex flex-col gap-4">
                 {reasonList.map(([reason, count]) => (

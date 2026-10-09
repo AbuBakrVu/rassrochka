@@ -305,7 +305,8 @@ h4 {
   bottom: 24px;
   z-index: 40;
   overflow: hidden;
-  display: flex;
+  /* display не задаём: его ставят классы `hidden lg:flex` в разметке.
+     Правило вне слоёв перебило бы `hidden`, и меню висело бы на телефоне. */
   flex-direction: column;
   gap: 14px;
   width: 84px;

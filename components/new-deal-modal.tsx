@@ -38,12 +38,29 @@ import { cashBalance } from "@/lib/cash";
 import NewClientModal from "@/components/new-client-modal";
 import { ClientCreditSummary, isOverLimit, useClientCredit } from "@/components/client-credit";
 
+// Клиент — первым: в офисе разговор начинается с человека, и его лимит
+// и чёрный список видны до того, как подобран товар
 const steps = [
+  { key: "client", title: "Клиент", icon: User },
   { key: "product", title: "Товар", icon: Package },
   { key: "terms", title: "Условия", icon: SlidersHorizontal },
-  { key: "client", title: "Клиент", icon: User },
   { key: "review", title: "Обзор", icon: ShieldCheck },
 ] as const;
+
+const CITY_KEY = "nasiya:deal-city";
+
+/** Город по умолчанию: выбранный в прошлый раз в этом браузере, иначе самый частый в сделках. */
+function defaultCity(deals: { city?: string }[]) {
+  try {
+    const last = localStorage.getItem(CITY_KEY);
+    if (last && cities.includes(last)) return last;
+  } catch {
+    // приватный режим — возьмём по сделкам
+  }
+  const counts = new Map<string, number>();
+  for (const d of deals) if (d.city && cities.includes(d.city)) counts.set(d.city, (counts.get(d.city) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+}
 
 const categories: { label: string; icon: LucideIcon }[] = [
   { label: "Электроника", icon: Smartphone },
@@ -144,12 +161,13 @@ export default function NewDealModal({
   /** «Новая сделка» из карточки клиента — клиент уже выбран. */
   initialClient?: Client;
 }) {
-  const { clients, cash, cashOpeningBalance, employees, addDeal, uploadAttachment } = useData();
+  const { clients, deals, cash, cashOpeningBalance, employees, addDeal, uploadAttachment } = useData();
   // Ответственным можно назначить только действующего сотрудника
   const managers = employees.filter((e) => e.active);
   const cashNow = cashBalance(cashOpeningBalance, cash);
   const router = useRouter();
-  const [step, setStep] = useState(0);
+  // Клиент уже выбран (из его карточки) — сразу к товару
+  const [step, setStep] = useState(initialClient ? 1 : 0);
   const [created, setCreated] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,7 +176,7 @@ export default function NewDealModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
-  const [city, setCity] = useState("");
+  const [city, setCity] = useState(() => defaultCity(deals));
   const [photos, setPhotos] = useState<{ url: string; name: string; file: File }[]>([]);
 
   const [price, setPrice] = useState("");
@@ -187,9 +205,29 @@ export default function NewDealModal({
   const [guarantors, setGuarantors] = useState<{ id: string; name: string }[]>([]);
   const [overLimitAck, setOverLimitAck] = useState(false);
 
+  // Мастер заполнен хоть чем-то — случайный Esc или клик мимо не должен
+  // молча выбрасывать введённое
+  const dirty =
+    !created &&
+    (name.trim() !== "" ||
+      description.trim() !== "" ||
+      price !== "" ||
+      down !== "" ||
+      photos.length > 0 ||
+      guarantors.length > 0 ||
+      (client !== null && client.id !== initialClient?.id));
+  const requestClose = () => {
+    if (dirty && !window.confirm("Закрыть мастер? Введённые данные сделки не сохранятся.")) return;
+    onClose();
+  };
+  const requestCloseRef = useRef(requestClose);
+  useEffect(() => {
+    requestCloseRef.current = requestClose;
+  });
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !clientFormOpen) onClose();
+      if (e.key === "Escape" && !clientFormOpen) requestCloseRef.current();
     };
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
@@ -236,9 +274,9 @@ export default function NewDealModal({
   const overLimit = isOverLimit(credit, Math.round(calc.financed));
 
   const stepReady = [
+    client !== null,
     name.trim() !== "" && category !== "" && city !== "",
-    calc.base > 0 && months > 0 && dealDate !== "" && manager !== null,
-    client !== null && (!overLimit || overLimitAck),
+    calc.base > 0 && months > 0 && dealDate !== "" && manager !== null && (!overLimit || overLimitAck),
     true,
   ];
 
@@ -304,7 +342,7 @@ export default function NewDealModal({
       <button
         aria-label="Закрыть окно"
         className="absolute inset-0 bg-scrim"
-        onClick={onClose}
+        onClick={requestClose}
       />
       <div
         role="dialog"
@@ -325,7 +363,7 @@ export default function NewDealModal({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Закрыть"
             className="rounded-full p-2 text-mute hover:bg-canvas hover:text-ink"
           >
@@ -395,7 +433,7 @@ export default function NewDealModal({
         <div className="grid min-h-0 flex-1 lg:grid-cols-[1fr_320px]">
           {/* Форма */}
           <div className="min-h-0 overflow-y-auto px-5 py-6 sm:px-7">
-            {step === 0 && (
+            {step === 1 && (
               <>
                 <StepHead
                   icon={Package}
@@ -464,7 +502,14 @@ export default function NewDealModal({
                       <select
                         className={`${input} appearance-none pl-10`}
                         value={city}
-                        onChange={(e) => setCity(e.target.value)}
+                        onChange={(e) => {
+                          setCity(e.target.value);
+                          try {
+                            localStorage.setItem(CITY_KEY, e.target.value);
+                          } catch {
+                            // не запомнится — выберут снова
+                          }
+                        }}
                       >
                         <option value="">Выберите город</option>
                         {cities.map((c) => (
@@ -521,7 +566,7 @@ export default function NewDealModal({
               </>
             )}
 
-            {step === 1 && (
+            {step === 2 && (
               <>
                 <StepHead
                   icon={SlidersHorizontal}
@@ -732,11 +777,32 @@ export default function NewDealModal({
                       ))}
                     </div>
                   </div>
+
+                  {/* Сумма известна только здесь — здесь и сверка с лимитом клиента */}
+                  {credit && calc.financed > 0 && (
+                    <div>
+                      <Label>Лимит клиента</Label>
+                      <ClientCreditSummary credit={credit} amount={Math.round(calc.financed)} />
+                      {overLimit && (
+                        <label className="mt-2 flex items-start gap-2.5 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={overLimitAck}
+                            onChange={(e) => setOverLimitAck(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 accent-[var(--color-brand)]"
+                          />
+                          <span>
+                            Оформить сверх лимита — отметка попадёт в журнал действий
+                          </span>
+                        </label>
+                      )}
+                    </div>
+                  )}
                 </div>
               </>
             )}
 
-            {step === 2 && (
+            {step === 0 && (
               <>
                 <StepHead
                   icon={User}
@@ -786,19 +852,6 @@ export default function NewDealModal({
                     )}
                     {credit && (
                       <ClientCreditSummary credit={credit} amount={Math.round(calc.financed)} />
-                    )}
-                    {overLimit && (
-                      <label className="mt-2 flex items-start gap-2.5 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={overLimitAck}
-                          onChange={(e) => setOverLimitAck(e.target.checked)}
-                          className="mt-0.5 h-4 w-4 accent-[var(--color-brand)]"
-                        />
-                        <span>
-                          Оформить сверх лимита — отметка попадёт в журнал действий
-                        </span>
-                      </label>
                     )}
                     {!client && (
                       <>
@@ -1105,9 +1158,9 @@ export default function NewDealModal({
                   ? "Всё готово к созданию"
                   : "Можно продолжать"
                 : [
+                    "Выберите клиента",
                     "Заполните название, категорию и город",
-                    "Укажите закупочную цену и срок",
-                    overLimit ? "Подтвердите оформление сверх лимита" : "Выберите клиента",
+                    overLimit ? "Подтвердите оформление сверх лимита" : "Укажите закупочную цену и срок",
                     "",
                   ][step]
             )}
