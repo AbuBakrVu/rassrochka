@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { PhoneCall, PhoneOff, CalendarClock, HandCoins, CheckCircle2, Send } from "lucide-react";
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui";
 import ContactModal from "@/components/contact-modal";
+import AcceptPaymentModal from "@/components/accept-payment-modal";
 import ReminderQueue from "@/components/reminder-queue";
 import { can } from "@/lib/permissions";
 import { computeReminderQueue } from "@/lib/reminders";
@@ -55,6 +56,10 @@ export default function CollectionsPage() {
   ).length;
   const [tab, setTab] = useState<"today" | "waiting" | "done">("today");
   const [modal, setModal] = useState<QueueItem | null>(null);
+  // Клиент на звонке говорит «сейчас оплачу» или пришёл в офис — платёж
+  // принимается прямо из очереди, без перехода в сделку
+  const [payDeal, setPayDeal] = useState<string | null>(null);
+  const canPay = can(user, "payments.accept");
 
   const overdue = computeActive(deals, paidPayments)
     .filter((c) => c.deal.statusTone === "red" && (!mine || c.deal.managerId === user.id))
@@ -77,7 +82,9 @@ export default function CollectionsPage() {
   const groups = {
     today: queue.filter((q) => q.state === "broken" || q.state === "callback" || q.state === "new"),
     waiting: queue.filter((q) => q.state === "waiting"),
-    done: queue.filter((q) => q.state === "done"),
+    // Все, с кем говорили сегодня, — и те, кто после звонка ушёл в «Ждём»
+    // (обещал оплатить, перезвонить завтра): звонок был, счётчик это видит
+    done: queue.filter((q) => q.last?.at.slice(0, 10) === today),
   };
   const list = groups[tab];
   const broken = queue.filter((q) => q.state === "broken").length;
@@ -191,6 +198,7 @@ export default function CollectionsPage() {
                         <Badge tone={meta.tone}>{meta.label}</Badge>
                       </div>
                       <p className="text-xs text-mute">
+                        {phone && phone !== "—" && <span className="text-ink tabular-nums">{phone} · </span>}
                         {deal.id} · {deal.product}
                         {managerOf(q.dealId) && ` · ${managerOf(q.dealId)}`}
                       </p>
@@ -220,6 +228,14 @@ export default function CollectionsPage() {
                           <PhoneCall size={16} aria-hidden />
                         </a>
                       )}
+                      {canPay && (
+                        <button
+                          onClick={() => setPayDeal(q.dealId)}
+                          className="flex items-center gap-1.5 rounded-full border border-line px-4 py-2.5 text-sm font-medium text-ink hover:border-brand hover:text-brand-deep"
+                        >
+                          <HandCoins size={15} aria-hidden /> Принять
+                        </button>
+                      )}
                       <button
                         onClick={() => setModal(q)}
                         className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
@@ -246,6 +262,7 @@ export default function CollectionsPage() {
           onClose={() => setModal(null)}
         />
       )}
+      {payDeal && <AcceptPaymentModal initialDealId={payDeal} onClose={() => setPayDeal(null)} />}
     </>
   );
 }

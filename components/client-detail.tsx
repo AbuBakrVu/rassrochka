@@ -25,6 +25,7 @@ import { ClientCreditCard } from "@/components/client-credit";
 import AttachmentsCard from "@/components/attachments-card";
 import ConsentCard from "@/components/consent-card";
 import NewDealModal from "@/components/new-deal-modal";
+import AcceptPaymentModal from "@/components/accept-payment-modal";
 import { useData } from "@/lib/store";
 import { can } from "@/lib/permissions";
 import {
@@ -35,6 +36,7 @@ import {
   type Client,
 } from "@/lib/data";
 import { scheduleForDeal, paidTotal, money, longDate } from "@/lib/schedule";
+import { todayIso } from "@/lib/derive";
 
 const statusTone: Record<Client["status"], "green" | "red" | "gray" | "blue"> = {
   active: "green",
@@ -50,11 +52,12 @@ const initials = (name: string) =>
     .join("");
 
 export default function ClientDetail({ id }: { id: string }) {
-  const { clients, deals, paidPayments, setClientBlacklisted, user } = useData();
+  const { clients, deals, paidPayments, setClientBlacklisted, user, contacts } = useData();
   const router = useRouter();
   const client = clientById(clients, id);
   const [blacklistOpen, setBlacklistOpen] = useState(false);
   const [dealOpen, setDealOpen] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const removeFromBlacklist = async () => {
@@ -95,6 +98,18 @@ export default function ClientDetail({ id }: { id: string }) {
     const next = schedule.find((p) => p.status === "due");
     return { deal, paid, schedule, paidSum, next };
   });
+
+  // «Ближайшее действие»: по выданной сделке — сразу принять платёж; если
+  // клиент на звонке обещал оплатить и срок не прошёл — показываем обещание
+  const nextDeal = deals.find((d) => d.id === client.nextDealId);
+  const payNow = !!nextDeal && dealState(nextDeal) === "active" && can(user, "payments.accept");
+  const lastContact = contacts
+    .filter((c) => c.dealId === client.nextDealId)
+    .sort((a, b) => b.at.localeCompare(a.at))[0];
+  const promise =
+    lastContact?.outcome === "promise" && lastContact.dueDate && lastContact.dueDate >= todayIso()
+      ? (lastContact as typeof lastContact & { dueDate: string })
+      : undefined;
 
   const cards: DealCardData[] = computed.map(({ deal, paid, paidSum, next }) => ({
     id: deal.id,
@@ -285,16 +300,39 @@ export default function ClientDetail({ id }: { id: string }) {
               Ближайшее действие · {client.nextDate}
             </p>
             <p className="text-sm text-ink">{client.nextAction}</p>
+            {promise && (
+              <p className="mt-0.5 text-sm text-mute">
+                Обещал оплатить до {longDate(new Date(`${promise.dueDate}T00:00:00`))}
+                {promise.amount ? ` · ${money(promise.amount)}` : ""}
+              </p>
+            )}
           </div>
           {client.nextDealId && (
-            <button
-              onClick={() => router.push(`/deals/${client.nextDealId}`)}
-              className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
-            >
-              Выполнить
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={`/deals/${client.nextDealId}`}
+                className={
+                  payNow
+                    ? "rounded-full border border-line bg-surface px-4 py-2.5 text-sm font-medium text-ink hover:text-brand-deep"
+                    : "rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
+                }
+              >
+                Открыть сделку
+              </Link>
+              {payNow && (
+                <button
+                  onClick={() => setPayOpen(true)}
+                  className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-on-brand shadow-card hover:bg-brand-deep"
+                >
+                  Принять платёж
+                </button>
+              )}
+            </div>
           )}
         </div>
+      )}
+      {payOpen && client.nextDealId && (
+        <AcceptPaymentModal initialDealId={client.nextDealId} onClose={() => setPayOpen(false)} />
       )}
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1fr_340px]">

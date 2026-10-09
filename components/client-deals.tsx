@@ -157,7 +157,8 @@ export default function ClientDeals({ deals }: { deals: DealCardData[] }) {
                     }`}
                   >
                     {d.state === "active" && d.nextDate
-                      ? `Следующий платёж ${money(d.monthly)} — ${d.nextDate} г.`
+                      ? // Красная сделка — ближайший взнос уже просрочен, «следующим» его не назвать
+                        `${d.statusTone === "red" ? "Просрочен платёж" : "Следующий платёж"} ${money(d.monthly)} — ${d.nextDate} г.`
                       : d.nextStep}
                   </p>
                   <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-brand">

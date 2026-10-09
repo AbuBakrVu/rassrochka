@@ -441,6 +441,12 @@ function DrawerFooter() {
   );
 }
 
+/** Палитра ⌘K с переходом в разделы, доступные сотруднику. */
+function ShellPalette() {
+  const sections = useNavItems().map(({ href, label, icon }) => ({ href, label, icon }));
+  return <CommandPalette sections={sections} />;
+}
+
 const PIN_KEY = "nasiya:sidebar-pinned";
 
 export default function Shell({ children }: { children: React.ReactNode }) {
@@ -479,13 +485,15 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   //   /company — вообще не про компанию: корневой домен, где вводят адрес
   //     своей компании. Без этой строки сюда всё равно рисовался бы
   //     сайдбар CRM компании (баг, найденный вручную в браузере).
+  //   /landing — лендинг CRM на корневом домене (middleware отдаёт его на «/»).
   // Слэш в "/pay/" обязателен: без него сюда попадал и раздел /payments.
   if (
     pathname.startsWith("/pay/") ||
     pathname.startsWith("/investor/") ||
     pathname === "/login" ||
     pathname === "/apply" ||
-    pathname === "/company"
+    pathname === "/company" ||
+    pathname === "/landing"
   ) {
     return <>{children}</>;
   }
@@ -554,7 +562,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <main className="min-w-0 flex-1 pb-24 lg:pb-0">{children}</main>
         </div>
         <MobileTabBar pathname={pathname} onMore={() => setOpen(true)} />
-        <CommandPalette />
+        <ShellPalette />
       </div>
     </DataProvider>
   );

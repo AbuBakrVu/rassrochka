@@ -139,6 +139,11 @@ export default function Home() {
   const [modal, setModal] = useState<"deal" | "client" | "payment" | null>(null);
   const [payDealId, setPayDealId] = useState<string | undefined>(undefined);
   const canCreate = can(user, "deals.edit");
+  const canPay = can(user, "payments.accept");
+  const payFor = (dealId: string) => {
+    setPayDealId(dealId);
+    setModal("payment");
+  };
 
   const active = computeActive(deals, paidPayments);
   const unpaid = active.flatMap((c) =>
@@ -189,17 +194,23 @@ export default function Home() {
         subtitle={`Сегодня ${now.getDate()} ${MONTHS_GEN[now.getMonth()]} — главное по портфелю и кассе`}
         searchPlaceholder="Найти клиента или сделку"
         actions={
-          canCreate && (
+          (canCreate || canPay) && (
             <>
-              <PillButton primary icon={HandCoins} onClick={() => setModal("payment")}>
-                Принять платёж
-              </PillButton>
-              <PillButton icon={FilePlus2} onClick={() => setModal("deal")}>
-                Новая сделка
-              </PillButton>
-              <PillButton icon={UserPlus} onClick={() => setModal("client")} className="max-sm:hidden">
-                Новый клиент
-              </PillButton>
+              {canPay && (
+                <PillButton primary icon={HandCoins} onClick={() => setModal("payment")}>
+                  Принять платёж
+                </PillButton>
+              )}
+              {canCreate && (
+                <PillButton icon={FilePlus2} onClick={() => setModal("deal")}>
+                  Новая сделка
+                </PillButton>
+              )}
+              {can(user, "clients.edit") && (
+                <PillButton icon={UserPlus} onClick={() => setModal("client")} className="max-sm:hidden">
+                  Новый клиент
+                </PillButton>
+              )}
               <Link
                 href="/collections"
                 className="flex h-10 items-center gap-2 rounded-full bg-surface px-4 text-sm font-medium shadow-card hover:text-brand-deep max-sm:hidden"
@@ -252,6 +263,16 @@ export default function Home() {
                       </p>
                     </div>
                     <span className="text-sm font-semibold whitespace-nowrap">{money(p.amount)}</span>
+                    {/* По просрочке — сразу принять оплату, не заходя в сделку */}
+                    {canPay && p.kind === "overdue" && (
+                      <button
+                        onClick={() => payFor(p.dealId)}
+                        aria-label={`Принять платёж от ${p.clientName}`}
+                        className="rounded-full bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-deep hover:bg-brand hover:text-on-brand"
+                      >
+                        Принять
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -343,12 +364,9 @@ export default function Home() {
                         : `${Number(picked.iso.slice(8))} ${MONTHS_GEN[Number(picked.iso.slice(5, 7)) - 1]}`}
                     </p>
                   </div>
-                  {canCreate && (
+                  {canPay && (
                     <button
-                      onClick={() => {
-                        setPayDealId(picked.deal.id);
-                        setModal("payment");
-                      }}
+                      onClick={() => payFor(picked.deal.id)}
                       className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-on-brand"
                     >
                       Принять
