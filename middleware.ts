@@ -18,7 +18,7 @@ const INFRA = [/^\/api\/health$/, /^\/api\/internal\//];
 // Открыты без входа: страница входа, кабинет заёмщика по ссылке, онлайн-
 // заявка и роуты, которые сами разбираются с доступом
 const PUBLIC = [
-  /^\/login$/, /^\/company$/, /^\/pay\//, /^\/investor\//, /^\/apply$/,
+  /^\/login$/, /^\/company$/, /^\/landing$/, /^\/pay\//, /^\/investor\//, /^\/apply$/,
   /^\/api\/auth\//, /^\/api\/portal\//, /^\/api\/investor\//, /^\/api\/branding\//, /^\/api\/public\//,
 ];
 
@@ -39,7 +39,15 @@ export function middleware(request: NextRequest) {
       process.env.NODE_ENV !== "production" && !!process.env.DEV_TENANT_SLUG;
 
     if (!devFallback) {
-      if (pathname === "/company") return NextResponse.next();
+      // Корень домена — лендинг CRM (app/landing). Адрес в строке остаётся «/»
+      if (pathname === "/") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/landing";
+        return NextResponse.rewrite(url);
+      }
+      if (pathname === "/company" || pathname === "/landing") return NextResponse.next();
+      // Заявка на подключение с лендинга
+      if (pathname === "/api/public/lead") return NextResponse.next();
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "Компания не выбрана" }, { status: 404 });
       }
@@ -50,8 +58,8 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // На поддомене компании страница выбора не нужна
-  if (host.kind === "tenant" && pathname === "/company") {
+  // На поддомене компании страница выбора и лендинг не нужны
+  if (host.kind === "tenant" && (pathname === "/company" || pathname === "/landing")) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
